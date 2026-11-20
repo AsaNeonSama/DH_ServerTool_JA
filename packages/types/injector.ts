@@ -6,7 +6,6 @@ export interface SpawnAndInjectOptions {
   readonly ueMapArgument: string;
   readonly port: number;
   readonly patches: readonly PatchScript[];
-  readonly scriptGapMs: number;
   readonly onDetached?: (reason: string) => void;
 }
 

@@ -28,7 +28,6 @@ export async function spawnAndInjectServer(
     ueMapArgument,
     port,
     patches,
-    scriptGapMs,
     onDetached,
   }: SpawnAndInjectOptions = options;
 
@@ -122,10 +121,6 @@ export async function spawnAndInjectServer(
       println(
         `${C.LIGHT_GREEN}   [${i + 1}/${patches.length}] 注入完了: ${patch.label}`
       );
-
-      if (scriptGapMs > 0 && i < patches.length - 1) {
-        await Bun.sleep(scriptGapMs);
-      }
     }
 
     await frida.resume(pid);

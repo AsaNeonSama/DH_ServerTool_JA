@@ -8,4 +8,6 @@ export const AUTH_PSK_SEPARATOR: string = "#";
 export const COOKIE_AAD: string = "COOKIE:dh_console_auth";
 export const AUTH_CHALLENGE_BYTES: number = 16;
 export const AUTH_CHALLENGE_TTL_MS: number = 60_000;
+export const MAX_PENDING_CHALLENGES: number = 256;
+export const AUTH_PATH: string = "/dh-console/auth";
 export const AUTH_VERIFY_PATH: string = "/dh-console/auth/verify";

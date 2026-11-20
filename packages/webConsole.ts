@@ -9,6 +9,8 @@ import {
   ACTOR_COMMENT_DICT,
   AUTH_CHALLENGE_BYTES,
   AUTH_CHALLENGE_TTL_MS,
+  AUTH_PATH,
+  AUTH_PSK_SEPARATOR,
   AUTH_VERIFY_PATH,
   BONE_DAGGER_ITEM,
   C,
@@ -18,20 +20,16 @@ import {
   COOKIE_NAME,
   DEFAULT_TCP_TIMEOUT_MS,
   HIGH_STAT_WARNING_THRESHOLD,
+  MAX_PENDING_CHALLENGES,
   PLAYER_NAME_DICT,
   PLAYER_NAME_LIST,
   STATUS_CODE,
 } from "./constants";
-import {
-  createAesGcmCipher,
-  createPskAuthToken,
-  timingSafeStringEquals,
-} from "./crypto";
+import { createAesGcmCipher } from "./crypto";
 import { isInteractiveTty, println } from "./terminal";
 import type {
   AesGcmSessionCipher,
   ApiResultPayload,
-  AuthRouteHandler,
   CachedPage,
   ConsoleBridgePayload,
   EncryptedRouteHandler,
@@ -419,7 +417,7 @@ export function startWebConsole(options: WebConsoleOptions): WebConsoleInstance 
   const { webPort, consolePatchPort, autoBroadcast, publicIp }: WebConsoleOptions = options;
   const authId: string = crypto.randomUUID().toUpperCase();
   const cipher: AesGcmSessionCipher = createAesGcmCipher();
-  const authToken: string = createPskAuthToken(authId, cipher.psk);
+  const authToken: string = cipher.psk;
   const pendingChallenges: Map<string, number> = new Map();
 
   const pruneExpiredChallenges = (now: number): void => {
@@ -433,6 +431,11 @@ export function startWebConsole(options: WebConsoleOptions): WebConsoleInstance 
   const issueAuthChallenge = (): string => {
     const now: number = Date.now();
     pruneExpiredChallenges(now);
+    while (pendingChallenges.size >= MAX_PENDING_CHALLENGES) {
+      const oldestKey: string | undefined = pendingChallenges.keys().next().value;
+      if (oldestKey === undefined) break;
+      pendingChallenges.delete(oldestKey);
+    }
     const challenge: string = randomBytes(AUTH_CHALLENGE_BYTES).toString("base64url");
     pendingChallenges.set(challenge, now + AUTH_CHALLENGE_TTL_MS);
     return challenge;
@@ -614,13 +617,7 @@ export function startWebConsole(options: WebConsoleOptions): WebConsoleInstance 
   const handleUnAuth: RouteHandler = (req: Request): Response =>
     htmlResponse(req, unAuthPageCache);
 
-  const handleAuth: AuthRouteHandler = (
-    req: Bun.BunRequest<"/dh-console/auth/:token">
-  ): Response => {
-    const candidateUuid: string = decodeURIComponent(req.params.token);
-    if (!timingSafeStringEquals(candidateUuid, authId)) {
-      return redirectToUnAuth();
-    }
+  const handleAuth: RouteHandler = (): Response => {
     const challenge: string = issueAuthChallenge();
     return new Response(buildAuthBootstrapHtml(challenge), {
       status: 200,
@@ -920,7 +917,7 @@ export function startWebConsole(options: WebConsoleOptions): WebConsoleInstance 
       "/favicon.ico": { GET: handleFavicon },
       "/": { GET: handleRoot },
       "/dh-console/un-auth": { GET: handleUnAuth },
-      "/dh-console/auth/:token": { GET: handleAuth },
+      "/dh-console/auth": { GET: handleAuth },
       "/dh-console/auth/verify": { POST: handleAuthVerify },
       "/dh-console/home_page": { GET: handleHomePage },
       "/dh-console/console_command": { POST: handleConsoleCommand },
@@ -941,8 +938,9 @@ export function startWebConsole(options: WebConsoleOptions): WebConsoleInstance 
 
   const boundPort: number = server.port ?? webPort;
   const displayPublicIp: string = publicIp ?? "127.0.0.1";
-  const publicUrl: string = `http://${displayPublicIp}:${boundPort}/dh-console/auth/${authToken}`;
-  const localUrl: string = `http://127.0.0.1:${boundPort}/dh-console/auth/${authToken}`;
+  const authSuffix: string = `${AUTH_PATH}${AUTH_PSK_SEPARATOR}${authToken}`;
+  const publicUrl: string = `http://${displayPublicIp}:${boundPort}${authSuffix}`;
+  const localUrl: string = `http://127.0.0.1:${boundPort}${authSuffix}`;
   const displayInfo: WebConsoleDisplayInfo = {
     port: boundPort,
     consolePatchPort,
@@ -957,8 +955,8 @@ export function startWebConsole(options: WebConsoleOptions): WebConsoleInstance 
     println(
       `${C.LIGHT_CYAN} ==================== Webコンソール起動 ====================`
     );
-    println(`${C.LIGHT_BLACK} * パブリックアドレス: ${publicUrl}`);
-    println(`${C.LIGHT_BLACK} * ローカルアドレス:   ${localUrl}`);
+    println(`${C.LIGHT_BLACK} * 外部URL: ${publicUrl}`);
+    println(`${C.LIGHT_BLACK} * 内部URL: ${localUrl}`);
     println(
       `${C.LIGHT_YELLOW} * URL末尾の #PSK は事前共有鍵(AES-256-GCM)です。${C.LIGHT_WHITE}全API通信が密文で保護されます。${C.LIGHT_MAGENTA}信用していない人に渡さないで下さい`
     );

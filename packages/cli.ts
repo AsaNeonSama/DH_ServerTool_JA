@@ -259,7 +259,9 @@ async function promptMatchConfig(
   println(
     `${C.LIGHT_YELLOW} 下記のナンバーで機能を選択してください(カンマ区切りで複数選択可 例: 1,2,7 / ${C.LIGHT_GREEN}Y/y ${C.LIGHT_YELLOW}で決定 / ${C.LIGHT_GREEN}C/c ${C.LIGHT_YELLOW}でクリア):`
   );
+  println();
   renderModMenuTable();
+  println();
 
   const selectedNumbers: number[] = [];
   while (true) {

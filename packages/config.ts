@@ -111,16 +111,6 @@ export async function loadOrCreateConfig(): Promise<AppConfig> {
       MIN_RESTART_WAIT_SECONDS,
       DEFAULT_CONFIG.restartWaitSeconds
     );
-    const injectDelayMs: number = readMinInt(
-      parsed.injectDelayMs,
-      0,
-      DEFAULT_CONFIG.injectDelayMs
-    );
-    const scriptGapMs: number = readMinInt(
-      parsed.scriptGapMs,
-      0,
-      DEFAULT_CONFIG.scriptGapMs
-    );
     const autoBroadcastDefault: boolean =
       typeof parsed.autoBroadcastDefault === "boolean"
         ? parsed.autoBroadcastDefault
@@ -132,8 +122,6 @@ export async function loadOrCreateConfig(): Promise<AppConfig> {
       webConsolePort,
       checkIntervalMs,
       restartWaitSeconds,
-      injectDelayMs,
-      scriptGapMs,
       autoBroadcastDefault,
       serverExecutable: readNonEmptyString(
         parsed.serverExecutable,

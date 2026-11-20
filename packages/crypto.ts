@@ -10,7 +10,6 @@ import {
   AES_GCM_ALGORITHM,
   AES_IV_BYTES,
   AES_KEY_BYTES,
-  AUTH_PSK_SEPARATOR,
 } from "./constants";
 import type { AesGcmSessionCipher } from "./types";
 
@@ -92,8 +91,4 @@ export function createAesGcmCipher(rawKey?: Buffer): AesGcmSessionCipher {
   };
 
   return { psk, encrypt, decrypt, verify };
-}
-
-export function createPskAuthToken(baseAuthId: string, psk: string): string {
-  return `${baseAuthId}${AUTH_PSK_SEPARATOR}${psk}`;
 }

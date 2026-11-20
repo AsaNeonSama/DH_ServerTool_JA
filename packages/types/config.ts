@@ -4,8 +4,6 @@ export interface AppConfig {
   readonly webConsolePort: number;
   readonly checkIntervalMs: number;
   readonly restartWaitSeconds: number;
-  readonly injectDelayMs: number;
-  readonly scriptGapMs: number;
   readonly autoBroadcastDefault: boolean;
   readonly serverExecutable: string;
   readonly shippingExecutable: string;
@@ -18,8 +16,6 @@ export interface RawConfig {
   readonly webConsolePort?: unknown;
   readonly checkIntervalMs?: unknown;
   readonly restartWaitSeconds?: unknown;
-  readonly injectDelayMs?: unknown;
-  readonly scriptGapMs?: unknown;
   readonly autoBroadcastDefault?: unknown;
   readonly serverExecutable?: unknown;
   readonly shippingExecutable?: unknown;

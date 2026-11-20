@@ -120,7 +120,6 @@ export async function runServerSupervisor(
           ueMapArgument: activePlan.ueMapArgument,
           port: currentPort,
           patches,
-          scriptGapMs: config.scriptGapMs,
           onDetached: (reason: string): void => {
             if (!signal.aborted) {
               println(

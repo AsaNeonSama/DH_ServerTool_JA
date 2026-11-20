@@ -106,7 +106,3 @@ export type RouteHandler = (req: Request) => Response | Promise<Response>;
 export type EncryptedRouteHandler = (
   data: Record<string, unknown>
 ) => ApiResultPayload | Promise<ApiResultPayload>;
-
-export type AuthRouteHandler = (
-  req: Bun.BunRequest<"/dh-console/auth/:token">
-) => Response;

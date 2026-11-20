@@ -174,8 +174,7 @@ function triggerCopyUrl(kind: "public" | "local"): void {
   if (!webConsoleInfo) return;
   const targetUrl: string =
     kind === "public" ? webConsoleInfo.publicUrl : webConsoleInfo.localUrl;
-  const label: string =
-    kind === "public" ? "パブリックアドレス" : "ローカルアドレス";
+  const label: string = kind === "public" ? "外部URL" : "内部URL";
   const ok: boolean = copyTextToClipboard(targetUrl);
   if (ok) {
     setCopyFeedback(` * ✓ ${label}をクリップボードにコピーしました!`, false);
@@ -248,12 +247,12 @@ function buildWebTabLayout(termCols: number): WebTabLayout {
 
   const broadcastText: string = webConsoleInfo.autoBroadcast ? "オン" : "オフ";
   const prefixLines: string[] = [
-    `${C.LIGHT_CYAN} -------------------- [Webコンソール設定] --------------------`,
-    `${C.LIGHT_WHITE} * TCPポート: ${C.LIGHT_GREEN}${webConsoleInfo.port}  ${C.LIGHT_WHITE}/ 自動ブロードキャスト: ${C.LIGHT_GREEN}${broadcastText}`,
+    `${C.LIGHT_CYAN} ------------------- [Webコンソール設定] -------------------`,
+    `${C.LIGHT_WHITE} * TCPポート: ${C.LIGHT_GREEN}${webConsoleInfo.port} ${C.LIGHT_WHITE}/ 自動ブロードキャスト: ${C.LIGHT_GREEN}${broadcastText}`,
     "",
     `${C.LIGHT_CYAN} ==================== Webコンソール起動 ====================`,
-    `${C.LIGHT_BLACK} * パブリックアドレス: ${webConsoleInfo.publicUrl}`,
-    `${C.LIGHT_BLACK} * ローカルアドレス:   ${webConsoleInfo.localUrl}`,
+    `${C.LIGHT_BLACK} * 外部URL: ${webConsoleInfo.publicUrl}`,
+    `${C.LIGHT_BLACK} * 内部URL: ${webConsoleInfo.localUrl}`,
     `${C.LIGHT_YELLOW} * URL末尾の #PSK は事前共有鍵(AES-256-GCM)です。${C.LIGHT_WHITE}全API通信が密文で保護されます。${C.LIGHT_MAGENTA}信用していない人に渡さないで下さい`,
     `${C.LIGHT_BLACK} * 内部連携ポート(console_win64.js): 127.0.0.1:${webConsoleInfo.consolePatchPort} / 自動ブロードキャスト: ${broadcastText}`,
     `${C.LIGHT_CYAN} ===========================================================`,
@@ -265,10 +264,10 @@ function buildWebTabLayout(termCols: number): WebTabLayout {
     visualRowCursor += countVisualRows(line, termCols);
   }
 
-  const pubBtnLabel: string = " パブリックURLコピー (P) ";
-  const locBtnLabel: string = " ローカルURLコピー (L) ";
-  const leftPad: string = "  ";
-  const gap: string = "   ";
+  const pubBtnLabel: string = " 外部URLコピー (P) ";
+  const locBtnLabel: string = " 内部URLコピー (L) ";
+  const leftPad: string = " ";
+  const gap: string = "  ";
 
   const pubStartCol: number = getDisplayWidth(leftPad) + 1;
   const pubEndCol: number = pubStartCol + getDisplayWidth(pubBtnLabel) - 1;

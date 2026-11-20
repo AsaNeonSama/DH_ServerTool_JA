@@ -13,8 +13,6 @@ export const DEFAULT_CONFIG: AppConfig = {
   webConsolePort: 7891,
   checkIntervalMs: 1000,
   restartWaitSeconds: 10,
-  injectDelayMs: 0,
-  scriptGapMs: 0,
   autoBroadcastDefault: true,
   serverExecutable: "./DreadHungerServer.exe",
   shippingExecutable:

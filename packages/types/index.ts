@@ -19,7 +19,6 @@ export type { RunSupervisorOptions } from "./server";
 export type { HitRegion, ServerKeyHandler, TerminalTabId } from "./terminal";
 export type {
   ApiResultPayload,
-  AuthRouteHandler,
   CachedPage,
   ConsoleBridgePayload,
   EncryptedRouteHandler,
