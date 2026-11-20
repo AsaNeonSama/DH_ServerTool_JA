@@ -9,7 +9,13 @@ import {
   MOD_MENU_COLS,
   SELECTABLE_MOD_OPTIONS,
 } from "./constants";
-import { padDisplayWidth, println, Prompter } from "./terminal";
+import { findConflictingSelectedOptions, getModConflictPairs } from "./mods";
+import {
+  padDisplayWidth,
+  println,
+  Prompter,
+  resetServerTabRound,
+} from "./terminal";
 import type {
   AppConfig,
   LaunchPlan,
@@ -50,11 +56,9 @@ async function askNumberInRange(
       ? Number.isInteger(parsed)
       : Number.isFinite(parsed);
     if (!validType || parsed < min || parsed > max) {
-      println();
       println(
         `${C.RED} * 規格外の選択肢を入力しました、やり直してください!`
       );
-      println();
       continue;
     }
     return parsed;
@@ -72,9 +76,22 @@ function renderModMenuTable(): void {
       if (!opt) continue;
       const suffix: string = opt.kind === "mode" ? " [セット]" : "";
       const cell: string = `${opt.number}:${opt.label}${suffix}`;
-      line += c < MOD_MENU_COLS - 1 ? padDisplayWidth(cell, MOD_MENU_COL_WIDTH) : cell;
+      const hasNextCol: boolean = (c + 1) * rows + r < SELECTABLE_MOD_OPTIONS.length;
+      line += hasNextCol ? padDisplayWidth(cell, MOD_MENU_COL_WIDTH) : cell;
     }
     println(`${C.CYAN}${line}`);
+  }
+
+  const conflictPairs: readonly (readonly [ModMenuOption, ModMenuOption])[] =
+    getModConflictPairs();
+  if (conflictPairs.length > 0) {
+    const pairText: string = conflictPairs
+      .map(
+        ([a, b]: readonly [ModMenuOption, ModMenuOption]): string =>
+          `${a.number}:${a.label} ⇔ ${b.number}:${b.label}`
+      )
+      .join(" / ");
+    println(`${C.LIGHT_BLACK} * 同時選択不可(排他): ${pairText}`);
   }
 }
 
@@ -113,7 +130,6 @@ async function promptMatchConfig(
 ): Promise<MatchConfig> {
   // 1. Map selection
   let mapChoice: MapOption;
-  println();
   while (true) {
     const rawMap: string = await prompter.ask(
       `${C.LIGHT_YELLOW} * マップを設定してください(${C.LIGHT_GREEN}1:山頂, 2:広漠, 3:進入路${C.LIGHT_YELLOW}): `,
@@ -123,14 +139,11 @@ async function promptMatchConfig(
       mapChoice = MAP_OPTIONS[rawMap];
       break;
     }
-    println();
     println(`${C.RED} * 規格外の選択肢を入力しました、やり直してください!`);
-    println();
   }
 
   // 2. Server configuration (default or edit)
   let settings: ServerSettings = { ...DEFAULT_SETTINGS };
-  println();
   while (true) {
     const rawMode: string = await prompter.ask(
       `${C.LIGHT_YELLOW} * サーバーの配置を設定してください(${C.LIGHT_GREEN}1:デフォルト設定, 2:設定を編集する${C.LIGHT_YELLOW}): `,
@@ -140,7 +153,6 @@ async function promptMatchConfig(
       break;
     }
     if (rawMode === "2") {
-      println();
       settings = {
         maxPlayers: await askNumberInRange(
           prompter,
@@ -233,12 +245,10 @@ async function promptMatchConfig(
       };
       break;
     }
-    println();
     println(`${C.RED} * 規格外の選択肢を入力しました、やり直してください!`);
-    println();
   }
 
-  // 3. Mod selection loop
+  // 3. Mod selection loop (separate visual category)
   println();
   const defaultLabels: string = DEFAULT_PATCH_SCRIPTS.map(
     (patch: PatchScript): string => patch.label
@@ -247,11 +257,9 @@ async function promptMatchConfig(
     `${C.LIGHT_CYAN} * デフォルトMOD(自動注入): ${C.LIGHT_GREEN}${defaultLabels}`
   );
   println(
-    `${C.LIGHT_YELLOW} 下記のナンバーで機能を選択してください(選択済みの場合は ${C.LIGHT_GREEN}Y/y ${C.LIGHT_YELLOW}を入力して確認、${C.LIGHT_GREEN}C/c ${C.LIGHT_YELLOW}で選択クリア): `
+    `${C.LIGHT_YELLOW} 下記のナンバーで機能を選択してください(カンマ区切りで複数選択可 例: 1,2,7 / ${C.LIGHT_GREEN}Y/y ${C.LIGHT_YELLOW}で決定 / ${C.LIGHT_GREEN}C/c ${C.LIGHT_YELLOW}でクリア):`
   );
-  println();
   renderModMenuTable();
-  println();
 
   const selectedNumbers: number[] = [];
   while (true) {
@@ -259,7 +267,8 @@ async function promptMatchConfig(
       `${C.LIGHT_CYAN} * 選択肢を入力してください: `,
       signal
     );
-    const lower: string = rawChoice.toLowerCase();
+    const trimmedChoice: string = rawChoice.trim();
+    const lower: string = trimmedChoice.toLowerCase();
 
     if (lower === "y") {
       break;
@@ -268,38 +277,86 @@ async function promptMatchConfig(
     if (lower === "c") {
       selectedNumbers.length = 0;
       println(`${C.LIGHT_YELLOW} * 選択済みのスクリプトをクリアしました。`);
-      println();
       continue;
     }
 
-    const num: number = Number(rawChoice);
-    const matched: ModMenuOption | undefined = Number.isInteger(num)
-      ? SELECTABLE_MOD_OPTIONS.find((item: ModMenuOption): boolean => item.number === num)
-      : undefined;
+    const tokens: string[] = trimmedChoice
+      .split(/[,，、]+/)
+      .map((part: string): string => part.trim())
+      .filter((part: string): boolean => part.length > 0);
 
-    if (!matched) {
-      println();
+    if (tokens.length === 0) {
       println(`${C.RED} * 規格外の選択肢です!`);
-      println();
       continue;
     }
 
-    if (selectedNumbers.includes(matched.number)) {
-      const currentNames: string = formatSelectedLabels(selectedNumbers);
-      println();
-      println(
-        `${C.RED} * 入力済みの選択肢です。現在選択済みのスクリプトは: `
+    const addedLabels: string[] = [];
+    const duplicateLabels: string[] = [];
+    const conflictNotices: string[] = [];
+    const invalidTokens: string[] = [];
+
+    for (const token of tokens) {
+      const num: number = Number(token);
+      const matched: ModMenuOption | undefined = Number.isInteger(num)
+        ? SELECTABLE_MOD_OPTIONS.find((item: ModMenuOption): boolean => item.number === num)
+        : undefined;
+
+      if (!matched) {
+        invalidTokens.push(token);
+        continue;
+      }
+
+      if (selectedNumbers.includes(matched.number)) {
+        if (!duplicateLabels.includes(matched.label)) {
+          duplicateLabels.push(matched.label);
+        }
+        continue;
+      }
+
+      const conflicts: ModMenuOption[] = findConflictingSelectedOptions(
+        matched,
+        selectedNumbers
       );
-      println(`${C.CYAN} ${currentNames} `);
-      println();
-      continue;
+      if (conflicts.length > 0) {
+        const conflictTargets: string = conflicts
+          .map((item: ModMenuOption): string => `${item.number}:${item.label}`)
+          .join(", ");
+        const notice: string = `${matched.number}:${matched.label} (${conflictTargets}と同時選択不可)`;
+        if (!conflictNotices.includes(notice)) {
+          conflictNotices.push(notice);
+        }
+        continue;
+      }
+
+      selectedNumbers.push(matched.number);
+      addedLabels.push(matched.label);
     }
 
-    selectedNumbers.push(matched.number);
-    const currentNames: string = formatSelectedLabels(selectedNumbers);
-    println(
-      `${C.LIGHT_GREEN} * 追加しました: ${matched.label} ${C.LIGHT_BLACK}(選択中: ${currentNames})`
-    );
+    if (addedLabels.length > 0) {
+      const currentNames: string = formatSelectedLabels(selectedNumbers);
+      println(
+        `${C.LIGHT_GREEN} * 追加しました: ${addedLabels.join(", ")} ${C.LIGHT_BLACK}(選択中: ${currentNames})`
+      );
+    }
+
+    if (duplicateLabels.length > 0) {
+      const currentNames: string = formatSelectedLabels(selectedNumbers);
+      println(
+        `${C.LIGHT_YELLOW} * 選択済みのためスキップ: ${duplicateLabels.join(", ")} ${C.LIGHT_BLACK}(選択中: ${currentNames})`
+      );
+    }
+
+    if (conflictNotices.length > 0) {
+      println(
+        `${C.RED} * 排他(同時選択不可)のためスキップ: ${conflictNotices.join(" / ")}`
+      );
+    }
+
+    if (invalidTokens.length > 0) {
+      println(
+        `${C.RED} * 規格外の選択肢です: ${invalidTokens.join(", ")}`
+      );
+    }
   }
 
   const selectedOptionLabels: string[] = selectedNumbers.map((n: number): string => {
@@ -341,19 +398,15 @@ export async function runWebConsoleConfigCli(
       );
       const parsedWeb: number | null = parsePortInput(rawWeb, config.webConsolePort);
       if (parsedWeb === null) {
-        println();
         println(
           `${C.RED} * 無効な入力です。${MIN_VALID_PORT}〜${MAX_VALID_PORT}の数値を入力してください!`
         );
-        println();
         continue;
       }
       if (parsedWeb === config.consolePatchPort) {
-        println();
         println(
           `${C.RED} * コンソールパッチ内部ポート(${config.consolePatchPort})と重複しています。別のポートを指定してください!`
         );
-        println();
         continue;
       }
       webConsolePort = parsedWeb;
@@ -378,9 +431,7 @@ export async function runWebConsoleConfigCli(
         autoBroadcast = false;
         break;
       }
-      println();
       println(`${C.RED} * 規格外の選択肢を入力しました、やり直してください!`);
-      println();
     }
 
     return {
@@ -407,7 +458,6 @@ export async function runServerSetupCli(
 ): Promise<LaunchPlan | null> {
   const prompter: Prompter = new Prompter();
   try {
-    println();
     println(
       `${C.LIGHT_CYAN} -------------------- [サーバー・試合設定] --------------------`
     );
@@ -427,17 +477,13 @@ export async function runServerSetupCli(
       const p1: number | null = parsePortInput(raw1, config.serverPorts[0]);
       const p2: number | null = parsePortInput(raw2, config.serverPorts[1]);
       if (p1 === null || p2 === null) {
-        println();
         println(
           `${C.RED} * 無効な入力です。${MIN_VALID_PORT}〜${MAX_VALID_PORT}の数値を入力してください!`
         );
-        println();
         continue;
       }
       if (p1 === p2) {
-        println();
         println(`${C.RED} * 1つ目と2つ目のポートは別の番号を指定してください!`);
-        println();
         continue;
       }
       if (
@@ -446,17 +492,24 @@ export async function runServerSetupCli(
         p1 === webConfig.consolePatchPort ||
         p2 === webConfig.consolePatchPort
       ) {
-        println();
         println(
           `${C.RED} * Webコンソール関連ポート(${webConfig.webConsolePort}, ${webConfig.consolePatchPort})と重複しています。別のポートを指定してください!`
         );
-        println();
         continue;
       }
       port1 = p1;
       port2 = p2;
       break;
     }
+
+    // Rotate clean before match/MOD configuration so Tab 2 retains only this round's config & injection logs
+    resetServerTabRound();
+    println(
+      `${C.LIGHT_CYAN} -------------------- [サーバー・試合設定] --------------------`
+    );
+    println(
+      `${C.LIGHT_WHITE} * サーバーポート: ${C.LIGHT_GREEN}${port1} <-> ${port2}`
+    );
 
     const matchConfig: MatchConfig = await promptMatchConfig(
       prompter,
@@ -484,12 +537,11 @@ export async function runReconfigureMatchCli(
 ): Promise<LaunchPlan | null> {
   const prompter: Prompter = new Prompter();
   try {
-    println();
     println(
       `${C.LIGHT_CYAN} ================== マップ・MOD再設定モード ==================`
     );
     println(
-      `${C.LIGHT_BLACK} * Webコンソールとサーバーポート設定はそのまま維持されます`
+      `${C.LIGHT_BLACK} * Webコンソールとサーバーポート設定(${currentPlan.serverPorts[0]} <-> ${currentPlan.serverPorts[1]})はそのまま維持されます`
     );
 
     const matchConfig: MatchConfig = await promptMatchConfig(

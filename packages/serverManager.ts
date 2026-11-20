@@ -7,7 +7,12 @@ import {
 } from "./constants";
 import { spawnAndInjectServer } from "./injector";
 import { buildInjectionPlan } from "./mods";
-import { formatSeconds, println, waitForPostMatchDecision } from "./terminal";
+import {
+  formatSeconds,
+  println,
+  resetServerTabRound,
+  waitForPostMatchDecision,
+} from "./terminal";
 import type {
   ActiveInjectionSession,
   LaunchPlan,
@@ -40,6 +45,33 @@ async function sleepAbortable(ms: number, signal: AbortSignal): Promise<boolean>
   return waiter;
 }
 
+function printRoundConfigSummary(
+  plan: LaunchPlan,
+  currentPort: number,
+  title: string
+): void {
+  const defaultModNames: string = DEFAULT_PATCH_SCRIPTS.map(
+    (patch: PatchScript): string => patch.label
+  ).join(", ");
+  const selectedModNames: string =
+    plan.selectedOptionLabels.length > 0
+      ? plan.selectedOptionLabels.join(", ")
+      : "なし";
+
+  println(`${C.LIGHT_CYAN} ${title}`);
+  println(
+    `${C.LIGHT_WHITE} * マップ:         ${C.LIGHT_GREEN}${plan.mapLabel} (${plan.mapId})`
+  );
+  println(
+    `${C.LIGHT_WHITE} * サーバーポート: ${C.LIGHT_GREEN}${plan.serverPorts[0]} <-> ${plan.serverPorts[1]} ${C.LIGHT_BLACK}(今回: ${currentPort})`
+  );
+  println(`${C.LIGHT_WHITE} * 自動注入MOD:    ${C.CYAN}${defaultModNames}`);
+  println(`${C.LIGHT_WHITE} * 選択済みMOD:    ${C.CYAN}${selectedModNames}`);
+  println(
+    `${C.LIGHT_CYAN} ============================================================`
+  );
+}
+
 export async function runServerSupervisor(
   options: RunSupervisorOptions
 ): Promise<void> {
@@ -52,9 +84,23 @@ export async function runServerSupervisor(
 
   let currentPort: number = activePlan.serverPorts[0];
   let round: number = 0;
+  let pendingRetryNotice: string | null = null;
 
   while (!signal.aborted) {
     round += 1;
+
+    if (pendingRetryNotice !== null) {
+      resetServerTabRound();
+      println(
+        `${C.LIGHT_YELLOW} * 前回起動失敗のためポート切替再試行 (${pendingRetryNotice})`
+      );
+      printRoundConfigSummary(
+        activePlan,
+        currentPort,
+        "======================= 起動設定まとめ ======================="
+      );
+      pendingRetryNotice = null;
+    }
 
     println();
     println(
@@ -95,6 +141,7 @@ export async function runServerSupervisor(
         println(
           `${C.RED} * ${formatSeconds(STARTUP_RETRY_DELAY_MS)}後にポートを切り替えて再試行します...`
         );
+        pendingRetryNotice = msg;
         currentPort =
           currentPort === activePlan.serverPorts[0]
             ? activePlan.serverPorts[1]
@@ -186,6 +233,7 @@ export async function runServerSupervisor(
     }
 
     if (action === "reconfigure") {
+      resetServerTabRound();
       const updatedPlan: LaunchPlan | null = await runReconfigureMatchCli(
         activePlan,
         signal
@@ -199,32 +247,18 @@ export async function runServerSupervisor(
         activePlan.consolePatchPort
       );
 
-      const defaultModNames: string = DEFAULT_PATCH_SCRIPTS.map(
-        (patch: PatchScript): string => patch.label
-      ).join(", ");
-      const selectedModNames: string =
-        activePlan.selectedOptionLabels.length > 0
-          ? activePlan.selectedOptionLabels.join(", ")
-          : "なし";
-
       println();
-      println(
-        `${C.LIGHT_CYAN} ======================= 更新後の設定 =======================`
-      );
-      println(
-        `${C.LIGHT_WHITE} * マップ:         ${C.LIGHT_GREEN}${activePlan.mapLabel} (${activePlan.mapId})`
-      );
-      println(
-        `${C.LIGHT_WHITE} * 次回ポート:     ${C.LIGHT_GREEN}${currentPort}`
-      );
-      println(`${C.LIGHT_WHITE} * 自動注入MOD:    ${C.CYAN}${defaultModNames}`);
-      println(`${C.LIGHT_WHITE} * 選択済みMOD:    ${C.CYAN}${selectedModNames}`);
-      println(
-        `${C.LIGHT_CYAN} ============================================================`
+      printRoundConfigSummary(
+        activePlan,
+        currentPort,
+        "======================= 更新後の設定 ======================="
       );
     } else {
-      println(
-        `${C.LIGHT_YELLOW} * 前回の設定のままポート ${C.LIGHT_GREEN}${currentPort}${C.LIGHT_YELLOW} で再起動します...`
+      resetServerTabRound();
+      printRoundConfigSummary(
+        activePlan,
+        currentPort,
+        "================= 起動設定 (前回設定を継続) ================="
       );
     }
   }

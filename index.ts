@@ -13,7 +13,10 @@ import {
 import { fetchPublicIp } from "./packages/network";
 import { runServerSupervisor } from "./packages/serverManager";
 import {
+  enterTabbedMode,
+  exitTabbedMode,
   formatSeconds,
+  isInteractiveTty,
   println,
   setupTerminal,
   waitForExitKey,
@@ -35,7 +38,6 @@ async function main(): Promise<void> {
   println(
     `${C.LIGHT_CYAN} * ソフト作者: ${C.LIGHT_WHITE}アサネオン  ${C.LIGHT_YELLOW}Build ${C.LIGHT_GREEN}With ${C.LIGHT_BLUE}Antigravity`
   );
-  println();
 
   // Ensure working directory contains the server binary (relative paths only)
   if (!ensureServerWorkingDir(DEFAULT_CONFIG.shippingExecutable)) {
@@ -127,7 +129,7 @@ async function main(): Promise<void> {
   const stopController: AbortController = new AbortController();
   const handleShutdown = (): void => {
     if (stopController.signal.aborted) return;
-    println();
+    exitTabbedMode();
     println(
       `${C.LIGHT_YELLOW} * 終了シグナルを受信しました。サーバーとWebコンソールを停止しています...`
     );
@@ -137,6 +139,10 @@ async function main(): Promise<void> {
 
   process.on("SIGINT", handleShutdown);
   process.on("SIGTERM", handleShutdown);
+
+  if (isInteractiveTty()) {
+    enterTabbedMode(webConsole.displayInfo, "server");
+  }
 
   try {
     // Step 3: Server ports, map, match settings, and MOD selection (second section)
@@ -157,7 +163,7 @@ async function main(): Promise<void> {
         ? plan.selectedOptionLabels.join(", ")
         : "なし";
 
-    // Display launch summary
+    // Display launch summary (separate visual category)
     println();
     println(
       `${C.LIGHT_CYAN} ======================= 起動設定まとめ =======================`
@@ -183,14 +189,15 @@ async function main(): Promise<void> {
       signal: stopController.signal,
     });
   } finally {
+    exitTabbedMode();
     webConsole.stop();
     println(`${C.LIGHT_GREEN} * 正常に終了しました。`);
   }
 }
 
 main().catch(async (err: unknown): Promise<void> => {
+  exitTabbedMode();
   if (err instanceof Error && err.name === "AbortError") {
-    println();
     println(`${C.LIGHT_GREEN} * 正常に終了しました。`);
     process.exit(0);
   }

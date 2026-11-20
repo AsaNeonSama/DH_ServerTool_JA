@@ -34,10 +34,25 @@ export interface Kernel32Symbols {
   readonly GetExitCodeProcess: (processHandle: bigint, exitCodePtr: Pointer) => number;
   readonly TerminateProcess: (processHandle: bigint, exitCode: number) => number;
   readonly CloseHandle: (objectHandle: bigint) => number;
+  readonly GlobalAlloc: (flags: number, bytes: bigint) => bigint;
+  readonly GlobalLock: (memHandle: bigint) => Pointer | bigint | null;
+  readonly GlobalUnlock: (memHandle: bigint) => number;
+  readonly GlobalFree: (memHandle: bigint) => bigint;
 }
 
 export interface Kernel32Library {
   readonly symbols: Kernel32Symbols;
+}
+
+export interface User32Symbols {
+  readonly OpenClipboard: (ownerWindow: bigint) => number;
+  readonly EmptyClipboard: () => number;
+  readonly SetClipboardData: (format: number, memHandle: bigint) => bigint;
+  readonly CloseClipboard: () => number;
+}
+
+export interface User32Library {
+  readonly symbols: User32Symbols;
 }
 
 export type ExtendedIpTableArgs = [

@@ -6,8 +6,14 @@
     <title>未認証 // DH-Web-Console</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="shortcut icon" href="/favicon.ico">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,600;0,700;1,700&family=Dela+Gothic+One&family=JetBrains+Mono:wght@700;800&family=Zen+Kaku+Gothic+New:wght@700;900&display=swap" rel="stylesheet">
     <style>
       :root {
+        --font-display: "Chakra Petch", "Dela Gothic One", "Zen Kaku Gothic New", "Hiragino Kaku Gothic StdN", "Yu Gothic", "Meiryo", sans-serif;
+        --font-ui: "Chakra Petch", "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", system-ui, sans-serif;
+        --font-tech: "Chakra Petch", "JetBrains Mono", "Zen Kaku Gothic New", "Cascadia Mono", "Consolas", monospace;
         --ink: #0b0b10;
         --paper: #f6f4ea;
         --blue: #1e6bff;
@@ -31,6 +37,12 @@
         box-sizing: border-box;
       }
 
+      html {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+      }
+
       body {
         margin: 0;
         min-height: 100vh;
@@ -39,7 +51,8 @@
         display: flex;
         justify-content: center;
         align-items: center;
-        font-family: "BIZ UDPGothic", "Noto Sans JP", "Yu Gothic UI", "Hiragino Kaku Gothic ProN", "Meiryo", system-ui, sans-serif;
+        font-family: var(--font-ui);
+        font-feature-settings: "palt" 1;
         background-color: var(--paper);
         background-image:
           linear-gradient(135deg, rgba(255, 42, 85, 0.08) 0, rgba(255, 42, 85, 0.08) 18%, transparent 18%),
@@ -146,11 +159,13 @@
         display: inline-block;
         background-color: var(--yellow);
         color: var(--ink);
-        padding: 5px 18px;
-        font-family: "Cascadia Mono", "Consolas", monospace;
-        font-size: 13px;
-        font-weight: 900;
-        letter-spacing: 0.1em;
+        padding: 5px 19px;
+        font-family: var(--font-tech);
+        font-style: italic;
+        font-size: 13.5px;
+        font-weight: 700;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
         margin-bottom: 18px;
         clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
         filter: drop-shadow(4px 4px 0 var(--ink));
@@ -158,18 +173,23 @@
 
       h1 {
         margin: 0 0 14px;
+        font-family: var(--font-display);
         font-size: 26px;
         font-weight: 900;
+        font-synthesis-weight: none;
         color: var(--red);
-        letter-spacing: 0.04em;
-        text-shadow: 2px 2px 0 var(--ink);
+        letter-spacing: 0.05em;
+        line-height: 1.25;
+        text-shadow: 2px 2px 0 var(--ink), 4px 4px 0 rgba(11, 11, 16, 0.25);
       }
 
       p {
         margin: 0;
+        font-family: var(--font-ui);
         font-size: 15px;
         font-weight: 700;
-        line-height: 1.8;
+        letter-spacing: 0.025em;
+        line-height: 1.85;
         color: var(--ink);
       }
 

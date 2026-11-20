@@ -1,6 +1,14 @@
+export const STD_INPUT_HANDLE: number = -10;
 export const STD_OUTPUT_HANDLE: number = -11;
+export const ENABLE_WINDOW_INPUT: number = 0x0008;
+export const ENABLE_MOUSE_INPUT: number = 0x0010;
+export const ENABLE_QUICK_EDIT_MODE: number = 0x0040;
+export const ENABLE_EXTENDED_FLAGS: number = 0x0080;
+export const ENABLE_VIRTUAL_TERMINAL_INPUT: number = 0x0200;
 export const ENABLE_VIRTUAL_TERMINAL_PROCESSING: number = 0x0004;
 export const CP_UTF8: number = 65001;
+export const CF_UNICODETEXT: number = 13;
+export const GMEM_MOVEABLE: number = 0x0002;
 export const TH32CS_SNAPPROCESS: number = 0x00000002;
 export const PROCESS_QUERY_LIMITED_INFORMATION: number = 0x1000;
 export const PROCESS_TERMINATE: number = 0x0001;

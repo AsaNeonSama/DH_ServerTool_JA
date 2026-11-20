@@ -1,14 +1,19 @@
+import { randomBytes } from "crypto";
 import { readFileSync } from "fs";
 import { brotliCompressSync, gzipSync } from "zlib";
+import dhCipherJs from "../assets/console/dh_cipher.js" with { type: "text" };
 import controlPageHtml from "../assets/console/dh_console.html" with { type: "text" };
 import unAuthPageHtml from "../assets/console/un_auth.html" with { type: "text" };
 import appIconIcoPath from "../assets/icon.ico" with { type: "file" };
 import {
   ACTOR_COMMENT_DICT,
-  AUTH_ID_PREFIX,
+  AUTH_CHALLENGE_BYTES,
+  AUTH_CHALLENGE_TTL_MS,
+  AUTH_VERIFY_PATH,
   BONE_DAGGER_ITEM,
   C,
   CONSOLE_MESSAGES,
+  COOKIE_AAD,
   COOKIE_MAX_AGE_SECONDS,
   COOKIE_NAME,
   DEFAULT_TCP_TIMEOUT_MS,
@@ -19,20 +24,26 @@ import {
 } from "./constants";
 import {
   createAesGcmCipher,
-  createEncryptedAuthToken,
-  verifyEncryptedAuthToken,
+  createPskAuthToken,
+  timingSafeStringEquals,
 } from "./crypto";
-import { println } from "./terminal";
+import { isInteractiveTty, println } from "./terminal";
 import type {
   AesGcmSessionCipher,
+  ApiResultPayload,
   AuthRouteHandler,
   CachedPage,
+  ConsoleBridgePayload,
+  EncryptedRouteHandler,
   RouteHandler,
   TcpPacketOptions,
   TcpSocketWriter,
+  WebConsoleDisplayInfo,
   WebConsoleInstance,
   WebConsoleOptions,
 } from "./types";
+
+const CIPHER_INLINE_TOKEN: string = "/*__DH_CIPHER_INLINE__*/";
 
 function toArrayBufferUint8(data: Uint8Array): Uint8Array<ArrayBuffer> {
   const copy: Uint8Array<ArrayBuffer> = new Uint8Array(data.byteLength);
@@ -53,37 +64,178 @@ function precompressHtml(html: string): CachedPage {
   };
 }
 
-const controlPageCache: CachedPage = precompressHtml(unwrapTextImport(controlPageHtml));
+const cipherScriptSource: string = unwrapTextImport(dhCipherJs);
+const controlPageWithCipher: string = unwrapTextImport(controlPageHtml).replace(
+  CIPHER_INLINE_TOKEN,
+  (): string => cipherScriptSource
+);
+const controlPageCache: CachedPage = precompressHtml(controlPageWithCipher);
 const unAuthPageCache: CachedPage = precompressHtml(unwrapTextImport(unAuthPageHtml));
 const faviconBytes: Uint8Array<ArrayBuffer> = toArrayBufferUint8(
   readFileSync(appIconIcoPath)
 );
 
-function htmlResponse(req: Request, page: CachedPage): Response {
+function buildAuthBootstrapHtml(challenge: string): string {
+  return `<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="no-referrer">
+  <title>DH-Web-Console</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <style>
+    :root {
+      --ink: #0b0b10;
+      --paper: #f6f4ea;
+      --cyan: #00e5ff;
+      --yellow: #ffe600;
+      --pink: #ff2a85;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: var(--paper);
+      background-image:
+        linear-gradient(to right, rgba(11, 11, 16, 0.055) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(11, 11, 16, 0.055) 1px, transparent 1px);
+      background-size: 26px 26px;
+    }
+    .dots {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+    .dots i {
+      display: block;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 2.5px solid var(--ink);
+      animation: dotBounce 0.9s ease-in-out infinite;
+    }
+    .dots i:nth-child(1) {
+      background-color: var(--cyan);
+      animation-delay: 0s;
+    }
+    .dots i:nth-child(2) {
+      background-color: var(--yellow);
+      animation-delay: 0.16s;
+    }
+    .dots i:nth-child(3) {
+      background-color: var(--pink);
+      animation-delay: 0.32s;
+    }
+    @keyframes dotBounce {
+      0%, 80%, 100% {
+        transform: translateY(0) scale(0.8);
+        opacity: 0.55;
+      }
+      40% {
+        transform: translateY(-8px) scale(1.22);
+        opacity: 1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="dots" role="status" aria-label="Loading"><i></i><i></i><i></i></div>
+  <script>
+${cipherScriptSource}
+(async function () {
+  "use strict";
+  var STORAGE_KEY = "dh_console_psk";
+  var CHALLENGE = ${JSON.stringify(challenge)};
+  var VERIFY_PATH = ${JSON.stringify(AUTH_VERIFY_PATH)};
+
+  function fail() {
+    try { sessionStorage.removeItem(STORAGE_KEY); } catch (_) {}
+    try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+    window.location.replace("/dh-console/un-auth");
+  }
+
+  var psk = window.location.hash && window.location.hash.length > 1
+    ? window.location.hash.slice(1).trim()
+    : "";
+  try {
+    window.history.replaceState(null, "", window.location.pathname);
+  } catch (_) {}
+
+  if (!window.__dhCipher || !window.__dhCipher.isValidPsk(psk)) {
+    fail();
+    return;
+  }
+
+  try {
+    var cipherReq = window.__dhCipher.encrypt(
+      JSON.stringify({ challenge: CHALLENGE }),
+      psk,
+      "REQ:" + VERIFY_PATH
+    );
+    var res = await window.fetch(VERIFY_PATH, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+      body: cipherReq
+    });
+    if (!res.ok) {
+      fail();
+      return;
+    }
+    var cipherRes = (await res.text()).trim();
+    var plainRes = window.__dhCipher.decrypt(cipherRes, psk, "RES:" + VERIFY_PATH);
+    if (plainRes === null) {
+      fail();
+      return;
+    }
+    var parsed = JSON.parse(plainRes);
+    if (!parsed || parsed.ok !== true || parsed.challenge !== CHALLENGE) {
+      fail();
+      return;
+    }
+    try { sessionStorage.setItem(STORAGE_KEY, psk); } catch (_) {}
+    try { localStorage.setItem(STORAGE_KEY, psk); } catch (_) {}
+    window.location.replace("/dh-console/home_page");
+  } catch (_) {
+    fail();
+  }
+})();
+  </script>
+</body>
+</html>`;
+}
+
+function htmlResponse(req: Request, page: CachedPage, noStore: boolean = false): Response {
   const accept: string = req.headers.get("accept-encoding") ?? "";
+  const baseHeaders: Record<string, string> = {
+    "Content-Type": "text/html; charset=utf-8",
+    Vary: "Accept-Encoding",
+    ...(noStore ? { "Cache-Control": "no-store" } : {}),
+  };
   if (accept.includes("br")) {
     return new Response(page.br, {
       headers: {
-        "Content-Type": "text/html; charset=utf-8",
+        ...baseHeaders,
         "Content-Encoding": "br",
-        Vary: "Accept-Encoding",
       },
     });
   }
   if (accept.includes("gzip")) {
     return new Response(page.gzip, {
       headers: {
-        "Content-Type": "text/html; charset=utf-8",
+        ...baseHeaders,
         "Content-Encoding": "gzip",
-        Vary: "Accept-Encoding",
       },
     });
   }
   return new Response(page.raw, {
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
-      Vary: "Accept-Encoding",
-    },
+    headers: baseHeaders,
   });
 }
 
@@ -120,18 +272,18 @@ function redirectToUnAuth(): Response {
   return redirectTo("/dh-console/un-auth");
 }
 
-function jsonBody(status: number, msg: string): Response {
-  return Response.json({ status, msg });
+function apiResult(status: number, msg: string): ApiResultPayload {
+  return { status, msg };
 }
 
 function roleDisplay(name: string): string {
   return PLAYER_NAME_DICT[name] ?? name;
 }
 
-async function parseJsonObject(req: Request): Promise<Record<string, unknown> | null> {
+function parseJsonObjectString(text: string): Record<string, unknown> | null {
   try {
-    const parsed: unknown = await req.json();
-    if (typeof parsed !== "object" || parsed === null) {
+    const parsed: unknown = JSON.parse(text);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
       return null;
     }
     return parsed as Record<string, unknown>;
@@ -265,67 +417,120 @@ function buildConsoleBroadcastMessage(
 
 export function startWebConsole(options: WebConsoleOptions): WebConsoleInstance {
   const { webPort, consolePatchPort, autoBroadcast, publicIp }: WebConsoleOptions = options;
-  const authId: string = `${AUTH_ID_PREFIX}${crypto.randomUUID().toUpperCase()}`;
+  const authId: string = crypto.randomUUID().toUpperCase();
   const cipher: AesGcmSessionCipher = createAesGcmCipher();
-  const authToken: string = createEncryptedAuthToken(authId, cipher);
+  const authToken: string = createPskAuthToken(authId, cipher.psk);
+  const pendingChallenges: Map<string, number> = new Map();
 
-  const sendCommandObj = (payload: Record<string, unknown>): Promise<Error | null> =>
+  const pruneExpiredChallenges = (now: number): void => {
+    for (const [key, expiresAt] of pendingChallenges) {
+      if (expiresAt <= now) {
+        pendingChallenges.delete(key);
+      }
+    }
+  };
+
+  const issueAuthChallenge = (): string => {
+    const now: number = Date.now();
+    pruneExpiredChallenges(now);
+    const challenge: string = randomBytes(AUTH_CHALLENGE_BYTES).toString("base64url");
+    pendingChallenges.set(challenge, now + AUTH_CHALLENGE_TTL_MS);
+    return challenge;
+  };
+
+  const consumeAuthChallenge = (challenge: string): boolean => {
+    const now: number = Date.now();
+    pruneExpiredChallenges(now);
+    const expiresAt: number | undefined = pendingChallenges.get(challenge);
+    if (expiresAt === undefined || expiresAt <= now) {
+      pendingChallenges.delete(challenge);
+      return false;
+    }
+    pendingChallenges.delete(challenge);
+    return true;
+  };
+
+  const sendBridgePayload = (payload: ConsoleBridgePayload): Promise<Error | null> =>
     sendUtf16TcpPacket({
       port: consolePatchPort,
       text: JSON.stringify(payload),
     });
 
-  const consoleCommand = (playerName: string, command: string): Promise<Error | null> =>
-    sendCommandObj({ op: "consoleexec", role: playerName, command });
-
-  const setHuman = (
-    playerName: string,
-    propName: string,
-    value: number
+  const executeConsoleCommand = (
+    targetRole: string,
+    command: string
   ): Promise<Error | null> =>
-    sendCommandObj({
-      op: "sethuman",
-      role: playerName,
-      propname: propName,
-      value,
+    sendBridgePayload({
+      action: "execute_console_command",
+      targetRole,
+      command,
     });
 
-  const addItem = (
-    playerName: string,
-    itemName: string,
-    count: number
+  const setHumanProperty = (
+    targetRole: string,
+    propertyName: string,
+    propertyValue: number
   ): Promise<Error | null> =>
-    sendCommandObj({
-      op: "additem",
-      role: playerName,
-      itemname: itemName,
-      count,
+    sendBridgePayload({
+      action: "set_human_property",
+      targetRole,
+      propertyName,
+      propertyValue,
     });
 
-  const setStorage = (playerName: string, limit: number): Promise<Error | null> =>
-    sendCommandObj({ op: "setstorage", role: playerName, limit });
+  const addInventoryItem = (
+    targetRole: string,
+    itemBlueprintPath: string,
+    itemCount: number
+  ): Promise<Error | null> =>
+    sendBridgePayload({
+      action: "add_inventory_item",
+      targetRole,
+      itemBlueprintPath,
+      itemCount,
+    });
 
-  const sendThrallMsg = (playerName: string, msg: string): Promise<Error | null> =>
-    sendCommandObj({ op: "thrallmsg", role: playerName, msg });
+  const setPlayerStorageLimit = (
+    targetRole: string,
+    storageLimit: number
+  ): Promise<Error | null> =>
+    sendBridgePayload({
+      action: "set_storage_limit",
+      targetRole,
+      storageLimit,
+    });
 
-  const kickPlayer = (playerName: string): Promise<Error | null> =>
-    sendCommandObj({ op: "kick", role: playerName });
+  const sendPlayerMessage = (
+    targetRole: string,
+    message: string
+  ): Promise<Error | null> =>
+    sendBridgePayload({
+      action: "send_thrall_message",
+      targetRole,
+      message,
+    });
 
-  const broadcast = async (msg: string): Promise<Error | null> => {
+  const kickTargetPlayer = (targetRole: string): Promise<Error | null> =>
+    sendBridgePayload({
+      action: "kick_player",
+      targetRole,
+    });
+
+  const broadcastMessageToAll = async (message: string): Promise<Error | null> => {
     for (const role of PLAYER_NAME_LIST) {
-      const err: Error | null = await sendThrallMsg(role, msg);
+      const err: Error | null = await sendPlayerMessage(role, message);
       if (err) return err;
     }
     return null;
   };
 
-  const autoBroadcastExcept = async (
-    excludePlayer: string,
-    msg: string
+  const broadcastMessageExcept = async (
+    excludedRole: string,
+    message: string
   ): Promise<Error | null> => {
     for (const role of PLAYER_NAME_LIST) {
-      if (role === excludePlayer) continue;
-      const err: Error | null = await sendThrallMsg(role, msg);
+      if (role === excludedRole) continue;
+      const err: Error | null = await sendPlayerMessage(role, message);
       if (err) return err;
     }
     return null;
@@ -335,15 +540,61 @@ export function startWebConsole(options: WebConsoleOptions): WebConsoleInstance 
     const cookies: Record<string, string> = parseCookies(req.headers.get("cookie"));
     const sessionCookie: string | undefined = cookies[COOKIE_NAME];
     if (!sessionCookie) return false;
-    return cipher.verify(sessionCookie, authId);
+    return cipher.verify(sessionCookie, authId, COOKIE_AAD);
   };
 
-  const withAuth = (handler: RouteHandler): RouteHandler =>
+  const withGetAuth = (handler: RouteHandler): RouteHandler =>
     (req: Request): Response | Promise<Response> => {
       if (!isAuthenticated(req)) {
         return redirectToUnAuth();
       }
       return handler(req);
+    };
+
+  const encryptedResponse = (
+    pathname: string,
+    payload: unknown,
+    extraHeaders?: Record<string, string>
+  ): Response => {
+    const ciphertext: string = cipher.encrypt(
+      JSON.stringify(payload),
+      `RES:${pathname}`
+    );
+    return new Response(ciphertext, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+        ...extraHeaders,
+      },
+    });
+  };
+
+  const withEncryptedPostAuth = (
+    pathname: string,
+    handler: EncryptedRouteHandler
+  ): RouteHandler =>
+    async (req: Request): Promise<Response> => {
+      if (!isAuthenticated(req)) {
+        return new Response(null, { status: 401 });
+      }
+      const rawCiphertext: string = (await req.text()).trim();
+      const decrypted: string | null = cipher.decrypt(
+        rawCiphertext,
+        `REQ:${pathname}`
+      );
+      if (decrypted === null) {
+        return new Response(null, { status: 401 });
+      }
+      const data: Record<string, unknown> | null = parseJsonObjectString(decrypted);
+      if (!data) {
+        return encryptedResponse(
+          pathname,
+          apiResult(STATUS_CODE.badRequest, CONSOLE_MESSAGES.networkParamError)
+        );
+      }
+      const result: ApiResultPayload = await handler(data);
+      return encryptedResponse(pathname, result);
     };
 
   const handleFavicon: RouteHandler = (): Response =>
@@ -366,228 +617,299 @@ export function startWebConsole(options: WebConsoleOptions): WebConsoleInstance 
   const handleAuth: AuthRouteHandler = (
     req: Bun.BunRequest<"/dh-console/auth/:token">
   ): Response => {
-    const candidateToken: string = decodeURIComponent(req.params.token);
-    if (!verifyEncryptedAuthToken(candidateToken, authId, cipher)) {
+    const candidateUuid: string = decodeURIComponent(req.params.token);
+    if (!timingSafeStringEquals(candidateUuid, authId)) {
       return redirectToUnAuth();
     }
-    const encryptedCookieValue: string = cipher.encrypt(authId);
-    return new Response(null, {
-      status: 302,
+    const challenge: string = issueAuthChallenge();
+    return new Response(buildAuthBootstrapHtml(challenge), {
+      status: 200,
       headers: {
-        Location: "/dh-console/home_page",
-        "Set-Cookie": `${COOKIE_NAME}=${encodeURIComponent(
-          encryptedCookieValue
-        )}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${COOKIE_MAX_AGE_SECONDS}`,
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
+        "Referrer-Policy": "no-referrer",
       },
     });
   };
 
-  const handleHomePage: RouteHandler = withAuth((req: Request): Response =>
-    htmlResponse(req, controlPageCache));
+  const handleAuthVerify: RouteHandler = async (req: Request): Promise<Response> => {
+    const rawCiphertext: string = (await req.text()).trim();
+    const decrypted: string | null = cipher.decrypt(
+      rawCiphertext,
+      `REQ:${AUTH_VERIFY_PATH}`
+    );
+    if (decrypted === null) {
+      return new Response(null, { status: 401 });
+    }
+    const data: Record<string, unknown> | null = parseJsonObjectString(decrypted);
+    const challenge: unknown = data?.challenge;
+    if (typeof challenge !== "string" || !consumeAuthChallenge(challenge)) {
+      return new Response(null, { status: 401 });
+    }
+    const encryptedCookieValue: string = cipher.encrypt(authId, COOKIE_AAD);
+    return encryptedResponse(
+      AUTH_VERIFY_PATH,
+      { ok: true, challenge },
+      {
+        "Set-Cookie": `${COOKIE_NAME}=${encodeURIComponent(
+          encryptedCookieValue
+        )}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${COOKIE_MAX_AGE_SECONDS}`,
+      }
+    );
+  };
 
-  const handleConsoleCommand: RouteHandler = withAuth(
-    async (req: Request): Promise<Response> => {
-      const data: Record<string, unknown> | null = await parseJsonObject(req);
-      if (!data) return jsonBody(STATUS_CODE.net, CONSOLE_MESSAGES.net);
+  const handleHomePage: RouteHandler = withGetAuth((req: Request): Response =>
+    htmlResponse(req, controlPageCache, true));
 
-      const playerName: unknown = data.player_name;
+  const handleConsoleCommand: RouteHandler = withEncryptedPostAuth(
+    "/dh-console/console_command",
+    async (data: Record<string, unknown>): Promise<ApiResultPayload> => {
+      const targetRole: unknown = data.player_name;
       const command: unknown = data.command;
-      if (typeof playerName !== "string" || typeof command !== "string") {
-        return jsonBody(STATUS_CODE.net, CONSOLE_MESSAGES.net);
+      if (typeof targetRole !== "string" || typeof command !== "string") {
+        return apiResult(STATUS_CODE.badRequest, CONSOLE_MESSAGES.networkParamError);
       }
 
-      const err: Error | null = await consoleCommand(playerName, command);
-      if (err) return jsonBody(STATUS_CODE.ser, CONSOLE_MESSAGES.ser);
+      const execErr: Error | null = await executeConsoleCommand(targetRole, command);
+      if (execErr) {
+        return apiResult(STATUS_CODE.serverError, CONSOLE_MESSAGES.serverExecutionError);
+      }
 
       const spaceIdx: number = command.indexOf(" ");
-      const cmdName: string = spaceIdx === -1 ? command : command.slice(0, spaceIdx);
-      const cmdArg: string = spaceIdx === -1 ? "" : command.slice(spaceIdx + 1);
+      const commandName: string = spaceIdx === -1 ? command : command.slice(0, spaceIdx);
+      const commandArg: string = spaceIdx === -1 ? "" : command.slice(spaceIdx + 1);
 
-      if (cmdName === "setisthrall") {
-        const daggerErr: Error | null = await addItem(playerName, BONE_DAGGER_ITEM, 1);
-        if (daggerErr) return jsonBody(STATUS_CODE.par, CONSOLE_MESSAGES.ine);
-      }
-
-      if (autoBroadcast) {
-        const msg: string | null = buildConsoleBroadcastMessage(
-          playerName,
-          cmdName,
-          cmdArg
+      if (commandName === "setisthrall") {
+        const daggerErr: Error | null = await addInventoryItem(
+          targetRole,
+          BONE_DAGGER_ITEM,
+          1
         );
-        if (msg !== null) {
-          const bcErr: Error | null = await autoBroadcastExcept(playerName, msg);
-          if (bcErr) return jsonBody(STATUS_CODE.par, CONSOLE_MESSAGES.ine);
+        if (daggerErr) {
+          return apiResult(
+            STATUS_CODE.partialSuccess,
+            CONSOLE_MESSAGES.broadcastPartialError
+          );
         }
       }
-      return jsonBody(STATUS_CODE.suc, CONSOLE_MESSAGES.suc);
+
+      if (autoBroadcast) {
+        const notice: string | null = buildConsoleBroadcastMessage(
+          targetRole,
+          commandName,
+          commandArg
+        );
+        if (notice !== null) {
+          const broadcastErr: Error | null = await broadcastMessageExcept(
+            targetRole,
+            notice
+          );
+          if (broadcastErr) {
+            return apiResult(
+              STATUS_CODE.partialSuccess,
+              CONSOLE_MESSAGES.broadcastPartialError
+            );
+          }
+        }
+      }
+      return apiResult(STATUS_CODE.success, CONSOLE_MESSAGES.success);
     }
   );
 
-  const handleSetHuman: RouteHandler = withAuth(
-    async (req: Request): Promise<Response> => {
-      const data: Record<string, unknown> | null = await parseJsonObject(req);
-      if (!data) return jsonBody(STATUS_CODE.net, CONSOLE_MESSAGES.net);
-
-      const playerName: unknown = data.player_name;
-      const propName: unknown = data.prop_name;
-      const webValue: unknown = data.value;
+  const handleSetHuman: RouteHandler = withEncryptedPostAuth(
+    "/dh-console/set_human",
+    async (data: Record<string, unknown>): Promise<ApiResultPayload> => {
+      const targetRole: unknown = data.player_name;
+      const propertyName: unknown = data.prop_name;
+      const rawValue: unknown = data.value;
       if (
-        typeof playerName !== "string" ||
-        typeof propName !== "string" ||
-        webValue === undefined ||
-        webValue === null ||
-        webValue === ""
+        typeof targetRole !== "string" ||
+        typeof propertyName !== "string" ||
+        rawValue === undefined ||
+        rawValue === null ||
+        rawValue === ""
       ) {
-        return jsonBody(STATUS_CODE.net, CONSOLE_MESSAGES.net);
+        return apiResult(STATUS_CODE.badRequest, CONSOLE_MESSAGES.networkParamError);
       }
 
-      const value: number = Number(webValue);
-      if (!Number.isFinite(value) || value < 0) {
-        return jsonBody(STATUS_CODE.val, CONSOLE_MESSAGES.val);
+      const propertyValue: number = Number(rawValue);
+      if (!Number.isFinite(propertyValue) || propertyValue < 0) {
+        return apiResult(STATUS_CODE.invalidValue, CONSOLE_MESSAGES.invalidValueError);
       }
 
-      const err: Error | null = await setHuman(playerName, propName, value);
-      if (err) return jsonBody(STATUS_CODE.ser, CONSOLE_MESSAGES.ser);
+      const execErr: Error | null = await setHumanProperty(
+        targetRole,
+        propertyName,
+        propertyValue
+      );
+      if (execErr) {
+        return apiResult(STATUS_CODE.serverError, CONSOLE_MESSAGES.serverExecutionError);
+      }
 
       if (autoBroadcast) {
-        const bcErr: Error | null = await autoBroadcastExcept(
-          playerName,
-          `${roleDisplay(playerName)} が自分のステータスを操作しました`
+        const broadcastErr: Error | null = await broadcastMessageExcept(
+          targetRole,
+          `${roleDisplay(targetRole)} が自分のステータスを操作しました`
         );
-        if (bcErr) return jsonBody(STATUS_CODE.par, CONSOLE_MESSAGES.ine);
+        if (broadcastErr) {
+          return apiResult(
+            STATUS_CODE.partialSuccess,
+            CONSOLE_MESSAGES.broadcastPartialError
+          );
+        }
       }
-      if (value > HIGH_STAT_WARNING_THRESHOLD) {
-        return jsonBody(STATUS_CODE.suc, CONSOLE_MESSAGES.ove);
+      if (propertyValue > HIGH_STAT_WARNING_THRESHOLD) {
+        return apiResult(STATUS_CODE.success, CONSOLE_MESSAGES.highValueWarning);
       }
-      return jsonBody(STATUS_CODE.suc, CONSOLE_MESSAGES.suc);
+      return apiResult(STATUS_CODE.success, CONSOLE_MESSAGES.success);
     }
   );
 
-  const handleAddItem: RouteHandler = withAuth(
-    async (req: Request): Promise<Response> => {
-      const data: Record<string, unknown> | null = await parseJsonObject(req);
-      if (!data) return jsonBody(STATUS_CODE.net, CONSOLE_MESSAGES.net);
-
-      const playerName: unknown = data.player_name;
-      const itemName: unknown = data.item_name;
-      const rawCount: unknown = data.count;
+  const handleAddItem: RouteHandler = withEncryptedPostAuth(
+    "/dh-console/add_item",
+    async (data: Record<string, unknown>): Promise<ApiResultPayload> => {
+      const targetRole: unknown = data.player_name;
+      const itemBlueprintPath: unknown = data.item_name;
+      const rawItemCount: unknown = data.count;
       if (
-        typeof playerName !== "string" ||
-        typeof itemName !== "string" ||
-        rawCount === undefined ||
-        rawCount === null
+        typeof targetRole !== "string" ||
+        typeof itemBlueprintPath !== "string" ||
+        rawItemCount === undefined ||
+        rawItemCount === null
       ) {
-        return jsonBody(STATUS_CODE.net, CONSOLE_MESSAGES.net);
+        return apiResult(STATUS_CODE.badRequest, CONSOLE_MESSAGES.networkParamError);
       }
 
-      const count: number = Number.parseInt(toStringValue(rawCount), 10);
-      if (!Number.isInteger(count) || count <= 0) {
-        return jsonBody(STATUS_CODE.val, CONSOLE_MESSAGES.val);
+      const itemCount: number = Number.parseInt(toStringValue(rawItemCount), 10);
+      if (!Number.isInteger(itemCount) || itemCount <= 0) {
+        return apiResult(STATUS_CODE.invalidValue, CONSOLE_MESSAGES.invalidValueError);
       }
 
-      const err: Error | null = await addItem(playerName, itemName, count);
-      if (err) return jsonBody(STATUS_CODE.ser, CONSOLE_MESSAGES.ser);
+      const execErr: Error | null = await addInventoryItem(
+        targetRole,
+        itemBlueprintPath,
+        itemCount
+      );
+      if (execErr) {
+        return apiResult(STATUS_CODE.serverError, CONSOLE_MESSAGES.serverExecutionError);
+      }
 
       if (autoBroadcast) {
-        const label: string = ACTOR_COMMENT_DICT[itemName] ?? itemName;
-        const bcErr: Error | null = await autoBroadcastExcept(
-          playerName,
-          `${roleDisplay(playerName)} が ${label} ${count} を獲得しました`
+        const itemLabel: string =
+          ACTOR_COMMENT_DICT[itemBlueprintPath] ?? itemBlueprintPath;
+        const broadcastErr: Error | null = await broadcastMessageExcept(
+          targetRole,
+          `${roleDisplay(targetRole)} が ${itemLabel} ${itemCount} を獲得しました`
         );
-        if (bcErr) return jsonBody(STATUS_CODE.par, CONSOLE_MESSAGES.ine);
+        if (broadcastErr) {
+          return apiResult(
+            STATUS_CODE.partialSuccess,
+            CONSOLE_MESSAGES.broadcastPartialError
+          );
+        }
       }
-      return jsonBody(STATUS_CODE.suc, CONSOLE_MESSAGES.suc);
+      return apiResult(STATUS_CODE.success, CONSOLE_MESSAGES.success);
     }
   );
 
-  const handleSetStorage: RouteHandler = withAuth(
-    async (req: Request): Promise<Response> => {
-      const data: Record<string, unknown> | null = await parseJsonObject(req);
-      if (!data) return jsonBody(STATUS_CODE.net, CONSOLE_MESSAGES.net);
-
-      const playerName: unknown = data.player_name;
-      const rawLimit: unknown = data.limit;
+  const handleSetStorage: RouteHandler = withEncryptedPostAuth(
+    "/dh-console/set_storage",
+    async (data: Record<string, unknown>): Promise<ApiResultPayload> => {
+      const targetRole: unknown = data.player_name;
+      const rawStorageLimit: unknown = data.limit;
       if (
-        typeof playerName !== "string" ||
-        rawLimit === undefined ||
-        rawLimit === null
+        typeof targetRole !== "string" ||
+        rawStorageLimit === undefined ||
+        rawStorageLimit === null
       ) {
-        return jsonBody(STATUS_CODE.net, CONSOLE_MESSAGES.net);
+        return apiResult(STATUS_CODE.badRequest, CONSOLE_MESSAGES.networkParamError);
       }
 
-      const limit: number = Number.parseInt(toStringValue(rawLimit), 10);
-      if (!Number.isInteger(limit) || limit <= 0) {
-        return jsonBody(STATUS_CODE.val, CONSOLE_MESSAGES.val);
+      const storageLimit: number = Number.parseInt(toStringValue(rawStorageLimit), 10);
+      if (!Number.isInteger(storageLimit) || storageLimit <= 0) {
+        return apiResult(STATUS_CODE.invalidValue, CONSOLE_MESSAGES.invalidValueError);
       }
 
-      const err: Error | null = await setStorage(playerName, limit);
-      if (err) return jsonBody(STATUS_CODE.ser, CONSOLE_MESSAGES.ser);
+      const execErr: Error | null = await setPlayerStorageLimit(targetRole, storageLimit);
+      if (execErr) {
+        return apiResult(STATUS_CODE.serverError, CONSOLE_MESSAGES.serverExecutionError);
+      }
 
       if (autoBroadcast) {
-        const bcErr: Error | null = await autoBroadcastExcept(
-          playerName,
-          `${roleDisplay(playerName)} のストレージ容量が ${limit} になりました`
+        const broadcastErr: Error | null = await broadcastMessageExcept(
+          targetRole,
+          `${roleDisplay(targetRole)} のストレージ容量が ${storageLimit} になりました`
         );
-        if (bcErr) return jsonBody(STATUS_CODE.par, CONSOLE_MESSAGES.ine);
+        if (broadcastErr) {
+          return apiResult(
+            STATUS_CODE.partialSuccess,
+            CONSOLE_MESSAGES.broadcastPartialError
+          );
+        }
       }
-      return jsonBody(STATUS_CODE.suc, CONSOLE_MESSAGES.suc);
+      return apiResult(STATUS_CODE.success, CONSOLE_MESSAGES.success);
     }
   );
 
-  const handleSendThrallMsg: RouteHandler = withAuth(
-    async (req: Request): Promise<Response> => {
-      const data: Record<string, unknown> | null = await parseJsonObject(req);
-      if (!data) return jsonBody(STATUS_CODE.net, CONSOLE_MESSAGES.net);
-
-      const playerName: unknown = data.player_name;
-      const msg: unknown = data.msg;
-      if (typeof playerName !== "string" || typeof msg !== "string") {
-        return jsonBody(STATUS_CODE.net, CONSOLE_MESSAGES.net);
+  const handleSendThrallMsg: RouteHandler = withEncryptedPostAuth(
+    "/dh-console/send_thrall_msg",
+    async (data: Record<string, unknown>): Promise<ApiResultPayload> => {
+      const targetRole: unknown = data.player_name;
+      const message: unknown = data.msg;
+      if (typeof targetRole !== "string" || typeof message !== "string") {
+        return apiResult(STATUS_CODE.badRequest, CONSOLE_MESSAGES.networkParamError);
       }
 
-      const err: Error | null = await sendThrallMsg(playerName, msg);
-      if (err) return jsonBody(STATUS_CODE.ser, CONSOLE_MESSAGES.ser);
-      return jsonBody(STATUS_CODE.suc, CONSOLE_MESSAGES.suc);
+      const execErr: Error | null = await sendPlayerMessage(targetRole, message);
+      if (execErr) {
+        return apiResult(STATUS_CODE.serverError, CONSOLE_MESSAGES.serverExecutionError);
+      }
+      return apiResult(STATUS_CODE.success, CONSOLE_MESSAGES.success);
     }
   );
 
-  const handleBroadcast: RouteHandler = withAuth(
-    async (req: Request): Promise<Response> => {
-      const data: Record<string, unknown> | null = await parseJsonObject(req);
-      if (!data) return jsonBody(STATUS_CODE.net, CONSOLE_MESSAGES.net);
-
-      const msg: unknown = data.msg;
-      if (typeof msg !== "string") {
-        return jsonBody(STATUS_CODE.net, CONSOLE_MESSAGES.net);
+  const handleBroadcast: RouteHandler = withEncryptedPostAuth(
+    "/dh-console/send_thrall_msg/broadcast",
+    async (data: Record<string, unknown>): Promise<ApiResultPayload> => {
+      const message: unknown = data.msg;
+      if (typeof message !== "string") {
+        return apiResult(STATUS_CODE.badRequest, CONSOLE_MESSAGES.networkParamError);
       }
 
-      const err: Error | null = await broadcast(msg);
-      if (err) return jsonBody(STATUS_CODE.ser, CONSOLE_MESSAGES.ser);
-      return jsonBody(STATUS_CODE.suc, CONSOLE_MESSAGES.suc);
+      const execErr: Error | null = await broadcastMessageToAll(message);
+      if (execErr) {
+        return apiResult(STATUS_CODE.serverError, CONSOLE_MESSAGES.serverExecutionError);
+      }
+      return apiResult(STATUS_CODE.success, CONSOLE_MESSAGES.success);
     }
   );
 
-  const handleKickPlayer: RouteHandler = withAuth(
-    async (req: Request): Promise<Response> => {
-      const data: Record<string, unknown> | null = await parseJsonObject(req);
-      if (!data) return jsonBody(STATUS_CODE.net, CONSOLE_MESSAGES.net);
-
-      const playerName: unknown = data.player_name;
-      if (typeof playerName !== "string") {
-        return jsonBody(STATUS_CODE.net, CONSOLE_MESSAGES.net);
+  const handleKickPlayer: RouteHandler = withEncryptedPostAuth(
+    "/dh-console/kick_player",
+    async (data: Record<string, unknown>): Promise<ApiResultPayload> => {
+      const targetRole: unknown = data.player_name;
+      if (typeof targetRole !== "string") {
+        return apiResult(STATUS_CODE.badRequest, CONSOLE_MESSAGES.networkParamError);
       }
 
-      const err: Error | null = await kickPlayer(playerName);
-      if (err) return jsonBody(STATUS_CODE.ser, CONSOLE_MESSAGES.ser);
+      const execErr: Error | null = await kickTargetPlayer(targetRole);
+      if (execErr) {
+        return apiResult(STATUS_CODE.serverError, CONSOLE_MESSAGES.serverExecutionError);
+      }
 
       if (autoBroadcast) {
-        const bcErr: Error | null = await autoBroadcastExcept(
-          playerName,
-          `${roleDisplay(playerName)} がキックされました`
+        const broadcastErr: Error | null = await broadcastMessageExcept(
+          targetRole,
+          `${roleDisplay(targetRole)} がキックされました`
         );
-        if (bcErr) return jsonBody(STATUS_CODE.par, CONSOLE_MESSAGES.ine);
+        if (broadcastErr) {
+          return apiResult(
+            STATUS_CODE.partialSuccess,
+            CONSOLE_MESSAGES.broadcastPartialError
+          );
+        }
       }
-      return jsonBody(STATUS_CODE.suc, CONSOLE_MESSAGES.suc);
+      return apiResult(STATUS_CODE.success, CONSOLE_MESSAGES.success);
     }
   );
 
@@ -599,6 +921,7 @@ export function startWebConsole(options: WebConsoleOptions): WebConsoleInstance 
       "/": { GET: handleRoot },
       "/dh-console/un-auth": { GET: handleUnAuth },
       "/dh-console/auth/:token": { GET: handleAuth },
+      "/dh-console/auth/verify": { POST: handleAuthVerify },
       "/dh-console/home_page": { GET: handleHomePage },
       "/dh-console/console_command": { POST: handleConsoleCommand },
       "/dh-console/set_human": { POST: handleSetHuman },
@@ -608,37 +931,50 @@ export function startWebConsole(options: WebConsoleOptions): WebConsoleInstance 
       "/dh-console/send_thrall_msg/broadcast": { POST: handleBroadcast },
       "/dh-console/kick_player": { POST: handleKickPlayer },
     },
-    fetch(): Response {
+    fetch(req: Request): Response {
+      if (req.method !== "GET") {
+        return new Response(null, { status: 401 });
+      }
       return redirectToUnAuth();
     },
   });
 
+  const boundPort: number = server.port ?? webPort;
   const displayPublicIp: string = publicIp ?? "127.0.0.1";
-  const broadcastStatusText: string = autoBroadcast ? "オン" : "オフ";
-  println();
-  println(
-    `${C.LIGHT_CYAN} ==================== Webコンソール起動 ====================`
-  );
-  println(
-    `${C.LIGHT_WHITE} * パブリックアドレス: ${C.LIGHT_GREEN}http://${displayPublicIp}:${webPort}/dh-console/auth/${authToken}`
-  );
-  println(
-    `${C.LIGHT_WHITE} * ローカルアドレス:   ${C.LIGHT_GREEN}http://127.0.0.1:${webPort}/dh-console/auth/${authToken}`
-  );
-  println(
-    `${C.LIGHT_YELLOW} * ${authToken}${C.LIGHT_WHITE} はあなたのアクセス認証です(AES-256-GCM)。${C.LIGHT_RED}信用していない人に渡さないで下さい`
-  );
-  println(
-    `${C.LIGHT_BLACK} * 内部連携ポート(console_win64.js): 127.0.0.1:${consolePatchPort} / 自動ブロードキャスト: ${broadcastStatusText}`
-  );
-  println(
-    `${C.LIGHT_CYAN} ===========================================================`
-  );
+  const publicUrl: string = `http://${displayPublicIp}:${boundPort}/dh-console/auth/${authToken}`;
+  const localUrl: string = `http://127.0.0.1:${boundPort}/dh-console/auth/${authToken}`;
+  const displayInfo: WebConsoleDisplayInfo = {
+    port: boundPort,
+    consolePatchPort,
+    autoBroadcast,
+    publicUrl,
+    localUrl,
+  };
+
+  if (!isInteractiveTty()) {
+    const broadcastStatusText: string = autoBroadcast ? "オン" : "オフ";
+    println();
+    println(
+      `${C.LIGHT_CYAN} ==================== Webコンソール起動 ====================`
+    );
+    println(`${C.LIGHT_BLACK} * パブリックアドレス: ${publicUrl}`);
+    println(`${C.LIGHT_BLACK} * ローカルアドレス:   ${localUrl}`);
+    println(
+      `${C.LIGHT_YELLOW} * URL末尾の #PSK は事前共有鍵(AES-256-GCM)です。${C.LIGHT_WHITE}全API通信が密文で保護されます。${C.LIGHT_MAGENTA}信用していない人に渡さないで下さい`
+    );
+    println(
+      `${C.LIGHT_BLACK} * 内部連携ポート(console_win64.js): 127.0.0.1:${consolePatchPort} / 自動ブロードキャスト: ${broadcastStatusText}`
+    );
+    println(
+      `${C.LIGHT_CYAN} ===========================================================`
+    );
+  }
 
   return {
     authId,
     authToken,
-    port: server.port ?? webPort,
+    port: boundPort,
+    displayInfo,
     fetch(req: Request): Response | Promise<Response> {
       return server.fetch(req);
     },

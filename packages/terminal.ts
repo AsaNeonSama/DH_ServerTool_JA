@@ -1,8 +1,29 @@
 import { stdin as input, stdout as output } from "process";
 import * as readline from "readline/promises";
 import { C } from "./constants";
+import {
+  appendServerTabLine,
+  askInTabbedMode,
+  enterTabbedMode,
+  exitTabbedMode,
+  getDisplayWidth,
+  isInteractiveTty,
+  isTabbedModeActive,
+  resetServerTabRound,
+  setServerKeyHandler,
+  setServerStatusLine,
+} from "./terminalTabs";
 import type { PostMatchAction } from "./types";
 import { initWindowsConsole } from "./win32";
+
+export {
+  enterTabbedMode,
+  exitTabbedMode,
+  getDisplayWidth,
+  isInteractiveTty,
+  isTabbedModeActive,
+  resetServerTabRound,
+};
 
 export function setupTerminal(title: string): void {
   initWindowsConsole(title);
@@ -12,6 +33,10 @@ export function setupTerminal(title: string): void {
 }
 
 export function println(text: string = ""): void {
+  if (isTabbedModeActive()) {
+    appendServerTabLine(text);
+    return;
+  }
   process.stdout.write(`${text}${C.RESET}\n`);
 }
 
@@ -24,13 +49,21 @@ export function formatSeconds(ms: number): string {
 }
 
 export class Prompter {
-  private readonly rl: readline.Interface;
+  private readonly rl: readline.Interface | null;
 
   constructor() {
-    this.rl = readline.createInterface({ input, output });
+    this.rl = isTabbedModeActive()
+      ? null
+      : readline.createInterface({ input, output });
   }
 
   async ask(promptText: string, signal?: AbortSignal): Promise<string> {
+    if (isTabbedModeActive()) {
+      return await askInTabbedMode(promptText, signal);
+    }
+    if (!this.rl) {
+      throw new Error("Prompter is closed");
+    }
     const answer: string = signal
       ? await this.rl.question(`${promptText}${C.RESET}`, { signal })
       : await this.rl.question(`${promptText}${C.RESET}`);
@@ -38,7 +71,7 @@ export class Prompter {
   }
 
   close(): void {
-    this.rl.close();
+    this.rl?.close();
   }
 }
 
@@ -54,6 +87,64 @@ export async function waitForExitKey(): Promise<void> {
   }
 }
 
+function waitForPostMatchDecisionTabbed(
+  totalSeconds: number,
+  signal: AbortSignal
+): Promise<PostMatchAction> {
+  const decision: Promise<PostMatchAction> = new Promise(
+    (resolve: (value: PostMatchAction) => void): void => {
+      let remaining: number = totalSeconds;
+      let done: boolean = false;
+
+      const render = (): void => {
+        setServerStatusLine(
+          `${C.LIGHT_YELLOW} * 自動再起動まで残り ${C.LIGHT_GREEN}${remaining}${C.LIGHT_YELLOW} 秒... (${C.LIGHT_CYAN}R${C.LIGHT_YELLOW}: マップ・MOD再設定 / ${C.LIGHT_CYAN}Enter${C.LIGHT_YELLOW}: 今すぐ再起動)`
+        );
+      };
+
+      const finish = (action: PostMatchAction): void => {
+        if (done) return;
+        done = true;
+        clearInterval(timer);
+        signal.removeEventListener("abort", onAbort);
+        setServerKeyHandler(null);
+        setServerStatusLine(null);
+        resolve(action);
+      };
+
+      const onAbort = (): void => {
+        finish("abort");
+      };
+
+      setServerKeyHandler((key: string): boolean => {
+        if (key.toLowerCase() === "r") {
+          finish("reconfigure");
+          return true;
+        }
+        if (key === "\r" || key === "\n") {
+          finish("restart");
+          return true;
+        }
+        return false;
+      });
+
+      signal.addEventListener("abort", onAbort, { once: true });
+      render();
+
+      const timer: ReturnType<typeof setInterval> = setInterval((): void => {
+        remaining -= 1;
+        if (remaining <= 0) {
+          finish("restart");
+          return;
+        }
+        render();
+      }, 1000);
+    }
+  );
+
+  return decision;
+}
+
 export async function waitForPostMatchDecision(
   seconds: number,
   signal: AbortSignal
@@ -63,6 +154,10 @@ export async function waitForPostMatchDecision(
   }
 
   const totalSeconds: number = Math.max(1, Math.floor(seconds));
+
+  if (isTabbedModeActive()) {
+    return await waitForPostMatchDecisionTabbed(totalSeconds, signal);
+  }
 
   if (!input.isTTY) {
     const nonTtyWait: Promise<PostMatchAction> = new Promise(
@@ -153,20 +248,7 @@ export async function waitForPostMatchDecision(
 }
 
 export function padDisplayWidth(text: string, targetWidth: number): string {
-  let width: number = 0;
-  for (const ch of text) {
-    const code: number = ch.codePointAt(0) ?? 0;
-    const isWide: boolean =
-      (code >= 0x1100 && code <= 0x115f) ||
-      (code >= 0x2e80 && code <= 0xa4cf && code !== 0x303f) ||
-      (code >= 0xac00 && code <= 0xd7a3) ||
-      (code >= 0xf900 && code <= 0xfaff) ||
-      (code >= 0xfe10 && code <= 0xfe19) ||
-      (code >= 0xfe30 && code <= 0xfe6f) ||
-      (code >= 0xff00 && code <= 0xff60) ||
-      (code >= 0xffe0 && code <= 0xffe6);
-    width += isWide ? 2 : 1;
-  }
+  const width: number = getDisplayWidth(text);
   const pad: number = Math.max(0, targetWidth - width);
   return `${text}${" ".repeat(pad)}`;
 }

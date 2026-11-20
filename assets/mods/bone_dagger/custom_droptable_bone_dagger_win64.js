@@ -1,5 +1,6 @@
 var base = Module.findBaseAddress('DreadHungerServer-Win64-Shipping.exe');
-var UObject_Serialize_addr = base.add(0x1312A60);
+var UDH_DropTable_GetGuaranteedDrops_addr = base.add(0xDC9010);
+var UDH_DropTable_GetRandomDrops_addr = base.add(0xDC9260);
 var FName_GetPlainNameString = new NativeFunction(base.add(0x11604F0), 'void', ['pointer', 'pointer'], 'win64');
 var FMemory_Realloc = new NativeFunction(base.add(0x106C3D0), 'pointer', ['pointer', 'int64', 'int32'], 'win64');
 var UClass_GetPrivateStaticClass = new NativeFunction(base.add(0x11F02E0), 'pointer', [], 'win64');
@@ -163,258 +164,272 @@ var ItemTable = new Map([
 */
 ]);
 
+function weightedItems(boostedIds, boostedWeight, baseIds, baseWeight) {
+    var list = [];
+    for (var i = 0; i < boostedIds.length; i++) {
+        for (var r = 0; r < boostedWeight; r++) {
+            list.push(boostedIds[i]);
+        }
+    }
+    for (var j = 0; j < baseIds.length; j++) {
+        for (var k = 0; k < baseWeight; k++) {
+            list.push(baseIds[j]);
+        }
+    }
+    return list;
+}
+
 var CustomDropTables = {
-    // "DT_HumanSkeleton" : [ //骸骨
-    //     {
-    //         "Items": [],
-    //         "Weight": 30, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [],
-    //         "Weight": 10, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 3, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [19],
-    //         "Weight": 5, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [28],
-    //         "Weight": 20, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [24],
-    //         "Weight": 2, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [43],
-    //         "Weight": 5, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [],
-    //         "Weight": 5, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    // ],
-    // "DT_OfficerSkeleton" : [ //军官骸骨
-    //     {
-    //         "Items": [],
-    //         "Weight": 30, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [19],
-    //         "Weight": 8, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [28],
-    //         "Weight": 30, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 2, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [7],
-    //         "Weight": 15, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [43],
-    //         "Weight": 2, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [5],
-    //         "Weight": 8, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 3, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [],
-    //         "Weight": 5, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    // ],
-    // "DT_HumanCorpse" : [ //尸体
-    //     {
-    //         "Items": [27],
-    //         "Weight": 30, //权重
-    //         "GuaranteedSpawns": 1, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [],
-    //         "Weight": 10, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 3, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [],
-    //         "Weight": 5, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 3, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [43],
-    //         "Weight": 5, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [19],
-    //         "Weight": 4, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [28],
-    //         "Weight": 20, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [24],
-    //         "Weight": 2, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    // ],
-    // "DT_CaptainsTrunk" : [ //船长宝箱
-    //     {
-    //         "Items": [36, 43, 22, 23],
-    //         "Weight": 1, //权重
-    //         "GuaranteedSpawns": 1, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [31],
-    //         "Weight": 1, //权重
-    //         "GuaranteedSpawns": 1, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [33, 24, 20],
-    //         "Weight": 1, //权重
-    //         "GuaranteedSpawns": 1, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [17, 35],
-    //         "Weight": 1, //权重
-    //         "GuaranteedSpawns": 1, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    // ],
-    // "DT_StrongBox" : [ //保险箱
-    //     {
-    //         "Items": [4, 32, 22, 34, 9, 23],
-    //         "Weight": 30, //权重
-    //         "GuaranteedSpawns": 1, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [43,17, 33, 20, 36, 24, 35],
-    //         "Weight": 10, //权重
-    //         "GuaranteedSpawns": 1, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [15, 18, 5],
-    //         "Weight": 3, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 5, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [31, 26],
-    //         "Weight": 5, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    // ],
-    // "DT_StrongBoxThrall" : [ //保险箱_狼人
-    //     {
-    //         "Items": [43, 4, 32, 22, 9, 23],
-    //         "Weight": 30, //权重
-    //         "GuaranteedSpawns": 1, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [17, 33, 20, 36, 24, 35, 34],
-    //         "Weight": 10, //权重
-    //         "GuaranteedSpawns": 1, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [38, 37],
-    //         "Weight": 5, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 5, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [15, 18, 5],
-    //         "Weight": 5, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 5, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-    //     {
-    //         "Items": [31, 26],
-    //         "Weight": 5, //权重
-    //         "GuaranteedSpawns": 0, //最小生成的数量
-    //         "MaximumSpawns": 1, //最大生成的数量
-    //         "StackSizeToSpawn": 1 //物品生成倍数
-    //     },
-        
-    // ],
+    "DT_HumanSkeleton" : [ //骸骨
+        {
+            "Items": [],
+            "Weight": 30, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [],
+            "Weight": 10, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 3, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [19],
+            "Weight": 5, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [28],
+            "Weight": 20, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [24],
+            "Weight": 2, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [43], // 骸骨匕首 (原权重5 -> 5.6, 约+11%)
+            "Weight": 5.6, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [],
+            "Weight": 5, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+    ],
+    "DT_OfficerSkeleton" : [ //军官骸骨
+        {
+            "Items": [],
+            "Weight": 30, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [19],
+            "Weight": 8, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [28],
+            "Weight": 30, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 2, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [7],
+            "Weight": 15, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [43], // 骸骨匕首 (原权重2 -> 2.2, 约+10%)
+            "Weight": 2.2, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [5],
+            "Weight": 8, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 3, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [],
+            "Weight": 5, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+    ],
+    "DT_HumanCorpse" : [ //尸体
+        {
+            "Items": [27],
+            "Weight": 30, //权重
+            "GuaranteedSpawns": 1, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [],
+            "Weight": 10, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 3, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [],
+            "Weight": 5, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 3, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [43], // 骸骨匕首 (原权重5 -> 5.6, 约+11%)
+            "Weight": 5.6, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [19],
+            "Weight": 4, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [28],
+            "Weight": 20, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [24],
+            "Weight": 2, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+    ],
+    "DT_CaptainsTrunk" : [ //船长宝箱
+        {
+            "Items": weightedItems([43], 7, [36, 22, 23], 6), // 原25.0% -> 28.0% (约+12%)
+            "Weight": 1, //权重
+            "GuaranteedSpawns": 1, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [31],
+            "Weight": 1, //权重
+            "GuaranteedSpawns": 1, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [33, 24, 20],
+            "Weight": 1, //权重
+            "GuaranteedSpawns": 1, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [17, 35],
+            "Weight": 1, //权重
+            "GuaranteedSpawns": 1, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+    ],
+    "DT_StrongBox" : [ //保险箱
+        {
+            "Items": [4, 32, 22, 34, 9, 23],
+            "Weight": 30, //权重
+            "GuaranteedSpawns": 1, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": weightedItems([43], 7, [17, 33, 20, 36, 24, 35], 6), // 原14.3% -> 16.3% (约+14%)
+            "Weight": 10, //权重
+            "GuaranteedSpawns": 1, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [15, 18, 5],
+            "Weight": 3, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 5, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [31, 26],
+            "Weight": 5, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+    ],
+    "DT_StrongBoxThrall" : [ //保险箱_狼人
+        {
+            "Items": weightedItems([43], 7, [4, 32, 22, 9, 23], 6), // 原16.7% -> 18.9% (约+13%)
+            "Weight": 30, //权重
+            "GuaranteedSpawns": 1, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [17, 33, 20, 36, 24, 35, 34],
+            "Weight": 10, //权重
+            "GuaranteedSpawns": 1, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [38, 37],
+            "Weight": 5, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 5, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [15, 18, 5],
+            "Weight": 5, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 5, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+        {
+            "Items": [31, 26],
+            "Weight": 5, //权重
+            "GuaranteedSpawns": 0, //最小生成的数量
+            "MaximumSpawns": 1, //最大生成的数量
+            "StackSizeToSpawn": 1 //物品生成倍数
+        },
+    ],
     "DT_ArmoryBox_Musket" : [ //军械库储藏箱
         {
             "Items": [1, 2, 2, 3],
@@ -424,7 +439,7 @@ var CustomDropTables = {
             "StackSizeToSpawn": 1 //物品生成倍数
         },
     ],
-}
+};
 /*
     "DT_HumanSkeleton" : [ //骸骨
     ],
@@ -535,20 +550,53 @@ function getItemClass(ClassName) {
     }
     return Clazz;
 }
-var GWorld = base.add(0x46ED420);
+var patchedDropTables = {};
 
-function applyCustomDropTable(DropTable, ObjectName) {
-    if (DropTable.isNull() || !CustomDropTables.hasOwnProperty(ObjectName)) {
+function applyCustomDropTable(DropTable) {
+    if (DropTable.isNull()) {
+        return;
+    }
+    var ObjectName = getObjectName(DropTable);
+    if (!CustomDropTables.hasOwnProperty(ObjectName)) {
         return;
     }
     var Table = DropTable.add(0x40);
     var CustomDropTable = CustomDropTables[ObjectName];
-    var Length = Object.keys(CustomDropTable).length;
+    var Length = CustomDropTable.length;
+    var TableKey = DropTable.toString();
+    var CurrentDataKey = Table.readPointer().toString();
+    if (patchedDropTables[TableKey] === CurrentDataKey && Table.add(8).readU32() === Length) {
+        return;
+    }
+
+    // Resolve all item UClass* pointers up-front before mutating the TArray
+    var ResolvedEntries = [];
+    for (var i = 0; i < Length; i++) {
+        var InventoryInfo = CustomDropTable[i];
+        var ResolvedItems = [];
+        for (var j = 0; j < InventoryInfo.Items.length; j++) {
+            var ItemName = ItemTable.get(InventoryInfo.Items[j]);
+            if (!ItemName) {
+                continue;
+            }
+            var ItemClass = getItemClass(ItemName);
+            if (!ItemClass.isNull()) {
+                ResolvedItems.push(ItemClass);
+            }
+        }
+        ResolvedEntries.push({
+            Info: InventoryInfo,
+            Items: ResolvedItems,
+        });
+    }
+
     arrayResize(Table, 40, Length);
     Table.add(8).writeU32(Length);
-    for (var i = 0; i < Length; i++) {
-        var InventoryList = getArrayItemAddr(Table, 40, i);
-        var InventoryInfo = CustomDropTable[i];
+    for (var k = 0; k < Length; k++) {
+        var InventoryList = getArrayItemAddr(Table, 40, k);
+        var Entry = ResolvedEntries[k];
+        var EntryInfo = Entry.Info;
+        var EntryItems = Entry.Items;
 
         var List = InventoryList;
         var Weight = InventoryList.add(0x10);
@@ -556,54 +604,31 @@ function applyCustomDropTable(DropTable, ObjectName) {
         var MaximumSpawns = InventoryList.add(0x18);
         var StackSizeToSpawn = InventoryList.add(0x1C);
 
-        Weight.writeFloat(InventoryInfo.Weight);
-        MaximumSpawns.writeU32(InventoryInfo.MaximumSpawns);
-        StackSizeToSpawn.writeU32(InventoryInfo.StackSizeToSpawn);
-        GuaranteedSpawns.writeU32(InventoryInfo.GuaranteedSpawns);
-        var ItemNum = InventoryInfo.Items.length;
+        Weight.writeFloat(EntryInfo.Weight);
+        MaximumSpawns.writeU32(EntryInfo.MaximumSpawns);
+        StackSizeToSpawn.writeU32(EntryInfo.StackSizeToSpawn);
+        GuaranteedSpawns.writeU32(EntryInfo.GuaranteedSpawns);
+        InventoryList.add(0x20).writeU64(0); // CurrentSpawns / pad_20
+
+        var ItemNum = EntryItems.length;
         arrayInit(List, 8, ItemNum, ItemNum);
         List.add(8).writeU32(ItemNum);
-        for(var j = 0; j < ItemNum; j++) {
-            var ItemName = ItemTable.get(InventoryInfo.Items[j]);
-            var ItemClass = getItemClass(ItemName);
-            getArrayItemAddr(List, 8, j).writePointer(ItemClass);
+        for (var m = 0; m < ItemNum; m++) {
+            getArrayItemAddr(List, 8, m).writePointer(EntryItems[m]);
         }
     }
+
+    patchedDropTables[TableKey] = Table.readPointer().toString();
 }
 
-Interceptor.attach(UObject_Serialize_addr, {
-    onEnter : function(args) {
-        this.UObject = args[0];
+Interceptor.attach(UDH_DropTable_GetGuaranteedDrops_addr, {
+    onEnter: function (args) {
+        applyCustomDropTable(args[0]);
     },
-    onLeave : function(ret) {
-        if (this.UObject.isNull()) {
-            return;
-        }
-        var ClassPrivate = this.UObject.add(0x10).readPointer();
-        if (ClassPrivate.isNull()) {
-            return;
-        }
-        var ClassName = getObjectName(ClassPrivate);
-        if(ClassName == 'DH_DropTable') {
-            var ObjectName = getObjectName(this.UObject);
-            applyCustomDropTable(this.UObject, ObjectName);
-        }
-    }
 });
 
-// Fallback for late external-attach mode (patch already-loaded drop tables when GWorld is active)
-try {
-    if (!GWorld.readPointer().isNull()) {
-        var TableKeys = Object.keys(CustomDropTables);
-        for (var k = 0; k < TableKeys.length; k++) {
-            var TableName = TableKeys[k];
-            var ExistingTable = findObjectByName(TableName, ptr(0));
-            if (!ExistingTable.isNull()) {
-                var ExistingClass = ExistingTable.add(0x10).readPointer();
-                if (!ExistingClass.isNull() && getObjectName(ExistingClass) == 'DH_DropTable') {
-                    applyCustomDropTable(ExistingTable, TableName);
-                }
-            }
-        }
-    }
-} catch (e) {}
+Interceptor.attach(UDH_DropTable_GetRandomDrops_addr, {
+    onEnter: function (args) {
+        applyCustomDropTable(args[0]);
+    },
+});

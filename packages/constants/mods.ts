@@ -15,14 +15,17 @@ import madmateNormalNolimitJs from "../../assets/mods/single/madmate_normal_noli
 import moonJumpJs from "../../assets/mods/single/moon_jump_win64.js" with { type: "text" };
 import noDeathJs from "../../assets/mods/single/no_death_win64.js" with { type: "text" };
 import northGhostJs from "../../assets/mods/single/north_ghost_win64.js" with { type: "text" };
+import questSystemJs from "../../assets/mods/single/quest_system_win64.js" with { type: "text" };
 import randRoleJs from "../../assets/mods/single/rand_role_win64.js" with { type: "text" };
 import resourcesSpawnerDepartureJs from "../../assets/mods/single/resources_spawner_Departure_win64.js" with { type: "text" };
 import resourcesSpawnerExpanseJs from "../../assets/mods/single/resources_spawner_Expanse_win64.js" with { type: "text" };
+import sightseeingDepartureJs from "../../assets/mods/single/sightseeing_departure_win64.js" with { type: "text" };
 import spellCastStartJs from "../../assets/mods/single/spell_cast_start_win64.js" with { type: "text" };
 import spellCustomJs from "../../assets/mods/single/spell_custom_win64.js" with { type: "text" };
 import spellNoCdJs from "../../assets/mods/single/spell_no_cd_win64.js" with { type: "text" };
 import startArmoryOpenJs from "../../assets/mods/single/start_armory_open_win64.js" with { type: "text" };
 import vomitModifyJs from "../../assets/mods/single/vomit_modify_win64.js" with { type: "text" };
+import whetstoneAnyItemJs from "../../assets/mods/single/whetstone_any_item_win64.js" with { type: "text" };
 import type { ModMenuOption, PatchScript } from "../types";
 
 export const CONSOLE_PATCH_ID: string = "default:console_win64";
@@ -53,7 +56,9 @@ export const DEFAULT_PATCH_SCRIPTS: readonly PatchScript[] = [
 ];
 
 export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
+  // Practical / standard competitive & QoL mods first
   {
+    id: "rand_role",
     number: 1,
     label: "役職ランダム",
     kind: "single",
@@ -68,107 +73,26 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
     ],
   },
   {
+    id: "spell_cast_start",
     number: 2,
-    label: "五サボタージュ",
+    label: "開幕沈黙",
     kind: "single",
     scripts: [
       {
-        id: "single:spell_custom_win64",
-        fileName: "spell_custom_win64.js",
-        label: "五サボタージュ",
+        id: "single:spell_cast_start_win64",
+        fileName: "spell_cast_start_win64.js",
+        label: "開幕沈黙",
         group: "single",
-        source: spellCustomJs,
+        source: spellCastStartJs,
       },
     ],
   },
   {
+    id: "resources_spawner_departure",
     number: 3,
-    label: "グレネード",
-    kind: "single",
-    scripts: [
-      {
-        id: "single:grenade_win64",
-        fileName: "grenade_win64.js",
-        label: "グレネード",
-        group: "single",
-        source: grenadeJs,
-      },
-    ],
-  },
-  {
-    number: 4,
-    label: "八艘飛び",
-    kind: "single",
-    scripts: [
-      {
-        id: "single:moon_jump_win64",
-        fileName: "moon_jump_win64.js",
-        label: "八艘飛び",
-        group: "single",
-        source: moonJumpJs,
-      },
-    ],
-  },
-  {
-    number: 5,
-    label: "スペルチャージ無限",
-    kind: "single",
-    scripts: [
-      {
-        id: "single:spell_no_cd_win64",
-        fileName: "spell_no_cd_win64.js",
-        label: "スペルチャージ無限",
-        group: "single",
-        source: spellNoCdJs,
-      },
-    ],
-  },
-  {
-    number: 6,
-    label: "ミステリーモード",
-    kind: "single",
-    scripts: [
-      {
-        id: "single:north_ghost_win64",
-        fileName: "north_ghost_win64.js",
-        label: "ミステリーモード",
-        group: "single",
-        source: northGhostJs,
-      },
-    ],
-  },
-  {
-    number: 7,
-    label: "毒耐性",
-    kind: "single",
-    scripts: [
-      {
-        id: "single:vomit_modify_win64",
-        fileName: "vomit_modify_win64.js",
-        label: "毒耐性",
-        group: "single",
-        source: vomitModifyJs,
-      },
-    ],
-  },
-  {
-    number: 8,
-    label: "無限復活",
-    kind: "single",
-    scripts: [
-      {
-        id: "single:no_death_win64",
-        fileName: "no_death_win64.js",
-        label: "無限復活",
-        group: "single",
-        source: noDeathJs,
-      },
-    ],
-  },
-  {
-    number: 9,
     label: "マップ補強(山頂)",
     kind: "single",
+    conflictsWith: ["sightseeing_departure"],
     scripts: [
       {
         id: "single:resources_spawner_Departure_win64",
@@ -180,7 +104,8 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
     ],
   },
   {
-    number: 10,
+    id: "resources_spawner_expanse",
+    number: 4,
     label: "マップ補強(広漠)",
     kind: "single",
     scripts: [
@@ -194,7 +119,23 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
     ],
   },
   {
-    number: 11,
+    id: "spell_custom",
+    number: 5,
+    label: "五サボタージュ",
+    kind: "single",
+    scripts: [
+      {
+        id: "single:spell_custom_win64",
+        fileName: "spell_custom_win64.js",
+        label: "五サボタージュ",
+        group: "single",
+        source: spellCustomJs,
+      },
+    ],
+  },
+  {
+    id: "madmate_normal_nolimit",
+    number: 6,
     label: "狂人モード",
     kind: "single",
     scripts: [
@@ -208,7 +149,8 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
     ],
   },
   {
-    number: 12,
+    id: "bone_dagger_mode",
+    number: 7,
     label: "骨の短剣モード",
     kind: "mode",
     scripts: [
@@ -236,21 +178,54 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
     ],
   },
   {
-    number: 13,
-    label: "開幕沈黙",
+    id: "quest_system",
+    number: 8,
+    label: "クエスト報酬",
     kind: "single",
     scripts: [
       {
-        id: "single:spell_cast_start_win64",
-        fileName: "spell_cast_start_win64.js",
-        label: "開幕沈黙",
+        id: "single:quest_system_win64",
+        fileName: "quest_system_win64.js",
+        label: "クエスト報酬",
         group: "single",
-        source: spellCastStartJs,
+        source: questSystemJs,
       },
     ],
   },
   {
-    number: 14,
+    id: "add_storage",
+    number: 9,
+    label: "全員バックパック",
+    kind: "single",
+    scripts: [
+      {
+        id: "single:add_storage_win64",
+        fileName: "add_storage_win64.js",
+        label: "全員バックパック",
+        group: "single",
+        source: addStorageJs,
+      },
+    ],
+  },
+  {
+    id: "whetstone_any_item",
+    number: 10,
+    label: "万能砥石",
+    kind: "single",
+    scripts: [
+      {
+        id: "single:whetstone_any_item_win64",
+        fileName: "whetstone_any_item_win64.js",
+        label: "万能砥石",
+        group: "single",
+        source: whetstoneAnyItemJs,
+      },
+    ],
+  },
+  // Fun / variant / party modes last
+  {
+    id: "start_armory_open",
+    number: 11,
     label: "開幕マスケット",
     kind: "single",
     scripts: [
@@ -264,16 +239,108 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
     ],
   },
   {
-    number: 15,
-    label: "全員バックパック",
+    id: "vomit_modify",
+    number: 12,
+    label: "毒耐性",
     kind: "single",
     scripts: [
       {
-        id: "single:add_storage_win64",
-        fileName: "add_storage_win64.js",
-        label: "全員バックパック",
+        id: "single:vomit_modify_win64",
+        fileName: "vomit_modify_win64.js",
+        label: "毒耐性",
         group: "single",
-        source: addStorageJs,
+        source: vomitModifyJs,
+      },
+    ],
+  },
+  {
+    id: "north_ghost",
+    number: 13,
+    label: "ミステリーモード",
+    kind: "single",
+    scripts: [
+      {
+        id: "single:north_ghost_win64",
+        fileName: "north_ghost_win64.js",
+        label: "ミステリーモード",
+        group: "single",
+        source: northGhostJs,
+      },
+    ],
+  },
+  {
+    id: "grenade",
+    number: 14,
+    label: "グレネード",
+    kind: "single",
+    scripts: [
+      {
+        id: "single:grenade_win64",
+        fileName: "grenade_win64.js",
+        label: "グレネード",
+        group: "single",
+        source: grenadeJs,
+      },
+    ],
+  },
+  {
+    id: "moon_jump",
+    number: 15,
+    label: "八艘飛び",
+    kind: "single",
+    scripts: [
+      {
+        id: "single:moon_jump_win64",
+        fileName: "moon_jump_win64.js",
+        label: "八艘飛び",
+        group: "single",
+        source: moonJumpJs,
+      },
+    ],
+  },
+  {
+    id: "spell_no_cd",
+    number: 16,
+    label: "スペルチャージ無限",
+    kind: "single",
+    scripts: [
+      {
+        id: "single:spell_no_cd_win64",
+        fileName: "spell_no_cd_win64.js",
+        label: "スペルチャージ無限",
+        group: "single",
+        source: spellNoCdJs,
+      },
+    ],
+  },
+  {
+    id: "no_death",
+    number: 17,
+    label: "無限復活",
+    kind: "single",
+    scripts: [
+      {
+        id: "single:no_death_win64",
+        fileName: "no_death_win64.js",
+        label: "無限復活",
+        group: "single",
+        source: noDeathJs,
+      },
+    ],
+  },
+  {
+    id: "sightseeing_departure",
+    number: 18,
+    label: "観光モード(山頂)",
+    kind: "single",
+    conflictsWith: ["resources_spawner_departure"],
+    scripts: [
+      {
+        id: "single:sightseeing_departure_win64",
+        fileName: "sightseeing_departure_win64.js",
+        label: "観光モード(山頂)",
+        group: "single",
+        source: sightseeingDepartureJs,
       },
     ],
   },

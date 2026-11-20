@@ -11,8 +11,10 @@ export interface PatchScript {
 }
 
 export interface ModMenuOption {
+  readonly id: string;
   readonly number: number;
   readonly label: string;
   readonly kind: ModKind;
   readonly scripts: readonly PatchScript[];
+  readonly conflictsWith?: readonly string[];
 }

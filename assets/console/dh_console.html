@@ -6,8 +6,15 @@
     <title>DH-Web-Console</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="shortcut icon" href="/favicon.ico">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,600;0,700;1,700&family=Dela+Gothic+One&family=JetBrains+Mono:wght@700;800&family=Zen+Kaku+Gothic+New:wght@700;900&display=swap" rel="stylesheet">
     <style>
       :root {
+        --font-display: "Chakra Petch", "Dela Gothic One", "Zen Kaku Gothic New", "Hiragino Kaku Gothic StdN", "Yu Gothic", "Meiryo", sans-serif;
+        --font-ui: "Chakra Petch", "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", system-ui, sans-serif;
+        --font-tech: "Chakra Petch", "JetBrains Mono", "Zen Kaku Gothic New", "Cascadia Mono", "Consolas", monospace;
+        --font-mono: "JetBrains Mono", "Chakra Petch", "Zen Kaku Gothic New", "Cascadia Mono", "Consolas", monospace;
         --ink: #0b0b10;
         --ink-soft: #1a1a24;
         --paper: #f6f4ea;
@@ -39,10 +46,14 @@
 
       html {
         -webkit-text-size-adjust: 100%;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
       }
 
       body {
-        font-family: "BIZ UDPGothic", "Noto Sans JP", "Yu Gothic UI", "Hiragino Kaku Gothic ProN", "Meiryo", system-ui, sans-serif;
+        font-family: var(--font-ui);
+        font-feature-settings: "palt" 1;
         background-color: var(--paper);
         background-image:
           linear-gradient(128deg, rgba(30, 107, 255, 0.08) 0, rgba(30, 107, 255, 0.08) 14%, transparent 14%),
@@ -264,10 +275,11 @@
       }
 
       .console-kicker {
-        font-family: "Cascadia Mono", "Consolas", monospace;
+        font-family: var(--font-mono);
         font-size: 11px;
-        font-weight: 900;
-        letter-spacing: 0.14em;
+        font-weight: 800;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
         background-color: var(--ink);
         color: var(--cyan);
         padding: 4px 14px;
@@ -278,11 +290,13 @@
 
       .console-title {
         margin: 0;
+        font-family: var(--font-display);
         font-size: 27px;
         font-weight: 900;
-        letter-spacing: 0.04em;
-        line-height: 1.15;
-        text-shadow: 3px 3px 0 var(--ink);
+        font-synthesis-weight: none;
+        letter-spacing: 0.05em;
+        line-height: 1.18;
+        text-shadow: 3px 3px 0 var(--ink), 5px 5px 0 rgba(11, 11, 16, 0.35);
       }
 
       .console-badges {
@@ -298,11 +312,13 @@
 
       .badge {
         display: inline-block;
-        font-family: "Cascadia Mono", "Consolas", monospace;
-        font-size: 12px;
-        font-weight: 900;
-        padding: 6px 15px;
-        letter-spacing: 0.06em;
+        font-family: var(--font-tech);
+        font-style: italic;
+        font-size: 12.5px;
+        font-weight: 700;
+        padding: 6px 16px;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
         clip-path: polygon(9px 0, 100% 0, calc(100% - 9px) 100%, 0 100%);
       }
 
@@ -336,12 +352,13 @@
         display: inline-flex;
         align-items: center;
         gap: 9px;
-        font-size: 13px;
+        font-family: var(--font-ui);
+        font-size: 13.5px;
         font-weight: 900;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.1em;
         background-color: var(--ink);
         color: var(--yellow);
-        padding: 6px 18px 6px 14px;
+        padding: 6px 19px 6px 14px;
         clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 100%, 0 100%);
       }
 
@@ -588,9 +605,11 @@
         padding: 12px 16px;
         border: 3px solid var(--ink);
         border-radius: 0;
-        font-size: 16px;
-        font-weight: 800;
-        font-family: inherit;
+        font-size: 15.5px;
+        font-weight: 700;
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.02em;
         color: var(--ink);
         background-color: #ffffff;
         box-shadow: 4px 4px 0 var(--ink);
@@ -638,9 +657,11 @@
         border: 0;
         background-color: #ffffff;
         color: var(--ink);
-        font-family: inherit;
+        font-family: var(--font-ui);
+        font-variant-numeric: tabular-nums;
         font-size: 16px;
         font-weight: 900;
+        letter-spacing: 0.025em;
         text-align: left;
         cursor: pointer;
         display: flex;
@@ -770,9 +791,10 @@
         background: var(--ink);
         color: var(--yellow);
         border-bottom: 3px solid var(--ink);
+        font-family: var(--font-ui);
         font-size: 14px;
         font-weight: 900;
-        letter-spacing: 0.06em;
+        letter-spacing: 0.08em;
       }
 
       .nb-portal-close {
@@ -880,6 +902,7 @@
       }
 
       .btn-border {
+        position: relative;
         background: var(--ink);
         padding: 4px;
         clip-path: polygon(
@@ -893,21 +916,24 @@
       }
 
       #btn {
-        font-family: inherit;
+        font-family: var(--font-display);
         font-weight: 900;
+        font-synthesis-weight: none;
         width: 100%;
         min-height: 58px;
-        padding: 16px 24px;
+        padding: 15px 24px;
         background-color: var(--pink);
         color: #ffffff;
         border: 0;
         border-radius: 0;
-        font-size: 18px;
+        font-size: 20px;
         cursor: pointer;
-        letter-spacing: 0.12em;
+        letter-spacing: 0.24em;
+        text-indent: 0.24em;
         transition: background-color 0.12s ease, color 0.12s ease;
         position: relative;
-        text-shadow: 2px 2px 0 var(--ink);
+        overflow: hidden;
+        text-shadow: 3px 3px 0 var(--ink);
         clip-path: polygon(
           15px 0,
           100% 0,
@@ -925,16 +951,66 @@
       }
 
       #btn:disabled {
-        background: repeating-linear-gradient(
-          -45deg,
-          var(--yellow),
-          var(--yellow) 12px,
-          #fff59d 12px,
-          #fff59d 24px
-        );
-        color: var(--ink);
+        background: var(--ink);
+        color: transparent;
         text-shadow: none;
-        cursor: not-allowed;
+        user-select: none;
+        cursor: wait;
+      }
+
+      .btn-dots {
+        display: none;
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+      }
+
+      .btn-border:has(#btn:disabled) .btn-dots {
+        display: flex;
+      }
+
+      .btn-dots i {
+        display: block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        animation: btnDotBounce 0.9s ease-in-out infinite;
+      }
+
+      .btn-dots i:nth-child(1) {
+        background-color: var(--cyan);
+        animation-delay: 0s;
+      }
+
+      .btn-dots i:nth-child(2) {
+        background-color: var(--yellow);
+        animation-delay: 0.16s;
+      }
+
+      .btn-dots i:nth-child(3) {
+        background-color: var(--pink);
+        animation-delay: 0.32s;
+      }
+
+      @keyframes btnDotBounce {
+        0%, 80%, 100% {
+          transform: translateY(0) scale(0.8);
+          opacity: 0.55;
+        }
+        40% {
+          transform: translateY(-7px) scale(1.22);
+          opacity: 1;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .neon-ribbon,
+        .btn-dots i {
+          animation: none !important;
+        }
       }
 
       .console-footer {
@@ -947,13 +1023,16 @@
         align-items: center;
         justify-content: space-between;
         gap: 10px;
-        font-family: "Cascadia Mono", "Consolas", monospace;
+        font-family: var(--font-mono);
         font-size: 12px;
-        letter-spacing: 0.05em;
+        font-weight: 700;
+        letter-spacing: 0.06em;
       }
 
       .footer-brand {
-        font-weight: 900;
+        font-family: var(--font-tech);
+        font-weight: 700;
+        letter-spacing: 0.07em;
       }
 
       .fb-y { color: var(--yellow); }
@@ -1185,8 +1264,9 @@
 
         #btn {
           min-height: 54px;
-          font-size: 16px;
-          letter-spacing: 0.08em;
+          font-size: 18px;
+          letter-spacing: 0.16em;
+          text-indent: 0.16em;
         }
 
         /* Dock custom dropdown as full-width angular bottom sheet on mobile */
@@ -1363,6 +1443,7 @@
           <div class="btn-wrap">
             <div class="btn-border">
               <button id="btn" style="display:none">コンソールへ送信</button>
+              <span class="btn-dots" aria-hidden="true"><i></i><i></i><i></i></span>
             </div>
           </div>
         </main>
@@ -1397,6 +1478,104 @@
       </div>
     </div>
   </div>
+  <script data-dh-e2e>
+    /*__DH_CIPHER_INLINE__*/
+    (function () {
+      "use strict";
+      var STORAGE_KEY = "dh_console_psk";
+
+      function readPsk() {
+        var v = "";
+        try { v = sessionStorage.getItem(STORAGE_KEY) || ""; } catch (_) {}
+        if (!v) {
+          try { v = localStorage.getItem(STORAGE_KEY) || ""; } catch (_) {}
+        }
+        return window.__dhCipher && window.__dhCipher.isValidPsk(v) ? v : "";
+      }
+
+      function savePsk(psk) {
+        try { sessionStorage.setItem(STORAGE_KEY, psk); } catch (_) {}
+        try { localStorage.setItem(STORAGE_KEY, psk); } catch (_) {}
+      }
+
+      function clearPsk() {
+        try { sessionStorage.removeItem(STORAGE_KEY); } catch (_) {}
+        try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+      }
+
+      if (window.location.hash && window.location.hash.length > 1) {
+        var hashPsk = window.location.hash.slice(1).trim();
+        if (window.__dhCipher && window.__dhCipher.isValidPsk(hashPsk)) {
+          savePsk(hashPsk);
+        }
+        try {
+          window.history.replaceState(null, "", window.location.pathname + window.location.search);
+        } catch (_) {}
+      }
+
+      if (!readPsk()) {
+        window.location.replace("/dh-console/un-auth");
+        return;
+      }
+
+      var nativeFetch = window.fetch.bind(window);
+      window.fetch = async function (input, init) {
+        var urlStr = typeof input === "string" ? input : (input && input.url ? input.url : "");
+        var method = ((init && init.method) || "GET").toUpperCase();
+        var parsedUrl = null;
+        try {
+          parsedUrl = new URL(urlStr, window.location.origin);
+        } catch (_) {}
+
+        if (
+          method === "POST" &&
+          parsedUrl &&
+          parsedUrl.origin === window.location.origin &&
+          parsedUrl.pathname.indexOf("/dh-console/") === 0
+        ) {
+          var psk = readPsk();
+          if (!psk) {
+            clearPsk();
+            window.location.replace("/dh-console/un-auth");
+            throw new Error("Missing PSK");
+          }
+
+          var rawBody = init && typeof init.body === "string" ? init.body : "";
+          var reqAad = "REQ:" + parsedUrl.pathname;
+          var resAad = "RES:" + parsedUrl.pathname;
+          var encryptedBody = window.__dhCipher.encrypt(rawBody, psk, reqAad);
+
+          var response = await nativeFetch(parsedUrl.pathname + parsedUrl.search, {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "text/plain; charset=utf-8"
+            },
+            body: encryptedBody
+          });
+
+          if (response.status === 401) {
+            clearPsk();
+            window.location.replace("/dh-console/un-auth");
+            throw new Error("Unauthorized");
+          }
+
+          var encryptedResponse = (await response.text()).trim();
+          var decryptedResponse = window.__dhCipher.decrypt(encryptedResponse, psk, resAad);
+          if (decryptedResponse === null) {
+            throw new Error("Response decryption failed");
+          }
+
+          return new Response(decryptedResponse, {
+            status: 200,
+            headers: { "Content-Type": "application/json; charset=utf-8" }
+          });
+        }
+
+        return nativeFetch(input, init);
+      };
+    })();
+  </script>
   <script>
       let currentOption;
       let fetchUrl;

@@ -16,13 +16,18 @@ export type { ActiveInjectionSession, SpawnAndInjectOptions } from "./injector";
 export type { ModGroup, ModKind, ModMenuOption, PatchScript } from "./mods";
 export type { PublicIpResult } from "./network";
 export type { RunSupervisorOptions } from "./server";
+export type { HitRegion, ServerKeyHandler, TerminalTabId } from "./terminal";
 export type {
+  ApiResultPayload,
   AuthRouteHandler,
   CachedPage,
+  ConsoleBridgePayload,
+  EncryptedRouteHandler,
   PlayerRoleName,
   RouteHandler,
   TcpPacketOptions,
   TcpSocketWriter,
+  WebConsoleDisplayInfo,
   WebConsoleInstance,
   WebConsoleOptions,
 } from "./webConsole";
@@ -35,4 +40,6 @@ export type {
   ProcessInfo,
   UdpLookupResult,
   UdpTableQuery,
+  User32Library,
+  User32Symbols,
 } from "./win32";

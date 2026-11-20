@@ -84,25 +84,41 @@ export const ACTOR_COMMENT_DICT: Readonly<Record<string, string>> = {
 export const BONE_DAGGER_ITEM: string =
   "/Game/Blueprints/Inventory/Totem/BP_BoneDagger_Inventory.BP_BoneDagger_Inventory_C";
 
-export const STATUS_CODE: Readonly<Record<"suc" | "net" | "ser" | "val" | "par", number>> = {
-  suc: 200,
-  net: 400,
-  ser: 504,
-  val: 416,
-  par: 207,
+export const STATUS_CODE: Readonly<
+  Record<
+    "success" | "badRequest" | "serverError" | "invalidValue" | "partialSuccess",
+    number
+  >
+> = {
+  success: 200,
+  badRequest: 400,
+  serverError: 504,
+  invalidValue: 416,
+  partialSuccess: 207,
 };
 
-export const CONSOLE_MESSAGES: Readonly<Record<"suc" | "net" | "ser" | "val" | "ove" | "ine", string>> = {
-  suc: "成功しました!",
-  net: "ネットワーク問題で引数を取得できませんでした。もう一度試してください!",
-  ser: "サーバー側で問題が発生しました。試合開始後にもう一度試すか、サーバーの再起動・JSパッチをご確認ください!",
-  val: "数値エラー!",
-  ove: "送信成功! 数値が高すぎるとエラーの可能性があります!",
-  ine: "送信成功しましたが、自動ブロードキャストに失敗しました!",
+export const CONSOLE_MESSAGES: Readonly<
+  Record<
+    | "success"
+    | "networkParamError"
+    | "serverExecutionError"
+    | "invalidValueError"
+    | "highValueWarning"
+    | "broadcastPartialError",
+    string
+  >
+> = {
+  success: "成功しました!",
+  networkParamError:
+    "ネットワーク問題で引数を取得できませんでした。もう一度試してください!",
+  serverExecutionError:
+    "サーバー側で問題が発生しました。試合開始後にもう一度試すか、サーバーの再起動・JSパッチをご確認ください!",
+  invalidValueError: "数値エラー!",
+  highValueWarning: "送信成功! 数値が高すぎるとエラーの可能性があります!",
+  broadcastPartialError: "送信成功しましたが、自動ブロードキャストに失敗しました!",
 };
 
 export const COOKIE_NAME: string = "dh_console_auth";
 export const COOKIE_MAX_AGE_SECONDS: number = 315_360_000;
 export const DEFAULT_TCP_TIMEOUT_MS: number = 1500;
 export const HIGH_STAT_WARNING_THRESHOLD: number = 500;
-export const AUTH_ID_PREFIX: string = "DH-CONSOLE-JA_";

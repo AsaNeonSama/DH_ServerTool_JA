@@ -31,5 +31,9 @@ export const C: Readonly<Record<
   LIGHT_WHITE: "\x1b[97m",
 };
 
-export const MOD_MENU_COLS: number = 3;
+export const MOD_MENU_COLS: number = 4;
 export const MOD_MENU_COL_WIDTH: number = 27;
+export const MAX_SERVER_TAB_LINES: number = 400;
+export const TAB_ACTIVE_STYLE: string = "\x1b[1;30;106m";
+export const TAB_INACTIVE_STYLE: string = "\x1b[37;100m";
+export const TAB_BUTTON_STYLE: string = "\x1b[1;30;47m";

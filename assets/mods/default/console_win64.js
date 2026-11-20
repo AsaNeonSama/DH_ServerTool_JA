@@ -1,499 +1,499 @@
-var base = Module.findBaseAddress('DreadHungerServer-Win64-Shipping.exe');
-var Port = __CONSOLE_PATCH_PORT__;
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-var FName_FName = new NativeFunction(base.add(0x11592A0), "void", ["pointer", "pointer", "int8"]);
-var FText_FromString = new NativeFunction(base.add(0x10963B0), "pointer", ["pointer", "pointer"]);
-var FName_GetPlainNameString = new NativeFunction(base.add(0x11604F0), 'void', ['pointer', 'pointer'], 'win64');
-function newFName(Name) {
-    var FName_Buffer = Memory.alloc(8);
-    var Buffer = Memory.alloc((Name.length + 1) * 3);
-    Buffer.writeUtf16String(Name);
-    FName_FName(FName_Buffer,Buffer,1);
-    return FName_Buffer;
-}
-function newFText(Text){
-    var FText_Buffer = Memory.alloc(24);
-    var FString_Buffer = newFString(Text.length + 3);
-    writeFString(FString_Buffer, Text);
-    FText_FromString(FText_Buffer, FString_Buffer);
-    return FText_Buffer;
-}
+var moduleBase = Module.findBaseAddress('DreadHungerServer-Win64-Shipping.exe');
+var CONSOLE_BRIDGE_HOST = '127.0.0.1';
+var CONSOLE_BRIDGE_PORT = __CONSOLE_PATCH_PORT__;
+var MAX_PENDING_COMMANDS = 100;
 
-function newFString(Length) {
-    var FString = Memory.alloc(16 + Length * 3);
-    FString.writePointer(FString.add(16));
-    FString.add(8).writeU32(0);
-    FString.add(12).writeU32(Length);
-    return FString;
-}
+// ============================================================================
+// UE4 Native Function Bindings & Hook Addresses
+// ============================================================================
+var FText_FromString = new NativeFunction(moduleBase.add(0x10963B0), 'pointer', ['pointer', 'pointer']);
+var FName_GetPlainNameString = new NativeFunction(moduleBase.add(0x11604F0), 'void', ['pointer', 'pointer'], 'win64');
 
-function writeFString(FString, Data) {
-    FString.add(8).writeU32(Data.length + 1);
-    FString.readPointer().writeUtf16String(Data);
-}
+var UClass_GetPrivateStaticClass = new NativeFunction(moduleBase.add(0x11F02E0), 'pointer', [], 'win64');
+var StaticLoadObject = new NativeFunction(moduleBase.add(0x137B290), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer', 'int32', 'pointer', 'int8', 'pointer'], 'win64');
+var StaticFindObject = new NativeFunction(moduleBase.add(0x137AAA0), 'pointer', ['pointer', 'pointer', 'pointer', 'int8'], 'win64');
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+var UDH_InventoryManager_AddInventory = new NativeFunction(moduleBase.add(0xDBC040), 'void', ['pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'int8', 'pointer'], 'win64');
+var UDH_InventoryManager_SetStorageLimit = new NativeFunction(moduleBase.add(0xDE3DA0), 'void', ['pointer', 'int32'], 'win64');
+var AGameSession_KickPlayer = new NativeFunction(moduleBase.add(0x256B770), 'void', ['pointer', 'pointer', 'pointer']);
+var ADH_PlayerController_ReceiveThrallMessage = new NativeFunction(moduleBase.add(0xEE7810), 'void', ['pointer', 'pointer', 'pointer']);
+var ADH_PlayerController_AddCheats = new NativeFunction(moduleBase.add(0xE2B7E0), 'void', ['pointer', 'int8'], 'win64');
+var UKismetSystemLibrary_ExecuteConsoleCommand = new NativeFunction(moduleBase.add(0x25EFC50), 'void', ['pointer', 'pointer', 'pointer'], 'win64');
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+var APlayerController_BeginPlay_addr = moduleBase.add(0xE2DBC0);
+var ADH_GameState_Tick_addr = moduleBase.add(0xDAD420);
+var ADH_GameState_HandleMatchHasStarted_addr = moduleBase.add(0xD99080);
 
-var UClass_GetPrivateStaticClass = new NativeFunction(base.add(0x11F02E0), 'pointer', [], 'win64');
-var StaticLoadObject = new NativeFunction(base.add(0x137B290), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer', 'int32', 'pointer', 'int8', 'pointer'], 'win64');
-var StaticFindObject = new NativeFunction(base.add(0x137AAA0), 'pointer', ['pointer', 'pointer', 'pointer', 'int8'], 'win64');
-
-function loadClassByName(ClassName) {
-    return loadObjectByName(ClassName, UClass_GetPrivateStaticClass());
-}
-
-function findClassByName(ClassName) {
-    return findObjectByName(ClassName, UClass_GetPrivateStaticClass());
-}
-
-function loadObjectByName(ObjectName, Clazz) {
-    var Buffer = Memory.alloc((ObjectName.length + 1) * 2);
-    Buffer.writeUtf16String(ObjectName);
-    return StaticLoadObject(Clazz, ptr(0), Buffer, ptr(0), 0, ptr(0), 1, ptr(0));
-}
-
-function findObjectByName(ObjectName, Clazz) {
-    var Buffer = Memory.alloc((ObjectName.length + 1) * 2);
-    Buffer.writeUtf16String(ObjectName);
-    return StaticFindObject(Clazz, ptr(0xFFFFFFFFFFFFFFFF), Buffer, 0);
-}
-
-function getClass(ClassName) {
-    var Clazz = findClassByName(ClassName);
-    if(Clazz.isNull()) {
-        Clazz = loadClassByName(ClassName);
-    }
-    return Clazz;
-}
-function getObjectName(UObject) {
-    var NamePrivate = UObject.add(0x18);
-    var NameBuffer = newFString(100);
-    FName_GetPlainNameString(NamePrivate, NameBuffer);
-    return NameBuffer.readPointer().readUtf16String();
-}
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-var PropertyOffsets = {
-    'bUpdateHunger' : ['int8', 0xa40],
-    'bUpdateWarmth' : ['int8', 0xa41],
-    'HealthBoostRegenRate' : ['float', 0xa58],
-    'WarmthRegenRate' : ['float', 0xa80],
-    'HungerRegenRate' : ['float', 0xa84],
-    'JumpStaminaConsumption' : ['float', 0xa8c],
-    'BodyTossStaminaConsumption' : ['float', 0xa90],
-    'TossPawnVelocity' : ['float', 0xb1c],
-    'SpiritWalkSpeedModifier' : ['float', 0xbc0],
-    'MaxHealthRegenSpeed' : ['float', 0xca4],
-    'WarmthBoostRemaining' : ['float', 0xff4],
-    'HungerBoostRemaining' : ['float', 0xff8],
-    'HealthBoostRemaining' : ['float', 0xffc],
-    'MaximumStamina' : ['float', 0xa48],
-    'MinimumStamina' : ['float', 0xa4c],
-    'CurrentHealth' : ['float', 0x94c],
-    'MaximumHealth' : ['float', 0x7e0],
-    'MinHealth' : ['float', 0x1000],
-    'MaxHunger' : ['float', 0x1010],
-    'bSpiritWalking' : ['int8', 0xc71],
-    'bPoisoned' : ['int8', 0x1250]
-};
-function processProperty(PropTable, PropertyName, Value, TargetObject) {
-    if(PropTable.hasOwnProperty(PropertyName)) {
-        var WriteType = PropTable[PropertyName][0];
-        var Offset = PropTable[PropertyName][1];
-        var TargetPointer = TargetObject.add(Offset);
-        if(WriteType == 'int8') {
-            TargetPointer.writeU8(Value);
-        }
-        else if(WriteType == 'int16') {
-            TargetPointer.writeU16(Value);
-        }
-        else if(WriteType == 'int32') {
-            TargetPointer.writeU32(Value);
-        }
-        else if(WriteType == 'int64') {
-            TargetPointer.writeU64(Value);
-        }
-        else if(WriteType == 'float') {
-            TargetPointer.writeFloat(Value);
-        }
-        
-    }
-
-}
-function setHumanCharacter(PlayerController, PropertyName, Value) {
-    if(PlayerController.isNull()) {
-        return;
-    }
-    var Pawn = PlayerController.add(0x250).readPointer();
-    if(Pawn.isNull()) {
-        return;
-    }
-    var PawnClass = Pawn.add(0x10).readPointer();
-    if(PawnClass.isNull()) {
-        return;
-    }
-    if(getObjectName(PawnClass) == 'BP_HumanCharacter_C') {
-        processProperty(PropertyOffsets, PropertyName, Value, Pawn);
-    }
-}
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-var UDH_InventoryManager_AddInventory = new NativeFunction(base.add(0xDBC040), 'void', ['pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'int8', 'pointer'], 'win64');
-function InitItemState(State, Upgraded, Tainted) {
-    State.writeU32(0xffffffff);
-    State.add(0x4).writeU8(1);
-    State.add(0x8).writeFloat(1.0);
-    State.add(0xC).writeU8(0);
-    State.add(0xD).writeU8(Upgraded);
-    State.add(0xE).writeU8(Tainted);
-    State.add(0x10).writePointer(ptr(0));
-    State.add(0x18).writePointer(ptr(0));
-    State.add(0x20).writePointer(ptr(0));
-    State.add(0x28).writePointer(ptr(0));
-    State.add(0x30).writePointer(ptr(0));
-}
-function addInventory(PlayerController, ItemName, Count) {
-    if(PlayerController.isNull()) {
-        return;
-    }
-    var ItemClass = getClass(ItemName);
-    if(ItemClass.isNull()) {
-        return;
-    }
-    var Buffer = Memory.alloc(8);
-    var ItemArray = Memory.alloc(16 + 56);
-    ItemArray.writePointer(ItemArray.add(16));
-    ItemArray.add(8).writeU32(1);
-    ItemArray.add(12).writeU32(1);
-    InitItemState(ItemArray.readPointer(), 0, 0);
-
-    var Pawn = PlayerController.add(0x250).readPointer();
-    if(Pawn.isNull()) {
-        return;
-    }
-    var InventoryComponent = Pawn.add(0x808).readPointer();
-    if(InventoryComponent.isNull()) {
-        return;
-    }
-    for(var j = 0; j < Count; j ++) {
-        Buffer.writeU32(0);
-        Buffer.add(4).writeU32(0xffffffff);
-        UDH_InventoryManager_AddInventory(InventoryComponent, ItemClass, ItemArray, Buffer, Buffer.add(4), 0, ptr(0));
-    }
-}
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-var UDH_InventoryManager_SetStorageLimit = new NativeFunction(base.add(0xDE3DA0), 'void', ['pointer', 'int32'], 'win64');
-function setStorageLimit(PlayerController, Limit) {
-    if(PlayerController.isNull()) {
-        return;
-    }
-    var Pawn = PlayerController.add(0x250).readPointer();
-    if(Pawn.isNull()) {
-        return;
-    }
-    var InventoryComponent = Pawn.add(0x808).readPointer();
-    if(InventoryComponent.isNull()) {
-        return;
-    }
-    UDH_InventoryManager_SetStorageLimit(InventoryComponent, Limit);
-}
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-var AGameSession_KickPlayer = new NativeFunction(base.add(0x256B770), 'void', ['pointer', 'pointer', 'pointer']);
-function kickPlayer(GameState, PlayerController) {
-    if(GameState.isNull() || PlayerController.isNull()) {
-        return;
-    }
-    var GameMode = GameState.add(0x228).readPointer();
-    if(GameMode.isNull()) {
-        return;
-    }
-    var GameSession = GameMode.add(0x278).readPointer();
-    if(GameSession.isNull()) {
-        return;
-    }
-    var FText_Message = newFText('kick');
-    AGameSession_KickPlayer(GameSession, PlayerController, FText_Message);
-}
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-var ADH_PlayerController_ReceiveThrallMessage = new NativeFunction(base.add(0xEE7810), "void", ["pointer", "pointer", "pointer"]);
-function sendThrallMessage(PlayerController, Message){
-    if(PlayerController.isNull()) {
-        return;
-    }
-    var FText_Message = newFText(Message);
-    ADH_PlayerController_ReceiveThrallMessage(PlayerController, FText_Message, ptr(0));
-}
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-var APlayerController_BeginPlay_addr = base.add(0xE2DBC0);
-var ADH_PlayerController_AddCheats = new NativeFunction(base.add(0xE2B7E0), 'void', ['pointer', 'int8'], 'win64');
-var ADH_GameState_Tick_addr = base.add(0xDAD420);
-var ADH_GameState_HandleMatchHasStarted_addr = base.add(0xD99080);
-var UKismetSystemLibrary_ExecuteConsoleCommand = new NativeFunction(base.add(0x25EFC50), 'void', ['pointer', 'pointer', 'pointer'], 'win64');
-
-// Preload map for `summon <ShortClassName>` so classes not spawned by the current map
-// (e.g. BP_Prey_Rat_C on Departure) are loaded into memory before UCheatManager::Summon runs.
-var SummonClassPaths = {
-    'BP_Prey_Rat_C': '/Game/Blueprints/AI/Prey/BP_Prey_Rat.BP_Prey_Rat_C',
-    'BP_Prey_Rabbit_C': '/Game/Blueprints/AI/Prey/BP_Prey_Rabbit.BP_Prey_Rabbit_C',
-    'BP_Prey_Seal_C': '/Game/Blueprints/AI/Prey/BP_Prey_Seal.BP_Prey_Seal_C',
-    'BP_Predator_Wolf_C': '/Game/Blueprints/AI/Predators/BP_Predator_Wolf.BP_Predator_Wolf_C',
-    'BP_Predator_Bear_C': '/Game/Blueprints/AI/Predators/BP_Predator_Bear.BP_Predator_Bear_C',
-    'BP_Cannibal_C': '/Game/Blueprints/AI/Cannibal/BP_Cannibal.BP_Cannibal_C',
-    'BP_Cannibal_Crawler_C': '/Game/Blueprints/AI/Cannibal/BP_Cannibal_Crawler.BP_Cannibal_Crawler_C',
-    'BP_Cannibal_Shambler_C': '/Game/Blueprints/AI/Cannibal/BP_Cannibal_Shambler.BP_Cannibal_Shambler_C',
-    'BP_HumanCharacter_C': '/Game/Blueprints/Player/BP_HumanCharacter.BP_HumanCharacter_C',
-    'BP_Totem_C': '/Game/Blueprints/Game/Totems/BP_Totem.BP_Totem_C',
-    'BP_ExplosionActor_C': '/Game/Blueprints/Game/BP_ExplosionActor.BP_ExplosionActor_C',
-    'BP_Explosion_Nitro_C': '/Game/Blueprints/Game/BP_Explosion_Nitro.BP_Explosion_Nitro_C'
+// ============================================================================
+// UE4 Struct Field Offsets
+// ============================================================================
+var UE_OFFSETS = {
+    uObjectClassPrivate: 0x10,
+    uObjectNamePrivate: 0x18,
+    gameStateAuthorityGameMode: 0x228,
+    gameStatePlayerArray: 0x238,
+    gameModeGameSession: 0x278,
+    playerStateOwnerController: 0xE0,
+    playerStatePlayerName: 0x300,
+    playerStateSelectedRole: 0x590,
+    roleDataOnlineName: 0x48,
+    playerControllerPawn: 0x250,
+    playerControllerCheatManager: 0x338,
+    humanInventoryManager: 0x808
 };
 
-function preloadSummonTarget(CommandString) {
-    if (!CommandString || CommandString.toLowerCase().indexOf('summon ') !== 0) {
-        return;
-    }
-    var targetName = CommandString.slice(7).trim();
-    if (SummonClassPaths.hasOwnProperty(targetName)) {
-        getClass(SummonClassPaths[targetName]);
-    }
-}
-function logInfo(Info) {
+var HUMAN_PROPERTY_OFFSETS = {
+    bUpdateHunger: ['int8', 0xA40],
+    bUpdateWarmth: ['int8', 0xA41],
+    HealthBoostRegenRate: ['float', 0xA58],
+    WarmthRegenRate: ['float', 0xA80],
+    HungerRegenRate: ['float', 0xA84],
+    JumpStaminaConsumption: ['float', 0xA8C],
+    BodyTossStaminaConsumption: ['float', 0xA90],
+    TossPawnVelocity: ['float', 0xB1C],
+    SpiritWalkSpeedModifier: ['float', 0xBC0],
+    MaxHealthRegenSpeed: ['float', 0xCA4],
+    WarmthBoostRemaining: ['float', 0xFF4],
+    HungerBoostRemaining: ['float', 0xFF8],
+    HealthBoostRemaining: ['float', 0xFFC],
+    MaximumStamina: ['float', 0xA48],
+    MinimumStamina: ['float', 0xA4C],
+    CurrentHealth: ['float', 0x94C],
+    MaximumHealth: ['float', 0x7E0],
+    MinHealth: ['float', 0x1000],
+    MaxHunger: ['float', 0x1010],
+    bSpiritWalking: ['int8', 0xC71],
+    bPoisoned: ['int8', 0x1250]
+};
+
+// Preload map for `summon <ShortClassName>` so classes not placed in the current map
+// (e.g. BP_Prey_Rat_C on Departure) are loaded before UCheatManager::Summon runs.
+var SUMMON_BLUEPRINT_PATHS = {
+    BP_Prey_Rat_C: '/Game/Blueprints/AI/Prey/BP_Prey_Rat.BP_Prey_Rat_C',
+    BP_Prey_Rabbit_C: '/Game/Blueprints/AI/Prey/BP_Prey_Rabbit.BP_Prey_Rabbit_C',
+    BP_Prey_Seal_C: '/Game/Blueprints/AI/Prey/BP_Prey_Seal.BP_Prey_Seal_C',
+    BP_Predator_Wolf_C: '/Game/Blueprints/AI/Predators/BP_Predator_Wolf.BP_Predator_Wolf_C',
+    BP_Predator_Bear_C: '/Game/Blueprints/AI/Predators/BP_Predator_Bear.BP_Predator_Bear_C',
+    BP_Cannibal_C: '/Game/Blueprints/AI/Cannibal/BP_Cannibal.BP_Cannibal_C',
+    BP_Cannibal_Crawler_C: '/Game/Blueprints/AI/Cannibal/BP_Cannibal_Crawler.BP_Cannibal_Crawler_C',
+    BP_Cannibal_Shambler_C: '/Game/Blueprints/AI/Cannibal/BP_Cannibal_Shambler.BP_Cannibal_Shambler_C',
+    BP_HumanCharacter_C: '/Game/Blueprints/Player/BP_HumanCharacter.BP_HumanCharacter_C',
+    BP_Totem_C: '/Game/Blueprints/Game/Totems/BP_Totem.BP_Totem_C',
+    BP_ExplosionActor_C: '/Game/Blueprints/Game/BP_ExplosionActor.BP_ExplosionActor_C',
+    BP_Explosion_Nitro_C: '/Game/Blueprints/Game/BP_Explosion_Nitro.BP_Explosion_Nitro_C'
+};
+
+// ============================================================================
+// Logging & UE4 String / Object Utilities
+// ============================================================================
+function writePatchLog(message) {
     try {
-        var f = new File('output.log', 'a');
-        f.write('[Patches] ' + Info + '\n');
-        f.close();
+        var logFile = new File('output.log', 'a');
+        logFile.write('[Patches] ' + message + '\n');
+        logFile.close();
     } catch (e) {}
 }
 
-var Commands = [];
-function addCommand(Cmd) {
-    if(Commands.length >= 100) {
+function allocateFString(capacityChars) {
+    var fStringPtr = Memory.alloc(16 + capacityChars * 3);
+    fStringPtr.writePointer(fStringPtr.add(16));
+    fStringPtr.add(8).writeU32(0);
+    fStringPtr.add(12).writeU32(capacityChars);
+    return fStringPtr;
+}
+
+function writeFStringValue(fStringPtr, text) {
+    fStringPtr.add(8).writeU32(text.length + 1);
+    fStringPtr.readPointer().writeUtf16String(text);
+}
+
+function createFTextFromString(text) {
+    var fTextPtr = Memory.alloc(24);
+    var fStringPtr = allocateFString(text.length + 3);
+    writeFStringValue(fStringPtr, text);
+    FText_FromString(fTextPtr, fStringPtr);
+    return fTextPtr;
+}
+
+function getUObjectName(uObjectPtr) {
+    var namePrivatePtr = uObjectPtr.add(UE_OFFSETS.uObjectNamePrivate);
+    var nameBuffer = allocateFString(100);
+    FName_GetPlainNameString(namePrivatePtr, nameBuffer);
+    return nameBuffer.readPointer().readUtf16String();
+}
+
+function findObjectByPath(objectPath, targetClassPtr) {
+    var utf16Buffer = Memory.alloc((objectPath.length + 1) * 2);
+    utf16Buffer.writeUtf16String(objectPath);
+    return StaticFindObject(targetClassPtr, ptr(0xFFFFFFFFFFFFFFFF), utf16Buffer, 0);
+}
+
+function loadObjectByPath(objectPath, targetClassPtr) {
+    var utf16Buffer = Memory.alloc((objectPath.length + 1) * 2);
+    utf16Buffer.writeUtf16String(objectPath);
+    return StaticLoadObject(targetClassPtr, ptr(0), utf16Buffer, ptr(0), 0, ptr(0), 1, ptr(0));
+}
+
+function resolveBlueprintClass(blueprintPath) {
+    var uClassStatic = UClass_GetPrivateStaticClass();
+    var resolvedClass = findObjectByPath(blueprintPath, uClassStatic);
+    if (resolvedClass.isNull()) {
+        resolvedClass = loadObjectByPath(blueprintPath, uClassStatic);
+    }
+    return resolvedClass;
+}
+
+function preloadSummonBlueprint(commandText) {
+    if (!commandText || commandText.toLowerCase().indexOf('summon ') !== 0) {
+        return;
+    }
+    var shortClassName = commandText.slice(7).trim();
+    if (SUMMON_BLUEPRINT_PATHS.hasOwnProperty(shortClassName)) {
+        resolveBlueprintClass(SUMMON_BLUEPRINT_PATHS[shortClassName]);
+    }
+}
+
+// ============================================================================
+// Gameplay Operations
+// ============================================================================
+function writeObjectProperty(propertyTable, propertyName, propertyValue, targetObjectPtr) {
+    if (!propertyTable.hasOwnProperty(propertyName)) {
+        return;
+    }
+    var valueType = propertyTable[propertyName][0];
+    var fieldOffset = propertyTable[propertyName][1];
+    var fieldPtr = targetObjectPtr.add(fieldOffset);
+    if (valueType === 'int8') {
+        fieldPtr.writeU8(propertyValue);
+    } else if (valueType === 'int16') {
+        fieldPtr.writeU16(propertyValue);
+    } else if (valueType === 'int32') {
+        fieldPtr.writeU32(propertyValue);
+    } else if (valueType === 'int64') {
+        fieldPtr.writeU64(propertyValue);
+    } else if (valueType === 'float') {
+        fieldPtr.writeFloat(propertyValue);
+    }
+}
+
+function setHumanCharacterProperty(playerControllerPtr, propertyName, propertyValue) {
+    if (playerControllerPtr.isNull()) {
+        return;
+    }
+    var pawnPtr = playerControllerPtr.add(UE_OFFSETS.playerControllerPawn).readPointer();
+    if (pawnPtr.isNull()) {
+        return;
+    }
+    var pawnClassPtr = pawnPtr.add(UE_OFFSETS.uObjectClassPrivate).readPointer();
+    if (pawnClassPtr.isNull()) {
+        return;
+    }
+    if (getUObjectName(pawnClassPtr) === 'BP_HumanCharacter_C') {
+        writeObjectProperty(HUMAN_PROPERTY_OFFSETS, propertyName, propertyValue, pawnPtr);
+    }
+}
+
+function initializeItemState(itemStatePtr, isUpgraded, isTainted) {
+    itemStatePtr.writeU32(0xffffffff);
+    itemStatePtr.add(0x04).writeU8(1);
+    itemStatePtr.add(0x08).writeFloat(1.0);
+    itemStatePtr.add(0x0C).writeU8(0);
+    itemStatePtr.add(0x0D).writeU8(isUpgraded);
+    itemStatePtr.add(0x0E).writeU8(isTainted);
+    itemStatePtr.add(0x10).writePointer(ptr(0));
+    itemStatePtr.add(0x18).writePointer(ptr(0));
+    itemStatePtr.add(0x20).writePointer(ptr(0));
+    itemStatePtr.add(0x28).writePointer(ptr(0));
+    itemStatePtr.add(0x30).writePointer(ptr(0));
+}
+
+function giveInventoryItem(playerControllerPtr, itemBlueprintPath, itemCount) {
+    if (playerControllerPtr.isNull()) {
+        return;
+    }
+    var itemClassPtr = resolveBlueprintClass(itemBlueprintPath);
+    if (itemClassPtr.isNull()) {
+        return;
+    }
+    var pawnPtr = playerControllerPtr.add(UE_OFFSETS.playerControllerPawn).readPointer();
+    if (pawnPtr.isNull()) {
+        return;
+    }
+    var inventoryManagerPtr = pawnPtr.add(UE_OFFSETS.humanInventoryManager).readPointer();
+    if (inventoryManagerPtr.isNull()) {
+        return;
+    }
+
+    var outParamsBuffer = Memory.alloc(8);
+    var itemStateArrayPtr = Memory.alloc(16 + 56);
+    itemStateArrayPtr.writePointer(itemStateArrayPtr.add(16));
+    itemStateArrayPtr.add(8).writeU32(1);
+    itemStateArrayPtr.add(12).writeU32(1);
+    initializeItemState(itemStateArrayPtr.readPointer(), 0, 0);
+
+    for (var i = 0; i < itemCount; i++) {
+        outParamsBuffer.writeU32(0);
+        outParamsBuffer.add(4).writeU32(0xffffffff);
+        UDH_InventoryManager_AddInventory(
+            inventoryManagerPtr,
+            itemClassPtr,
+            itemStateArrayPtr,
+            outParamsBuffer,
+            outParamsBuffer.add(4),
+            0,
+            ptr(0)
+        );
+    }
+}
+
+function updateStorageLimit(playerControllerPtr, storageLimit) {
+    if (playerControllerPtr.isNull()) {
+        return;
+    }
+    var pawnPtr = playerControllerPtr.add(UE_OFFSETS.playerControllerPawn).readPointer();
+    if (pawnPtr.isNull()) {
+        return;
+    }
+    var inventoryManagerPtr = pawnPtr.add(UE_OFFSETS.humanInventoryManager).readPointer();
+    if (inventoryManagerPtr.isNull()) {
+        return;
+    }
+    UDH_InventoryManager_SetStorageLimit(inventoryManagerPtr, storageLimit);
+}
+
+function kickTargetPlayer(gameStatePtr, playerControllerPtr) {
+    if (gameStatePtr.isNull() || playerControllerPtr.isNull()) {
+        return;
+    }
+    var gameModePtr = gameStatePtr.add(UE_OFFSETS.gameStateAuthorityGameMode).readPointer();
+    if (gameModePtr.isNull()) {
+        return;
+    }
+    var gameSessionPtr = gameModePtr.add(UE_OFFSETS.gameModeGameSession).readPointer();
+    if (gameSessionPtr.isNull()) {
+        return;
+    }
+    var kickReasonText = createFTextFromString('kick');
+    AGameSession_KickPlayer(gameSessionPtr, playerControllerPtr, kickReasonText);
+}
+
+function deliverThrallMessage(playerControllerPtr, messageText) {
+    if (playerControllerPtr.isNull()) {
+        return;
+    }
+    var messageFText = createFTextFromString(messageText);
+    ADH_PlayerController_ReceiveThrallMessage(playerControllerPtr, messageFText, ptr(0));
+}
+
+// ============================================================================
+// Player Lookup & Command Queue
+// ============================================================================
+var pendingCommandQueue = [];
+
+function enqueueCommand(payload) {
+    if (pendingCommandQueue.length >= MAX_PENDING_COMMANDS) {
         return false;
     }
-    Commands.push(Cmd);
+    pendingCommandQueue.push(payload);
     return true;
 }
-function getCommand() {
-    if(Commands.length != 0) {
-        return Commands.shift();
+
+function dequeueCommand() {
+    if (pendingCommandQueue.length !== 0) {
+        return pendingCommandQueue.shift();
     }
     return null;
 }
 
-function findPlayerController(GameState, FindName, UsePlayerName) {
-    if(GameState.isNull()) {
+function findPlayerControllerByTarget(gameStatePtr, targetName, matchPlayerName) {
+    if (gameStatePtr.isNull() || !targetName) {
         return ptr(0);
     }
-    var PlayerArray = GameState.add(0x238);
-    var Players = PlayerArray.readPointer();
-    var PlayerNum = PlayerArray.add(8).readU32();
-    if(Players.isNull() || PlayerNum === 0) {
+    var playerArrayPtr = gameStatePtr.add(UE_OFFSETS.gameStatePlayerArray);
+    var playerListDataPtr = playerArrayPtr.readPointer();
+    var playerCount = playerArrayPtr.add(8).readU32();
+    if (playerListDataPtr.isNull() || playerCount === 0) {
         return ptr(0);
     }
-    for(var i = 0; i < PlayerNum; i++) {
-        var PlayerState = Players.add(8 * i).readPointer();
-        if(PlayerState.isNull()) {
+    for (var i = 0; i < playerCount; i++) {
+        var playerStatePtr = playerListDataPtr.add(8 * i).readPointer();
+        if (playerStatePtr.isNull()) {
             continue;
         }
-        var NameString;
-        if(UsePlayerName == 1) {
-            var PlayerNamePtr = PlayerState.add(0x300).readPointer();
-            if(PlayerNamePtr.isNull()) {
+        var candidateName = '';
+        if (matchPlayerName) {
+            var playerNamePtr = playerStatePtr.add(UE_OFFSETS.playerStatePlayerName).readPointer();
+            if (playerNamePtr.isNull()) {
                 continue;
             }
-            NameString = PlayerNamePtr.readUtf16String();
+            candidateName = playerNamePtr.readUtf16String();
+        } else {
+            var selectedRolePtr = playerStatePtr.add(UE_OFFSETS.playerStateSelectedRole).readPointer();
+            if (selectedRolePtr.isNull()) {
+                continue;
+            }
+            var roleNamePtr = selectedRolePtr.add(UE_OFFSETS.roleDataOnlineName).readPointer();
+            if (roleNamePtr.isNull()) {
+                continue;
+            }
+            candidateName = roleNamePtr.readUtf16String();
         }
-        else {
-            var SelectedRole = PlayerState.add(0x590).readPointer();
-            if(SelectedRole.isNull()) {
-                continue;
-            }
-            var RoleNamePtr = SelectedRole.add(0x48).readPointer();
-            if(RoleNamePtr.isNull()) {
-                continue;
-            }
-            NameString = RoleNamePtr.readUtf16String();
-        }
-        if(NameString == FindName) {
-            var PlayerController = PlayerState.add(0xE0).readPointer();
-            return PlayerController;
+        if (candidateName === targetName) {
+            return playerStatePtr.add(UE_OFFSETS.playerStateOwnerController).readPointer();
         }
     }
     return ptr(0);
 }
 
-
-function parseController(GameState, Command) {
-    var Controller = ptr(0);
-    if(Command.hasOwnProperty('role')) {
-        Controller = findPlayerController(GameState, Command['role'], 0);
+function resolveTargetPlayerController(gameStatePtr, payload) {
+    if (payload.hasOwnProperty('targetPlayerName')) {
+        return findPlayerControllerByTarget(gameStatePtr, payload.targetPlayerName, true);
     }
-    if(Command.hasOwnProperty('player')) {
-        Controller = findPlayerController(GameState, Command['player'], 1);
+    if (payload.hasOwnProperty('targetRole')) {
+        return findPlayerControllerByTarget(gameStatePtr, payload.targetRole, false);
     }
-    return Controller;
+    return ptr(0);
 }
+
+function executeQueuedPayload(gameStatePtr, payload) {
+    var action = payload.action;
+    var targetController = resolveTargetPlayerController(gameStatePtr, payload);
+
+    if (action === 'execute_console_command') {
+        var commandText = payload.command;
+        preloadSummonBlueprint(commandText);
+        if (!targetController.isNull() && targetController.add(UE_OFFSETS.playerControllerCheatManager).readPointer().isNull()) {
+            ADH_PlayerController_AddCheats(targetController, 1);
+        }
+        var commandFString = allocateFString(commandText.length + 10);
+        writeFStringValue(commandFString, commandText);
+        UKismetSystemLibrary_ExecuteConsoleCommand(gameStatePtr, commandFString, targetController);
+    } else if (action === 'add_inventory_item') {
+        giveInventoryItem(targetController, payload.itemBlueprintPath, payload.itemCount);
+    } else if (action === 'set_storage_limit') {
+        updateStorageLimit(targetController, payload.storageLimit);
+    } else if (action === 'kick_player') {
+        kickTargetPlayer(gameStatePtr, targetController);
+    } else if (action === 'send_thrall_message') {
+        deliverThrallMessage(targetController, payload.message);
+    } else if (action === 'set_human_property') {
+        setHumanCharacterProperty(targetController, payload.propertyName, payload.propertyValue);
+    }
+}
+
+// ============================================================================
+// Game Hooks
+// ============================================================================
 Interceptor.attach(ADH_GameState_Tick_addr, {
-    onEnter : function(args) {
-        this.GameState = args[0];
+    onEnter: function (args) {
+        this.gameStatePtr = args[0];
     },
-    onLeave : function(ret) {
-        var GameState = this.GameState;
-        if(GameState.isNull()) {
+    onLeave: function () {
+        var gameStatePtr = this.gameStatePtr;
+        if (gameStatePtr.isNull()) {
             return;
         }
-        if(!ServerStarted) {
-            server();
+        if (!isBridgeServerRunning) {
+            startBridgeServer();
         }
-        var Command = getCommand();
-        if(Command) {
+        var payload = dequeueCommand();
+        if (payload) {
             try {
-                if(Command['op'] == 'consoleexec') {
-                    var CommandString = Command['command'];
-                    preloadSummonTarget(CommandString);
-                    var Controller = parseController(GameState, Command);
-                    if(!Controller.isNull() && Controller.add(0x338).readPointer().isNull()) {
-                        ADH_PlayerController_AddCheats(Controller, 1);
-                    }
-                    var WrapCmd = newFString(CommandString.length + 10);
-                    writeFString(WrapCmd, CommandString);
-                    UKismetSystemLibrary_ExecuteConsoleCommand(GameState, WrapCmd, Controller);
-                }
-                else if(Command['op'] == 'additem') {
-                    var ItemName = Command['itemname'];
-                    var Count = Command['count'];
-                    var Controller = parseController(GameState, Command);
-                    addInventory(Controller, ItemName, Count);
-                }
-                else if(Command['op'] == 'setstorage') {
-                    var Limit = Command['limit'];
-                    var Controller = parseController(GameState, Command);
-                    setStorageLimit(Controller, Limit);
-                }
-                else if(Command['op'] == 'kick') {
-                    var Controller = parseController(GameState, Command);
-                    kickPlayer(GameState, Controller);
-                }
-                else if(Command['op'] == 'thrallmsg') {
-                    var Message = Command['msg'];
-                    var Controller = parseController(GameState, Command);
-                    sendThrallMessage(Controller, Message);
-                }
-                else if(Command['op'] == 'sethuman') {
-                    var PropName = Command['propname'];
-                    var Value = Command['value'];
-                    var Controller = parseController(GameState, Command);
-                    setHumanCharacter(Controller, PropName, Value);
-                }
+                executeQueuedPayload(gameStatePtr, payload);
             } catch (e) {
-                logInfo('Command exec error (' + Command['op'] + '): ' + e.message);
+                writePatchLog('Command exec error (' + payload.action + '): ' + e.message);
             }
         }
     }
 });
+
 Interceptor.attach(APlayerController_BeginPlay_addr, {
-    onEnter : function(args) {
-        this.PlayerController = args[0];
+    onEnter: function (args) {
+        this.playerControllerPtr = args[0];
     },
-    onLeave : function(ret) {
-        if(!this.PlayerController.isNull()) {
-            ADH_PlayerController_AddCheats(this.PlayerController, 1);
+    onLeave: function () {
+        if (!this.playerControllerPtr.isNull()) {
+            ADH_PlayerController_AddCheats(this.playerControllerPtr, 1);
         }
     }
 });
 
-var Listener;
-var ServerStarted = false;
-function failure(err)
-{
-    if(err && err.message) {
-        logInfo(err.message);
+// ============================================================================
+// Local Loopback TCP Bridge Server (receives UTF-16LE JSON from webConsole.ts)
+// ============================================================================
+var tcpListener = null;
+var isBridgeServerRunning = false;
+
+function logBridgeError(err) {
+    if (err && err.message) {
+        writePatchLog(err.message);
     }
 }
 
-function safeClose(connection)
-{
+function safeCloseConnection(connection) {
     try {
-        var res = connection.close();
-        if(res && typeof res.catch === 'function') {
-            res.catch(function(){});
+        var closePromise = connection.close();
+        if (closePromise && typeof closePromise.catch === 'function') {
+            closePromise.catch(function () {});
         }
     } catch (e) {}
 }
 
-function accepted(connection)
-{
+function handleBridgeConnection(connection) {
     connection.input.read(4096).then(function (buffer) {
-        safeClose(connection);
+        safeCloseConnection(connection);
         if (!buffer || buffer.byteLength < 2) {
             return;
         }
-        var Cmd = buffer.unwrap().readUtf16String();
-        if (!Cmd || Cmd.length === 0) {
+        var rawJson = buffer.unwrap().readUtf16String();
+        if (!rawJson || rawJson.length === 0) {
             return;
         }
         try {
-            var Obj = JSON.parse(Cmd);
-            if (Obj && typeof Obj === 'object') {
-                addCommand(Obj);
+            var payload = JSON.parse(rawJson);
+            if (payload && typeof payload === 'object') {
+                enqueueCommand(payload);
             }
         } catch (parseErr) {
-            failure(parseErr);
+            logBridgeError(parseErr);
         }
     }).catch(function (err) {
-        safeClose(connection);
-        failure(err);
+        safeCloseConnection(connection);
+        logBridgeError(err);
     });
 }
-function accept_loop(listener){
-    Listener = listener;
-    listener.accept().then(function(connection) {
-        accepted(connection);
-        setImmediate(function() { accept_loop(listener); });
-    }).catch(function(err) {
-        var msg = err && err.message ? String(err.message) : '';
-        if (msg.indexOf('cancelled') !== -1 || msg.indexOf('closed') !== -1) {
-            ServerStarted = false;
+
+function acceptBridgeLoop(listener) {
+    tcpListener = listener;
+    listener.accept().then(function (connection) {
+        handleBridgeConnection(connection);
+        setImmediate(function () { acceptBridgeLoop(listener); });
+    }).catch(function (err) {
+        var errMsg = err && err.message ? String(err.message) : '';
+        if (errMsg.indexOf('cancelled') !== -1 || errMsg.indexOf('closed') !== -1) {
+            isBridgeServerRunning = false;
             return;
         }
-        failure(err);
-        setImmediate(function() { accept_loop(listener); });
+        logBridgeError(err);
+        setImmediate(function () { acceptBridgeLoop(listener); });
     });
 }
-function listened(listener)
-{
-    accept_loop(listener);
-}
-function server()
-{
-    if(ServerStarted) {
+
+function startBridgeServer() {
+    if (isBridgeServerRunning) {
         return;
     }
-    ServerStarted = true;
-    Socket.listen({"family": 'ipv4', 'host': '0.0.0.0', 'port': Port})
-        .then(listened)
-        .catch(function(err) {
-            ServerStarted = false;
-            failure(err);
+    isBridgeServerRunning = true;
+    Socket.listen({ family: 'ipv4', host: CONSOLE_BRIDGE_HOST, port: CONSOLE_BRIDGE_PORT })
+        .then(acceptBridgeLoop)
+        .catch(function (err) {
+            isBridgeServerRunning = false;
+            logBridgeError(err);
         });
 }
 
-
 Interceptor.attach(ADH_GameState_HandleMatchHasStarted_addr, {
-    onEnter : function(args) {
-        server();
+    onEnter: function () {
+        startBridgeServer();
     }
 });
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
