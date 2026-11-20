@@ -85,13 +85,16 @@ function renderModMenuTable(): void {
   const conflictPairs: readonly (readonly [ModMenuOption, ModMenuOption])[] =
     getModConflictPairs();
   if (conflictPairs.length > 0) {
+    println();
     const pairText: string = conflictPairs
       .map(
         ([a, b]: readonly [ModMenuOption, ModMenuOption]): string =>
-          `${a.number}:${a.label} ⇔ ${b.number}:${b.label}`
+          `${a.number}:${a.label} <-> ${b.number}:${b.label}`
       )
       .join(" / ");
     println(`${C.LIGHT_BLACK} * 同時選択不可(排他): ${pairText}`);
+  } else {
+    println();
   }
 }
 
@@ -143,6 +146,7 @@ async function promptMatchConfig(
   }
 
   // 2. Server configuration (default or edit)
+  println();
   let settings: ServerSettings = { ...DEFAULT_SETTINGS };
   while (true) {
     const rawMode: string = await prompter.ask(
@@ -153,6 +157,7 @@ async function promptMatchConfig(
       break;
     }
     if (rawMode === "2") {
+      println();
       settings = {
         maxPlayers: await askNumberInRange(
           prompter,
@@ -261,7 +266,6 @@ async function promptMatchConfig(
   );
   println();
   renderModMenuTable();
-  println();
 
   const selectedNumbers: number[] = [];
   while (true) {
