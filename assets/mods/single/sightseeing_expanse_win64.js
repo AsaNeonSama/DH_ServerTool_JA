@@ -35,6 +35,7 @@ var OFF_ACTOR_ROLE = 0xF0;
 var OFF_ACTOR_ROOT_COMPONENT = 0x130;
 var OFF_SCENE_COMPONENT_WORLD_LOC_X = 0x1D0; // ComponentToWorld.Translation.X
 var OFF_SCENE_COMPONENT_WORLD_LOC_Y = 0x1D4; // ComponentToWorld.Translation.Y
+var OFF_WORLD_TIME_SECONDS = 0x598; // UWorld::TimeSeconds (automatically scaled by slomo)
 var OFF_GAMESTATE_WARSHIP = 0x2B0;
 var OFF_GAMESTATE_SHIP_ARRIVED = 0x3D0;
 var OFF_GAMESTATE_WINNING_TEAM = 0x51C;
@@ -42,8 +43,9 @@ var OFF_WARSHIP_BOILER = 0x2E0;
 var OFF_BOILER_PRESSURE_LEVEL = 0x2B4;
 var ROLE_AUTHORITY = 3;
 
-var SAILING_START_DELAY_MS = 1000;
-var SAILING_TICK_INTERVAL_MS = 250;
+// Game-time intervals (seconds) so steering stays identical under any slomo
+var SAILING_START_DELAY_SEC = 1.0;
+var SAILING_TICK_INTERVAL_SEC = 0.25;
 var WAYPOINT_CAPTURE_RADIUS = 1600.0;
 var WAYPOINT_PASS_MAX_DIST = 3200.0;
 var YAW_DEADBAND_DEG = 2.5;
@@ -56,7 +58,7 @@ var NITRO_EXPLOSION_CLASS = '/Game/Blueprints/Game/BP_Explosion_Nitro.BP_Explosi
 var EXIT_GLACIER_X = 42308.07421875;
 var EXIT_GLACIER_Y = 14646.22265625;
 var NITRO_TRIGGER_DISTANCE = 11000.0; // Detonates early so deck crew takes zero blast damage and glacier chunks sink completely before arrival
-var NITRO_SECOND_DELAY_MS = 500;
+var NITRO_SECOND_DELAY_SEC = 0.5;
 // Nitro #1 clears the two side-by-side exit ice walls (BP_IceWall34 & BP_IceWall39)
 var NITRO_GATE_LOCATION = [41874.0, 12258.0, 150.0];
 // Nitro #2 hits the exact approach face of BP_DestructibleIceWall_2 (same local offset as Departure)
@@ -108,9 +110,9 @@ var activeWorldKey = null;
 var activeGameStateKey = null;
 var nextWaypointIndex = 0;
 var nitroStage = 0; // 0 = pending, 1 = gate nitro fired, 2 = glacier nitro fired
-var secondNitroAtMs = 0;
-var startAtMs = 0;
-var lastTickMs = 0;
+var secondNitroAtGameSec = 0.0;
+var startAtGameSec = 0.0;
+var lastTickGameSec = -1.0;
 
 function getUObjectName(uObjectPtr) {
     if (uObjectPtr.isNull()) {
@@ -264,7 +266,15 @@ function advanceWaypoints(shipX, shipY) {
     }
 }
 
-function tickSightseeingSailing(gameStatePtr, worldPtr, nowMs) {
+function getWorldTimeSeconds(worldPtr) {
+    var t = worldPtr.add(OFF_WORLD_TIME_SECONDS).readFloat();
+    if (Number.isFinite(t)) {
+        return t;
+    }
+    return Date.now() / 1000.0;
+}
+
+function tickSightseeingSailing(gameStatePtr, worldPtr, gameSec) {
     var warship = gameStatePtr.add(OFF_GAMESTATE_WARSHIP).readPointer();
     if (warship.isNull()) {
         return;
@@ -288,10 +298,10 @@ function tickSightseeingSailing(gameStatePtr, worldPtr, nowMs) {
         var gdy = EXIT_GLACIER_Y - shipLoc.y;
         if (Math.sqrt(gdx * gdx + gdy * gdy) <= NITRO_TRIGGER_DISTANCE) {
             nitroStage = 1;
-            secondNitroAtMs = nowMs + NITRO_SECOND_DELAY_MS;
+            secondNitroAtGameSec = gameSec + NITRO_SECOND_DELAY_SEC;
             spawnNitroAt(worldPtr, NITRO_GATE_LOCATION);
         }
-    } else if (nitroStage === 1 && nowMs >= secondNitroAtMs) {
+    } else if (nitroStage === 1 && gameSec >= secondNitroAtGameSec) {
         nitroStage = 2;
         spawnNitroAt(worldPtr, NITRO_GLACIER_LOCATION);
     }
@@ -311,13 +321,14 @@ Interceptor.attach(ADH_GameState_HandleMatchHasStarted_addr, {
                 activeGameStateKey = null;
                 return;
             }
+            var nowGameSec = getWorldTimeSeconds(world);
             activeWorldKey = world.toString();
             activeGameStateKey = gameState.toString();
             nextWaypointIndex = 0;
             nitroStage = 0;
-            secondNitroAtMs = 0;
-            startAtMs = Date.now() + SAILING_START_DELAY_MS;
-            lastTickMs = 0;
+            secondNitroAtGameSec = 0.0;
+            startAtGameSec = nowGameSec + SAILING_START_DELAY_SEC;
+            lastTickGameSec = -1.0;
         } catch (e) {}
     }
 });
@@ -326,10 +337,6 @@ Interceptor.attach(ADH_GameState_Tick_addr, {
     onEnter: function (args) {
         try {
             if (activeWorldKey === null) {
-                return;
-            }
-            var now = Date.now();
-            if (now < startAtMs || now - lastTickMs < SAILING_TICK_INTERVAL_MS) {
                 return;
             }
             var gameState = args[0];
@@ -353,8 +360,15 @@ Interceptor.attach(ADH_GameState_Tick_addr, {
                 activeGameStateKey = null;
                 return;
             }
-            lastTickMs = now;
-            tickSightseeingSailing(gameState, world, now);
+            var gameSec = getWorldTimeSeconds(world);
+            if (gameSec < startAtGameSec) {
+                return;
+            }
+            if (lastTickGameSec >= 0.0 && (gameSec - lastTickGameSec) < SAILING_TICK_INTERVAL_SEC) {
+                return;
+            }
+            lastTickGameSec = gameSec;
+            tickSightseeingSailing(gameState, world, gameSec);
         } catch (e) {}
     }
 });
