@@ -11,6 +11,7 @@ import setInventoryJs from "../../assets/mods/bone_dagger/set_inventory_win64.js
 // Single mods (each selectable individually)
 import addStorageJs from "../../assets/mods/single/add_storage_win64.js" with { type: "text" };
 import arrowFullRecoveryJs from "../../assets/mods/single/arrow_full_recovery_win64.js" with { type: "text" };
+import blizzardArmoryOpenJs from "../../assets/mods/single/blizzard_armory_open_win64.js" with { type: "text" };
 import grenadeJs from "../../assets/mods/single/grenade_win64.js" with { type: "text" };
 import madmateNormalNolimitJs from "../../assets/mods/single/madmate_normal_nolimit.js" with { type: "text" };
 import moonJumpJs from "../../assets/mods/single/moon_jump_win64.js" with { type: "text" };
@@ -240,12 +241,29 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
       },
     ],
   },
+  {
+    id: "blizzard_armory_open",
+    number: 12,
+    label: "暴風雪マスケット",
+    kind: "single",
+    conflictsWith: ["start_armory_open"],
+    scripts: [
+      {
+        id: "single:blizzard_armory_open_win64",
+        fileName: "blizzard_armory_open_win64.js",
+        label: "暴風雪マスケット",
+        group: "single",
+        source: blizzardArmoryOpenJs,
+      },
+    ],
+  },
   // Fun / variant / party modes last
   {
     id: "start_armory_open",
-    number: 12,
+    number: 13,
     label: "開幕マスケット",
     kind: "single",
+    conflictsWith: ["blizzard_armory_open"],
     scripts: [
       {
         id: "single:start_armory_open_win64",
@@ -258,7 +276,7 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   },
   {
     id: "vomit_modify",
-    number: 13,
+    number: 14,
     label: "毒耐性",
     kind: "single",
     scripts: [
@@ -273,7 +291,7 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   },
   {
     id: "north_ghost",
-    number: 14,
+    number: 15,
     label: "ミステリーモード",
     kind: "single",
     scripts: [
@@ -288,7 +306,7 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   },
   {
     id: "grenade",
-    number: 15,
+    number: 16,
     label: "グレネード",
     kind: "single",
     scripts: [
@@ -303,7 +321,7 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   },
   {
     id: "moon_jump",
-    number: 16,
+    number: 17,
     label: "八艘飛び",
     kind: "single",
     scripts: [
@@ -318,7 +336,7 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   },
   {
     id: "spell_no_cd",
-    number: 17,
+    number: 18,
     label: "スペルチャージ無限",
     kind: "single",
     scripts: [
@@ -333,7 +351,7 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   },
   {
     id: "no_death",
-    number: 18,
+    number: 19,
     label: "無限復活",
     kind: "single",
     scripts: [
@@ -348,7 +366,7 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   },
   {
     id: "sightseeing_departure",
-    number: 19,
+    number: 20,
     label: "観光モード(山頂)",
     kind: "single",
     conflictsWith: ["resources_spawner_departure", "sightseeing_expanse"],
@@ -364,7 +382,7 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   },
   {
     id: "sightseeing_expanse",
-    number: 20,
+    number: 21,
     label: "観光モード(広漠)",
     kind: "single",
     conflictsWith: ["resources_spawner_expanse", "sightseeing_departure"],
