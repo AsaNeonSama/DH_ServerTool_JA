@@ -389,8 +389,10 @@ function buildConsoleBroadcastMessage(
     const target: string = ACTOR_COMMENT_DICT[cmdArg] ?? cmdArg;
     return `${roleDisplay(playerName)} が${target}を召喚しました`;
   }
-  if (cmdName === "setisthrall") {
-    return `${roleDisplay(playerName)} が闇の傀儡に悪墜ちしました`;
+  if (cmdName.toLowerCase() === "setisthrall") {
+    return cmdArg.trim() === "0"
+      ? `${roleDisplay(playerName)} が船員に戻りました`
+      : `${roleDisplay(playerName)} が闇の傀儡に悪墜ちしました`;
   }
   if (cmdName === "setspellcharge") {
     return `${roleDisplay(playerName)} がスペールチャージしました`;
@@ -676,7 +678,7 @@ export function startWebConsole(options: WebConsoleOptions): WebConsoleInstance 
       const commandName: string = spaceIdx === -1 ? command : command.slice(0, spaceIdx);
       const commandArg: string = spaceIdx === -1 ? "" : command.slice(spaceIdx + 1);
 
-      if (commandName === "setisthrall") {
+      if (commandName.toLowerCase() === "setisthrall" && commandArg.trim() !== "0") {
         const daggerErr: Error | null = await addInventoryItem(
           targetRole,
           BONE_DAGGER_ITEM,

@@ -1967,7 +1967,7 @@
       // 玩家状态表
       const playerStatusList = [
         {
-          textContent: "幽体状態(地縛霊)",
+          textContent: "幽体状態",
           value: "bSpiritWalking",
         },
         {
@@ -2241,7 +2241,12 @@
         thrallOptionY.textContent = "傀儡";
         thrallOptionY.value = "1";
 
+        const thrallOptionN = document.createElement("option");
+        thrallOptionN.textContent = "船員 (傀儡解除)";
+        thrallOptionN.value = "0";
+
         isThrallSelect.appendChild(thrallOptionY);
+        isThrallSelect.appendChild(thrallOptionN);
 
         baseForm.appendChild(isThrallLabel);
         baseForm.appendChild(isThrallSelect);

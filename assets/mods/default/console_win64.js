@@ -18,6 +18,12 @@ var UDH_InventoryManager_SetStorageLimit = new NativeFunction(moduleBase.add(0xD
 var AGameSession_KickPlayer = new NativeFunction(moduleBase.add(0x256B770), 'void', ['pointer', 'pointer', 'pointer']);
 var ADH_PlayerController_ReceiveThrallMessage = new NativeFunction(moduleBase.add(0xEE7810), 'void', ['pointer', 'pointer', 'pointer']);
 var ADH_PlayerController_AddCheats = new NativeFunction(moduleBase.add(0xE2B7E0), 'void', ['pointer', 'int8'], 'win64');
+var ADH_PlayerController_SetDesiresThrallVision_Impl = new NativeFunction(moduleBase.add(0xE4D980), 'void', ['pointer', 'int8'], 'win64');
+var ADH_PlayerState_SetIsThrall = new NativeFunction(moduleBase.add(0xE4E880), 'void', ['pointer', 'int8'], 'win64');
+var ADH_HumanCharacter_SetIsSpiritWalking = new NativeFunction(moduleBase.add(0xD70310), 'void', ['pointer', 'int8', 'float'], 'win64');
+var AActor_GetWorldTimerManager = new NativeFunction(moduleBase.add(0x22DDC30), 'pointer', ['pointer'], 'win64');
+var FTimerManager_FindTimer = new NativeFunction(moduleBase.add(0x28F2D80), 'pointer', ['pointer', 'pointer'], 'win64');
+var FTimerManager_InternalClearTimer = new NativeFunction(moduleBase.add(0x28F6A00), 'void', ['pointer', 'uint64'], 'win64');
 var UKismetSystemLibrary_ExecuteConsoleCommand = new NativeFunction(moduleBase.add(0x25EFC50), 'void', ['pointer', 'pointer', 'pointer'], 'win64');
 
 var APlayerController_BeginPlay_addr = moduleBase.add(0xE2DBC0);
@@ -30,16 +36,21 @@ var ADH_GameState_HandleMatchHasStarted_addr = moduleBase.add(0xD99080);
 var UE_OFFSETS = {
     uObjectClassPrivate: 0x10,
     uObjectNamePrivate: 0x18,
+    actorVtableK2DestroyActor: 0x310,
     gameStateAuthorityGameMode: 0x228,
     gameStatePlayerArray: 0x238,
     gameModeGameSession: 0x278,
     playerStateOwnerController: 0xE0,
     playerStatePlayerName: 0x300,
+    playerStateSpellManager: 0x488,
+    playerStateOtherThralls: 0x578,
     playerStateSelectedRole: 0x590,
     roleDataOnlineName: 0x48,
+    playerControllerPlayerState: 0x228,
     playerControllerPawn: 0x250,
     playerControllerCheatManager: 0x338,
-    humanInventoryManager: 0x808
+    humanInventoryManager: 0x808,
+    humanSpiritWalkTimerHandle: 0xD50
 };
 
 var HUMAN_PROPERTY_OFFSETS = {
@@ -176,6 +187,108 @@ function writeObjectProperty(propertyTable, propertyName, propertyValue, targetO
     }
 }
 
+function clearSpiritWalkTimer(pawnPtr) {
+    var timerHandlePtr = pawnPtr.add(UE_OFFSETS.humanSpiritWalkTimerHandle);
+    var rawHandle = timerHandlePtr.readU64();
+    if (!rawHandle.equals(0)) {
+        var timerManager = AActor_GetWorldTimerManager(pawnPtr);
+        if (!timerManager.isNull()) {
+            var timerData = FTimerManager_FindTimer(timerManager, timerHandlePtr);
+            if (!timerData.isNull()) {
+                FTimerManager_InternalClearTimer(timerManager, rawHandle);
+            }
+        }
+        timerHandlePtr.writeU64(0);
+    }
+}
+
+function setSpiritWalkingState(pawnPtr, enabled) {
+    clearSpiritWalkTimer(pawnPtr);
+    ADH_HumanCharacter_SetIsSpiritWalking(pawnPtr, enabled ? 1 : 0, 0.0);
+}
+
+function destroyActorSafe(actorPtr) {
+    if (actorPtr.isNull()) {
+        return;
+    }
+    var vtablePtr = actorPtr.readPointer();
+    if (vtablePtr.isNull()) {
+        return;
+    }
+    var fnPtr = vtablePtr.add(UE_OFFSETS.actorVtableK2DestroyActor).readPointer();
+    if (fnPtr.isNull()) {
+        return;
+    }
+    var k2DestroyActor = new NativeFunction(fnPtr, 'void', ['pointer'], 'win64');
+    k2DestroyActor(actorPtr);
+}
+
+function removeFromOtherThrallsArray(playerStatePtr, targetToRemovePtr) {
+    var otherThrallsPtr = playerStatePtr.add(UE_OFFSETS.playerStateOtherThralls);
+    var dataPtr = otherThrallsPtr.readPointer();
+    var count = otherThrallsPtr.add(8).readS32();
+    if (dataPtr.isNull() || count <= 0) {
+        return;
+    }
+    var writeIdx = 0;
+    for (var i = 0; i < count; i++) {
+        var elemPtr = dataPtr.add(8 * i).readPointer();
+        if (!elemPtr.equals(targetToRemovePtr)) {
+            if (writeIdx !== i) {
+                dataPtr.add(8 * writeIdx).writePointer(elemPtr);
+            }
+            writeIdx += 1;
+        }
+    }
+    if (writeIdx !== count) {
+        otherThrallsPtr.add(8).writeS32(writeIdx);
+    }
+}
+
+function setTargetPlayerIsThrall(gameStatePtr, playerControllerPtr, isThrall) {
+    if (gameStatePtr.isNull() || playerControllerPtr.isNull()) {
+        return;
+    }
+    var playerStatePtr = playerControllerPtr.add(UE_OFFSETS.playerControllerPlayerState).readPointer();
+    if (playerStatePtr.isNull()) {
+        return;
+    }
+    if (isThrall) {
+        ADH_PlayerState_SetIsThrall(playerStatePtr, 1);
+        return;
+    }
+    // Revert Thrall back to Explorer cleanly:
+    // 1. Disable Thrall Vision if currently enabled
+    ADH_PlayerController_SetDesiresThrallVision_Impl(playerControllerPtr, 0);
+
+    // 2. Clear target's OtherThralls array and remove target from every other player's OtherThralls
+    var targetOtherThrallsPtr = playerStatePtr.add(UE_OFFSETS.playerStateOtherThralls);
+    if (targetOtherThrallsPtr.add(8).readS32() > 0) {
+        targetOtherThrallsPtr.add(8).writeS32(0);
+    }
+    var playerArrayPtr = gameStatePtr.add(UE_OFFSETS.gameStatePlayerArray);
+    var playerListDataPtr = playerArrayPtr.readPointer();
+    var playerCount = playerArrayPtr.add(8).readU32();
+    if (!playerListDataPtr.isNull() && playerCount > 0) {
+        for (var i = 0; i < playerCount; i++) {
+            var otherPlayerStatePtr = playerListDataPtr.add(8 * i).readPointer();
+            if (!otherPlayerStatePtr.isNull() && !otherPlayerStatePtr.equals(playerStatePtr)) {
+                removeFromOtherThrallsArray(otherPlayerStatePtr, playerStatePtr);
+            }
+        }
+    }
+
+    // 3. Destroy and clear SpellManager (+0x488) so spells/totems are revoked and re-promotion spawns cleanly
+    var spellManagerPtr = playerStatePtr.add(UE_OFFSETS.playerStateSpellManager).readPointer();
+    if (!spellManagerPtr.isNull()) {
+        destroyActorSafe(spellManagerPtr);
+        playerStatePtr.add(UE_OFFSETS.playerStateSpellManager).writePointer(ptr(0));
+    }
+
+    // 4. Set bIsThrall (+0x572) = 0, fire delegates, update Hush & CannibalLevel (0.0f)
+    ADH_PlayerState_SetIsThrall(playerStatePtr, 0);
+}
+
 function setHumanCharacterProperty(playerControllerPtr, propertyName, propertyValue) {
     if (playerControllerPtr.isNull()) {
         return;
@@ -189,7 +302,11 @@ function setHumanCharacterProperty(playerControllerPtr, propertyName, propertyVa
         return;
     }
     if (getUObjectName(pawnClassPtr) === 'BP_HumanCharacter_C') {
-        writeObjectProperty(HUMAN_PROPERTY_OFFSETS, propertyName, propertyValue, pawnPtr);
+        if (propertyName === 'bSpiritWalking') {
+            setSpiritWalkingState(pawnPtr, propertyValue ? 1 : 0);
+        } else {
+            writeObjectProperty(HUMAN_PROPERTY_OFFSETS, propertyName, propertyValue, pawnPtr);
+        }
     }
 }
 
@@ -361,6 +478,15 @@ function executeQueuedPayload(gameStatePtr, payload) {
 
     if (action === 'execute_console_command') {
         var commandText = payload.command;
+        var trimmedCommand = commandText ? commandText.trim() : '';
+        var firstSpaceIdx = trimmedCommand.indexOf(' ');
+        var cmdName = (firstSpaceIdx === -1 ? trimmedCommand : trimmedCommand.slice(0, firstSpaceIdx)).toLowerCase();
+        if (cmdName === 'setisthrall') {
+            var thrallArg = firstSpaceIdx === -1 ? '' : trimmedCommand.slice(firstSpaceIdx + 1).trim().toLowerCase();
+            var enableThrall = (thrallArg !== '0' && thrallArg !== 'false');
+            setTargetPlayerIsThrall(gameStatePtr, targetController, enableThrall);
+            return;
+        }
         preloadSummonBlueprint(commandText);
         if (!targetController.isNull() && targetController.add(UE_OFFSETS.playerControllerCheatManager).readPointer().isNull()) {
             ADH_PlayerController_AddCheats(targetController, 1);

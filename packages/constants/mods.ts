@@ -10,6 +10,7 @@ import setInventoryJs from "../../assets/mods/bone_dagger/set_inventory_win64.js
 
 // Single mods (each selectable individually)
 import addStorageJs from "../../assets/mods/single/add_storage_win64.js" with { type: "text" };
+import arrowFullRecoveryJs from "../../assets/mods/single/arrow_full_recovery_win64.js" with { type: "text" };
 import grenadeJs from "../../assets/mods/single/grenade_win64.js" with { type: "text" };
 import madmateNormalNolimitJs from "../../assets/mods/single/madmate_normal_nolimit.js" with { type: "text" };
 import moonJumpJs from "../../assets/mods/single/moon_jump_win64.js" with { type: "text" };
@@ -20,6 +21,7 @@ import randRoleJs from "../../assets/mods/single/rand_role_win64.js" with { type
 import resourcesSpawnerDepartureJs from "../../assets/mods/single/resources_spawner_Departure_win64.js" with { type: "text" };
 import resourcesSpawnerExpanseJs from "../../assets/mods/single/resources_spawner_Expanse_win64.js" with { type: "text" };
 import sightseeingDepartureJs from "../../assets/mods/single/sightseeing_departure_win64.js" with { type: "text" };
+import sightseeingExpanseJs from "../../assets/mods/single/sightseeing_expanse_win64.js" with { type: "text" };
 import spellCastStartJs from "../../assets/mods/single/spell_cast_start_win64.js" with { type: "text" };
 import spellCustomJs from "../../assets/mods/single/spell_custom_win64.js" with { type: "text" };
 import spellNoCdJs from "../../assets/mods/single/spell_no_cd_win64.js" with { type: "text" };
@@ -108,6 +110,7 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
     number: 4,
     label: "マップ補強(広漠)",
     kind: "single",
+    conflictsWith: ["sightseeing_expanse"],
     scripts: [
       {
         id: "single:resources_spawner_Expanse_win64",
@@ -341,6 +344,37 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
         label: "観光モード(山頂)",
         group: "single",
         source: sightseeingDepartureJs,
+      },
+    ],
+  },
+  {
+    id: "sightseeing_expanse",
+    number: 19,
+    label: "観光モード(広漠)",
+    kind: "single",
+    conflictsWith: ["resources_spawner_expanse"],
+    scripts: [
+      {
+        id: "single:sightseeing_expanse_win64",
+        fileName: "sightseeing_expanse_win64.js",
+        label: "観光モード(広漠)",
+        group: "single",
+        source: sightseeingExpanseJs,
+      },
+    ],
+  },
+  {
+    id: "arrow_full_recovery",
+    number: 20,
+    label: "矢回収100%",
+    kind: "single",
+    scripts: [
+      {
+        id: "single:arrow_full_recovery_win64",
+        fileName: "arrow_full_recovery_win64.js",
+        label: "矢回収100%",
+        group: "single",
+        source: arrowFullRecoveryJs,
       },
     ],
   },
