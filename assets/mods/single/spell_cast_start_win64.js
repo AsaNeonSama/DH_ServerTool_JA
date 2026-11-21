@@ -37,6 +37,9 @@ function loadObjectByName(ObjectName, Clazz) {
 
 function getClass(ClassName) {
     var UClassPtr = UClass_GetPrivateStaticClass();
+    if (UClassPtr.isNull()) {
+        return ptr(0);
+    }
     var Clazz = findObjectByName(ClassName, UClassPtr);
     if (!Clazz.isNull()) {
         return Clazz;
@@ -113,42 +116,44 @@ var pendingCastAtMs = 0;
 var lastCastWorldKey = null;
 
 Interceptor.attach(ADH_GameState_HandleMatchHasStarted_addr, {
-    onLeave: function (ret) {
-        var World = GWorld.readPointer();
-        if (World.isNull()) {
-            return;
-        }
-        var WorldKey = World.toString();
-        if (lastCastWorldKey === WorldKey) {
-            return;
-        }
-        // Delay 0.5s after MatchState enters InProgress so clients finish leaving the poker table
-        // and receive the replicated SpellManager + ActiveSpells Hush cleanly.
-        pendingWorldKey = WorldKey;
-        pendingCastAtMs = Date.now() + 500;
+    onEnter: function () {
+        try {
+            var World = GWorld.readPointer();
+            if (World.isNull()) {
+                return;
+            }
+            var WorldKey = World.toString();
+            if (lastCastWorldKey === WorldKey) {
+                return;
+            }
+            ActiveSpellManagers = [];
+            // Delay 0.5s after MatchState enters InProgress so clients finish leaving the poker table
+            // and receive the replicated SpellManager + ActiveSpells Hush cleanly.
+            pendingWorldKey = WorldKey;
+            pendingCastAtMs = Date.now() + 500;
+        } catch (e) {}
     },
 });
 
 Interceptor.attach(ADH_GameState_Tick_addr, {
     onEnter: function (args) {
-        this.GameState = args[0];
-    },
-    onLeave: function (ret) {
-        if (pendingWorldKey === null || Date.now() < pendingCastAtMs) {
-            return;
-        }
-        var GameState = this.GameState;
-        if (GameState.isNull()) {
-            return;
-        }
-        var World = GWorld.readPointer();
-        if (World.isNull() || World.toString() !== pendingWorldKey) {
-            return;
-        }
-        var worldToCast = pendingWorldKey;
-        pendingWorldKey = null;
-        if (castOpeningHush(GameState)) {
-            lastCastWorldKey = worldToCast;
-        }
+        try {
+            if (pendingWorldKey === null || Date.now() < pendingCastAtMs) {
+                return;
+            }
+            var GameState = args[0];
+            if (GameState.isNull()) {
+                return;
+            }
+            var World = GWorld.readPointer();
+            if (World.isNull() || World.toString() !== pendingWorldKey) {
+                return;
+            }
+            var worldToCast = pendingWorldKey;
+            pendingWorldKey = null;
+            if (castOpeningHush(GameState)) {
+                lastCastWorldKey = worldToCast;
+            }
+        } catch (e) {}
     },
 });

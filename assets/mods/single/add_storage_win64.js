@@ -31,22 +31,24 @@ function getString(FString) {
 
 Interceptor.attach(ADH_HumanCharacter_AddStartingInventory_addr, {
     onEnter: function (args) {
-        var HumanCharacter = args[0];
-        if (HumanCharacter.isNull()) {
-            return;
-        }
-        var PlayerState = HumanCharacter.add(0x240).readPointer();
-        var InventoryComponent = HumanCharacter.add(0x808).readPointer();
-        if (PlayerState.isNull() || InventoryComponent.isNull()) {
-            return;
-        }
-        var SelectedRole = PlayerState.add(0x590).readPointer();
-        if (SelectedRole.isNull()) {
-            return;
-        }
-        var Name = getString(SelectedRole.add(0x48));
-        if (StorageLimit.has(Name)) {
-            UDH_InventoryManager_SetStorageLimit(InventoryComponent, StorageLimit.get(Name));
-        }
+        try {
+            var HumanCharacter = args[0];
+            if (HumanCharacter.isNull()) {
+                return;
+            }
+            var PlayerState = HumanCharacter.add(0x240).readPointer();
+            var InventoryComponent = HumanCharacter.add(0x808).readPointer();
+            if (PlayerState.isNull() || InventoryComponent.isNull()) {
+                return;
+            }
+            var SelectedRole = PlayerState.add(0x590).readPointer();
+            if (SelectedRole.isNull()) {
+                return;
+            }
+            var Name = getString(SelectedRole.add(0x48));
+            if (StorageLimit.has(Name)) {
+                UDH_InventoryManager_SetStorageLimit(InventoryComponent, StorageLimit.get(Name));
+            }
+        } catch (e) {}
     },
 });

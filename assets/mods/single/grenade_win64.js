@@ -9,6 +9,9 @@ var UWorld_SpawnActor = new NativeFunction(base.add(0x2624510), 'pointer', ['poi
 var FName_GetPlainNameString = new NativeFunction(base.add(0x11604F0), 'void', ['pointer', 'pointer'], 'win64');
 
 function getActorTransform(AActor) {
+    if (AActor.isNull()) {
+        return ptr(0);
+    }
     var RootComponent = AActor.add(0x130).readPointer();
     if (RootComponent.isNull()) {
         return ptr(0);
@@ -22,7 +25,11 @@ function findObjectByName(ObjectName, Clazz) {
     return StaticFindObject(Clazz, ptr(0xFFFFFFFFFFFFFFFF), Buffer, 0);
 }
 function findClassByName(ClassName) {
-    return findObjectByName(ClassName, UClass_GetPrivateStaticClass());
+    var staticClass = UClass_GetPrivateStaticClass();
+    if (staticClass.isNull()) {
+        return ptr(0);
+    }
+    return findObjectByName(ClassName, staticClass);
 }
 function loadObjectByName(ObjectName, Clazz) {
     var Buffer = Memory.alloc((ObjectName.length + 1) * 2);
@@ -30,7 +37,11 @@ function loadObjectByName(ObjectName, Clazz) {
     return StaticLoadObject(Clazz, ptr(0), Buffer, ptr(0), 0, ptr(0), 1, ptr(0));
 }
 function loadClassByName(ClassName) {
-    return loadObjectByName(ClassName, UClass_GetPrivateStaticClass());
+    var staticClass = UClass_GetPrivateStaticClass();
+    if (staticClass.isNull()) {
+        return ptr(0);
+    }
+    return loadObjectByName(ClassName, staticClass);
 }
 function getClass(ClassName) {
     var Clazz = findClassByName(ClassName);
@@ -57,101 +68,60 @@ function newFString(Length) {
 }
 
 function getObjectName(UObject) {
+    if (UObject.isNull()) {
+        return '';
+    }
     var NamePrivate = UObject.add(0x18);
     var NameBuffer = newFString(100);
     FName_GetPlainNameString(NamePrivate, NameBuffer);
-    return NameBuffer.readPointer().readUtf16String();
+    var DataPtr = NameBuffer.readPointer();
+    if (DataPtr.isNull()) {
+        return '';
+    }
+    var text = DataPtr.readUtf16String();
+    return text ? text : '';
 }
 /*
 /Game/Blueprints/Game/BP_Explosion_Nitro.BP_Explosion_Nitro_C
 /Game/Blueprints/Game/BP_Explosion_Gunpowder.BP_Explosion_Gunpowder_C
 /Game/Blueprints/Game/BP_Explosion_Gunpowder_OffShip.BP_Explosion_Gunpowder_OffShip_C
 */
-var ADH_InventoryPickup_OnPickupMovementStopped_addr = base.add(0xDD77C0)
+var GRENADE_PICKUP_NAMES = {
+    BP_Rock_Pickup_C: true,
+    BP_Stick_Pickup_C: true,
+    BP_Coal_Pickup_C: true,
+    BP_LeadIngot_Pickup_C: true,
+    BP_Whetstone_Pickup_C: true,
+    BP_BoneClub_Pickup_C: true,
+    BP_CoalBarrel_Pickup_C: true,
+    BP_Sword_Pickup_C: true,
+    BP_WoodAxe_Pickup_C: true,
+    BP_IceAxe_Pickup_C: true,
+    BP_Cleaver_Pickup_C: true
+};
+var ADH_InventoryPickup_OnPickupMovementStopped_addr = base.add(0xDD77C0);
 Interceptor.attach(ADH_InventoryPickup_OnPickupMovementStopped_addr, {
     onEnter : function(args){
-        this.ADH_InventoryPickup = args[0]
+        this.ADH_InventoryPickup = args[0];
     }, 
     onLeave : function(ret){
-        var InventoryName = getObjectName(this.ADH_InventoryPickup)
-        //杂物类
-        if(InventoryName == "BP_Rock_Pickup_C"){ //石头
-            var Pos = getActorTransform(this.ADH_InventoryPickup)
-            var ExplosionActor = getClass('/Game/Blueprints/Game/BP_Explosion_Gunpowder.BP_Explosion_Gunpowder_C')
-            var World = UObject_GetWorld(this.ADH_InventoryPickup)
-            AActor_SetLifeSpan(this.ADH_InventoryPickup,0.1)
-            var Explosion = spawnActor(World, ExplosionActor, Pos)
-        }
-        else if(InventoryName == "BP_Stick_Pickup_C"){ //木板
-            var Pos = getActorTransform(this.ADH_InventoryPickup)
-            var ExplosionActor = getClass('/Game/Blueprints/Game/BP_Explosion_Gunpowder.BP_Explosion_Gunpowder_C')
-            var World = UObject_GetWorld(this.ADH_InventoryPickup)
-            AActor_SetLifeSpan(this.ADH_InventoryPickup,0.1)
-            var Explosion = spawnActor(World, ExplosionActor, Pos)
-        }
-        else if(InventoryName == "BP_Coal_Pickup_C"){ //煤炭
-            var Pos = getActorTransform(this.ADH_InventoryPickup)
-            var ExplosionActor = getClass('/Game/Blueprints/Game/BP_Explosion_Gunpowder.BP_Explosion_Gunpowder_C')
-            var World = UObject_GetWorld(this.ADH_InventoryPickup)
-            AActor_SetLifeSpan(this.ADH_InventoryPickup,0.1)
-            var Explosion = spawnActor(World, ExplosionActor, Pos)
-        }
-        else if(InventoryName == "BP_LeadIngot_Pickup_C"){ //铅锭
-            var Pos = getActorTransform(this.ADH_InventoryPickup)
-            var ExplosionActor = getClass('/Game/Blueprints/Game/BP_Explosion_Gunpowder.BP_Explosion_Gunpowder_C')
-            var World = UObject_GetWorld(this.ADH_InventoryPickup)
-            AActor_SetLifeSpan(this.ADH_InventoryPickup,0.1)
-            var Explosion = spawnActor(World, ExplosionActor, Pos)
-        }
-        else if(InventoryName == "BP_Whetstone_Pickup_C"){ //磨刀石
-            var Pos = getActorTransform(this.ADH_InventoryPickup)
-            var ExplosionActor = getClass('/Game/Blueprints/Game/BP_Explosion_Gunpowder.BP_Explosion_Gunpowder_C')
-            var World = UObject_GetWorld(this.ADH_InventoryPickup)
-            AActor_SetLifeSpan(this.ADH_InventoryPickup,0.1)
-            var Explosion = spawnActor(World, ExplosionActor, Pos)
-        }
-        else if(InventoryName == "BP_BoneClub_Pickup_C"){ //骨棒
-            var Pos = getActorTransform(this.ADH_InventoryPickup)
-            var ExplosionActor = getClass('/Game/Blueprints/Game/BP_Explosion_Gunpowder.BP_Explosion_Gunpowder_C')
-            var World = UObject_GetWorld(this.ADH_InventoryPickup)
-            AActor_SetLifeSpan(this.ADH_InventoryPickup,0.1)
-            var Explosion = spawnActor(World, ExplosionActor, Pos)
-        }
-        else if(InventoryName == "BP_CoalBarrel_Pickup_C"){ //煤炭桶
-            var Pos = getActorTransform(this.ADH_InventoryPickup)
-            var ExplosionActor = getClass('/Game/Blueprints/Game/BP_Explosion_Gunpowder.BP_Explosion_Gunpowder_C')
-            var World = UObject_GetWorld(this.ADH_InventoryPickup)
-            AActor_SetLifeSpan(this.ADH_InventoryPickup,0.1)
-            var Explosion = spawnActor(World, ExplosionActor, Pos)
-        }
-        //武器类
-        else if(InventoryName == "BP_Sword_Pickup_C"){ //军刀
-            var Pos = getActorTransform(this.ADH_InventoryPickup)
-            var ExplosionActor = getClass('/Game/Blueprints/Game/BP_Explosion_Gunpowder.BP_Explosion_Gunpowder_C')
-            var World = UObject_GetWorld(this.ADH_InventoryPickup)
-            AActor_SetLifeSpan(this.ADH_InventoryPickup,0.1)
-            var Explosion = spawnActor(World, ExplosionActor, Pos)
-        }
-        else if(InventoryName == "BP_WoodAxe_Pickup_C"){ //木斧
-            var Pos = getActorTransform(this.ADH_InventoryPickup)
-            var ExplosionActor = getClass('/Game/Blueprints/Game/BP_Explosion_Gunpowder.BP_Explosion_Gunpowder_C')
-            var World = UObject_GetWorld(this.ADH_InventoryPickup)
-            AActor_SetLifeSpan(this.ADH_InventoryPickup,0.1)
-            var Explosion = spawnActor(World, ExplosionActor, Pos)
-        }
-        else if(InventoryName == "BP_IceAxe_Pickup_C"){ //冰镐
-            var Pos = getActorTransform(this.ADH_InventoryPickup)
-            var ExplosionActor = getClass('/Game/Blueprints/Game/BP_Explosion_Gunpowder.BP_Explosion_Gunpowder_C')
-            var World = UObject_GetWorld(this.ADH_InventoryPickup)
-            AActor_SetLifeSpan(this.ADH_InventoryPickup,0.1)
-            var Explosion = spawnActor(World, ExplosionActor, Pos)
-        }
-        else if(InventoryName == "BP_Cleaver_Pickup_C"){ //菜刀
-            var Pos = getActorTransform(this.ADH_InventoryPickup)
-            var ExplosionActor = getClass('/Game/Blueprints/Game/BP_Explosion_Gunpowder.BP_Explosion_Gunpowder_C')
-            var World = UObject_GetWorld(this.ADH_InventoryPickup)
-            AActor_SetLifeSpan(this.ADH_InventoryPickup,0.1)
-            var Explosion = spawnActor(World, ExplosionActor, Pos)
-        }
+        try {
+            var pickup = this.ADH_InventoryPickup;
+            if (!pickup || pickup.isNull()) {
+                return;
+            }
+            var InventoryName = getObjectName(pickup);
+            if (!Object.prototype.hasOwnProperty.call(GRENADE_PICKUP_NAMES, InventoryName)) {
+                return;
+            }
+            var Pos = getActorTransform(pickup);
+            var ExplosionActor = getClass('/Game/Blueprints/Game/BP_Explosion_Gunpowder.BP_Explosion_Gunpowder_C');
+            var World = UObject_GetWorld(pickup);
+            if (Pos.isNull() || ExplosionActor.isNull() || World.isNull()) {
+                return;
+            }
+            AActor_SetLifeSpan(pickup, 0.1);
+            spawnActor(World, ExplosionActor, Pos);
+        } catch (e) {}
     }
 });

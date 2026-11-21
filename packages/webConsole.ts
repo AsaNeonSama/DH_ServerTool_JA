@@ -42,6 +42,15 @@ import type {
 } from "./types";
 
 const CIPHER_INLINE_TOKEN: string = "/*__DH_CIPHER_INLINE__*/";
+const MAX_ENCRYPTED_BODY_BYTES: number = 65536;
+
+function loadFaviconBytes(filePath: string): Uint8Array<ArrayBuffer> {
+  try {
+    return toArrayBufferUint8(readFileSync(filePath));
+  } catch {
+    return new Uint8Array(0);
+  }
+}
 
 function toArrayBufferUint8(data: Uint8Array): Uint8Array<ArrayBuffer> {
   const copy: Uint8Array<ArrayBuffer> = new Uint8Array(data.byteLength);
@@ -69,9 +78,7 @@ const controlPageWithCipher: string = unwrapTextImport(controlPageHtml).replace(
 );
 const controlPageCache: CachedPage = precompressHtml(controlPageWithCipher);
 const unAuthPageCache: CachedPage = precompressHtml(unwrapTextImport(unAuthPageHtml));
-const faviconBytes: Uint8Array<ArrayBuffer> = toArrayBufferUint8(
-  readFileSync(appIconIcoPath)
-);
+const faviconBytes: Uint8Array<ArrayBuffer> = loadFaviconBytes(appIconIcoPath);
 
 function buildAuthBootstrapHtml(challenge: string): string {
   return `<!DOCTYPE html>
@@ -246,9 +253,36 @@ function parseCookies(header: string | null): Record<string, string> {
     if (eq === -1) continue;
     const key: string = part.slice(0, eq).trim();
     const val: string = part.slice(eq + 1).trim();
-    if (key) out[key] = decodeURIComponent(val);
+    if (!key) continue;
+    try {
+      out[key] = decodeURIComponent(val);
+    } catch {
+      out[key] = val;
+    }
   }
   return out;
+}
+
+async function readBoundedRequestText(
+  req: Request,
+  maxBytes: number = MAX_ENCRYPTED_BODY_BYTES
+): Promise<string | null> {
+  const contentLenHeader: string | null = req.headers.get("content-length");
+  if (contentLenHeader !== null) {
+    const declaredLen: number = Number(contentLenHeader);
+    if (Number.isFinite(declaredLen) && declaredLen > maxBytes) {
+      return null;
+    }
+  }
+  try {
+    const rawBuf: ArrayBuffer = await req.arrayBuffer();
+    if (rawBuf.byteLength > maxBytes) {
+      return null;
+    }
+    return new TextDecoder("utf-8").decode(rawBuf).trim();
+  } catch {
+    return null;
+  }
 }
 
 function toStringValue(value: unknown): string {
@@ -309,6 +343,7 @@ async function sendUtf16TcpPacket(options: TcpPacketOptions): Promise<Error | nu
       const finish = (err: Error | null): void => {
         if (settled) return;
         settled = true;
+        activeSocket = null;
         clearTimeout(timer);
         resolve(err);
       };
@@ -349,10 +384,26 @@ async function sendUtf16TcpPacket(options: TcpPacketOptions): Promise<Error | nu
         port,
         socket: {
           open(socket: TcpSocketWriter): void {
+            if (settled) {
+              try {
+                socket.terminate();
+              } catch {
+                // Ignore late open terminate error
+              }
+              return;
+            }
             activeSocket = socket;
             writeRemaining(socket);
           },
           drain(socket: TcpSocketWriter): void {
+            if (settled) {
+              try {
+                socket.terminate();
+              } catch {
+                // Ignore late drain terminate error
+              }
+              return;
+            }
             writeRemaining(socket);
           },
           data(): void {
@@ -580,26 +631,33 @@ export function startWebConsole(options: WebConsoleOptions): WebConsoleInstance 
     handler: EncryptedRouteHandler
   ): RouteHandler =>
     async (req: Request): Promise<Response> => {
-      if (!isAuthenticated(req)) {
-        return new Response(null, { status: 401 });
-      }
-      const rawCiphertext: string = (await req.text()).trim();
-      const decrypted: string | null = cipher.decrypt(
-        rawCiphertext,
-        `REQ:${pathname}`
-      );
-      if (decrypted === null) {
-        return new Response(null, { status: 401 });
-      }
-      const data: Record<string, unknown> | null = parseJsonObjectString(decrypted);
-      if (!data) {
-        return encryptedResponse(
-          pathname,
-          apiResult(STATUS_CODE.badRequest, CONSOLE_MESSAGES.networkParamError)
+      try {
+        if (!isAuthenticated(req)) {
+          return new Response(null, { status: 401 });
+        }
+        const rawCiphertext: string | null = await readBoundedRequestText(req);
+        if (rawCiphertext === null) {
+          return new Response(null, { status: 400 });
+        }
+        const decrypted: string | null = cipher.decrypt(
+          rawCiphertext,
+          `REQ:${pathname}`
         );
+        if (decrypted === null) {
+          return new Response(null, { status: 401 });
+        }
+        const data: Record<string, unknown> | null = parseJsonObjectString(decrypted);
+        if (!data) {
+          return encryptedResponse(
+            pathname,
+            apiResult(STATUS_CODE.badRequest, CONSOLE_MESSAGES.networkParamError)
+          );
+        }
+        const result: ApiResultPayload = await handler(data);
+        return encryptedResponse(pathname, result);
+      } catch {
+        return new Response(null, { status: 500 });
       }
-      const result: ApiResultPayload = await handler(data);
-      return encryptedResponse(pathname, result);
     };
 
   const handleFavicon: RouteHandler = (): Response =>
@@ -632,29 +690,36 @@ export function startWebConsole(options: WebConsoleOptions): WebConsoleInstance 
   };
 
   const handleAuthVerify: RouteHandler = async (req: Request): Promise<Response> => {
-    const rawCiphertext: string = (await req.text()).trim();
-    const decrypted: string | null = cipher.decrypt(
-      rawCiphertext,
-      `REQ:${AUTH_VERIFY_PATH}`
-    );
-    if (decrypted === null) {
-      return new Response(null, { status: 401 });
-    }
-    const data: Record<string, unknown> | null = parseJsonObjectString(decrypted);
-    const challenge: unknown = data?.challenge;
-    if (typeof challenge !== "string" || !consumeAuthChallenge(challenge)) {
-      return new Response(null, { status: 401 });
-    }
-    const encryptedCookieValue: string = cipher.encrypt(authId, COOKIE_AAD);
-    return encryptedResponse(
-      AUTH_VERIFY_PATH,
-      { ok: true, challenge },
-      {
-        "Set-Cookie": `${COOKIE_NAME}=${encodeURIComponent(
-          encryptedCookieValue
-        )}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${COOKIE_MAX_AGE_SECONDS}`,
+    try {
+      const rawCiphertext: string | null = await readBoundedRequestText(req);
+      if (rawCiphertext === null) {
+        return new Response(null, { status: 400 });
       }
-    );
+      const decrypted: string | null = cipher.decrypt(
+        rawCiphertext,
+        `REQ:${AUTH_VERIFY_PATH}`
+      );
+      if (decrypted === null) {
+        return new Response(null, { status: 401 });
+      }
+      const data: Record<string, unknown> | null = parseJsonObjectString(decrypted);
+      const challenge: unknown = data?.challenge;
+      if (typeof challenge !== "string" || !consumeAuthChallenge(challenge)) {
+        return new Response(null, { status: 401 });
+      }
+      const encryptedCookieValue: string = cipher.encrypt(authId, COOKIE_AAD);
+      return encryptedResponse(
+        AUTH_VERIFY_PATH,
+        { ok: true, challenge },
+        {
+          "Set-Cookie": `${COOKIE_NAME}=${encodeURIComponent(
+            encryptedCookieValue
+          )}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${COOKIE_MAX_AGE_SECONDS}`,
+        }
+      );
+    } catch {
+      return new Response(null, { status: 500 });
+    }
   };
 
   const handleHomePage: RouteHandler = withGetAuth((req: Request): Response =>
@@ -935,6 +1000,9 @@ export function startWebConsole(options: WebConsoleOptions): WebConsoleInstance 
         return new Response(null, { status: 401 });
       }
       return redirectToUnAuth();
+    },
+    error(): Response {
+      return new Response(null, { status: 500 });
     },
   });
 

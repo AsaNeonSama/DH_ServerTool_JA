@@ -127,10 +127,18 @@ function createFTextFromString(text) {
 }
 
 function getUObjectName(uObjectPtr) {
+    if (uObjectPtr.isNull()) {
+        return '';
+    }
     var namePrivatePtr = uObjectPtr.add(UE_OFFSETS.uObjectNamePrivate);
     var nameBuffer = allocateFString(100);
     FName_GetPlainNameString(namePrivatePtr, nameBuffer);
-    return nameBuffer.readPointer().readUtf16String();
+    var namePtr = nameBuffer.readPointer();
+    if (namePtr.isNull()) {
+        return '';
+    }
+    var text = namePtr.readUtf16String();
+    return text ? text : '';
 }
 
 function findObjectByPath(objectPath, targetClassPtr) {
@@ -227,7 +235,7 @@ function removeFromOtherThrallsArray(playerStatePtr, targetToRemovePtr) {
     var otherThrallsPtr = playerStatePtr.add(UE_OFFSETS.playerStateOtherThralls);
     var dataPtr = otherThrallsPtr.readPointer();
     var count = otherThrallsPtr.add(8).readS32();
-    if (dataPtr.isNull() || count <= 0) {
+    if (dataPtr.isNull() || count <= 0 || count > 64) {
         return;
     }
     var writeIdx = 0;
@@ -269,7 +277,7 @@ function setTargetPlayerIsThrall(gameStatePtr, playerControllerPtr, isThrall) {
     var playerArrayPtr = gameStatePtr.add(UE_OFFSETS.gameStatePlayerArray);
     var playerListDataPtr = playerArrayPtr.readPointer();
     var playerCount = playerArrayPtr.add(8).readU32();
-    if (!playerListDataPtr.isNull() && playerCount > 0) {
+    if (!playerListDataPtr.isNull() && playerCount > 0 && playerCount <= 64) {
         for (var i = 0; i < playerCount; i++) {
             var otherPlayerStatePtr = playerListDataPtr.add(8 * i).readPointer();
             if (!otherPlayerStatePtr.isNull() && !otherPlayerStatePtr.equals(playerStatePtr)) {
@@ -429,7 +437,7 @@ function findPlayerControllerByTarget(gameStatePtr, targetName, matchPlayerName)
     var playerArrayPtr = gameStatePtr.add(UE_OFFSETS.gameStatePlayerArray);
     var playerListDataPtr = playerArrayPtr.readPointer();
     var playerCount = playerArrayPtr.add(8).readU32();
-    if (playerListDataPtr.isNull() || playerCount === 0) {
+    if (playerListDataPtr.isNull() || playerCount === 0 || playerCount > 64) {
         return ptr(0);
     }
     for (var i = 0; i < playerCount; i++) {
@@ -478,7 +486,13 @@ function executeQueuedPayload(gameStatePtr, payload) {
 
     if (action === 'execute_console_command') {
         var commandText = payload.command;
-        var trimmedCommand = commandText ? commandText.trim() : '';
+        if (typeof commandText !== 'string') {
+            return;
+        }
+        var trimmedCommand = commandText.trim();
+        if (trimmedCommand.length === 0) {
+            return;
+        }
         var firstSpaceIdx = trimmedCommand.indexOf(' ');
         var cmdName = (firstSpaceIdx === -1 ? trimmedCommand : trimmedCommand.slice(0, firstSpaceIdx)).toLowerCase();
         if (cmdName === 'setisthrall') {
@@ -495,15 +509,23 @@ function executeQueuedPayload(gameStatePtr, payload) {
         writeFStringValue(commandFString, commandText);
         UKismetSystemLibrary_ExecuteConsoleCommand(gameStatePtr, commandFString, targetController);
     } else if (action === 'add_inventory_item') {
-        giveInventoryItem(targetController, payload.itemBlueprintPath, payload.itemCount);
+        if (typeof payload.itemBlueprintPath === 'string' && typeof payload.itemCount === 'number' && Number.isFinite(payload.itemCount) && payload.itemCount > 0) {
+            giveInventoryItem(targetController, payload.itemBlueprintPath, Math.floor(payload.itemCount));
+        }
     } else if (action === 'set_storage_limit') {
-        updateStorageLimit(targetController, payload.storageLimit);
+        if (typeof payload.storageLimit === 'number' && Number.isFinite(payload.storageLimit)) {
+            updateStorageLimit(targetController, Math.floor(payload.storageLimit));
+        }
     } else if (action === 'kick_player') {
         kickTargetPlayer(gameStatePtr, targetController);
     } else if (action === 'send_thrall_message') {
-        deliverThrallMessage(targetController, payload.message);
+        if (typeof payload.message === 'string') {
+            deliverThrallMessage(targetController, payload.message);
+        }
     } else if (action === 'set_human_property') {
-        setHumanCharacterProperty(targetController, payload.propertyName, payload.propertyValue);
+        if (typeof payload.propertyName === 'string' && typeof payload.propertyValue === 'number' && Number.isFinite(payload.propertyValue)) {
+            setHumanCharacterProperty(targetController, payload.propertyName, payload.propertyValue);
+        }
     }
 }
 
@@ -512,24 +534,23 @@ function executeQueuedPayload(gameStatePtr, payload) {
 // ============================================================================
 Interceptor.attach(ADH_GameState_Tick_addr, {
     onEnter: function (args) {
-        this.gameStatePtr = args[0];
-    },
-    onLeave: function () {
-        var gameStatePtr = this.gameStatePtr;
-        if (gameStatePtr.isNull()) {
-            return;
-        }
-        if (!isBridgeServerRunning) {
-            startBridgeServer();
-        }
-        var payload = dequeueCommand();
-        if (payload) {
-            try {
-                executeQueuedPayload(gameStatePtr, payload);
-            } catch (e) {
-                writePatchLog('Command exec error (' + payload.action + '): ' + e.message);
+        try {
+            var gameStatePtr = args[0];
+            if (gameStatePtr.isNull()) {
+                return;
             }
-        }
+            if (!isBridgeServerRunning && Date.now() >= nextBridgeRetryAt) {
+                startBridgeServer();
+            }
+            var payload = dequeueCommand();
+            if (payload) {
+                try {
+                    executeQueuedPayload(gameStatePtr, payload);
+                } catch (e) {
+                    writePatchLog('Command exec error (' + payload.action + '): ' + e.message);
+                }
+            }
+        } catch (e) {}
     }
 });
 
@@ -538,9 +559,11 @@ Interceptor.attach(APlayerController_BeginPlay_addr, {
         this.playerControllerPtr = args[0];
     },
     onLeave: function () {
-        if (!this.playerControllerPtr.isNull()) {
-            ADH_PlayerController_AddCheats(this.playerControllerPtr, 1);
-        }
+        try {
+            if (this.playerControllerPtr && !this.playerControllerPtr.isNull()) {
+                ADH_PlayerController_AddCheats(this.playerControllerPtr, 1);
+            }
+        } catch (e) {}
     }
 });
 
@@ -549,6 +572,8 @@ Interceptor.attach(APlayerController_BeginPlay_addr, {
 // ============================================================================
 var tcpListener = null;
 var isBridgeServerRunning = false;
+var nextBridgeRetryAt = 0;
+var MAX_BRIDGE_PACKET_BYTES = 65536;
 
 function logBridgeError(err) {
     if (err && err.message) {
@@ -565,13 +590,35 @@ function safeCloseConnection(connection) {
     } catch (e) {}
 }
 
-function handleBridgeConnection(connection) {
-    connection.input.read(4096).then(function (buffer) {
-        safeCloseConnection(connection);
-        if (!buffer || buffer.byteLength < 2) {
-            return;
+function decodeUtf16LeChunks(chunks, totalBytes) {
+    if (totalBytes < 2) {
+        return '';
+    }
+    var combined = new Uint8Array(totalBytes);
+    var offset = 0;
+    for (var i = 0; i < chunks.length; i++) {
+        combined.set(chunks[i], offset);
+        offset += chunks[i].byteLength;
+    }
+    var codeUnits = Math.floor(totalBytes / 2);
+    var chars = [];
+    for (var j = 0; j < codeUnits; j++) {
+        var unit = combined[j * 2] | (combined[j * 2 + 1] << 8);
+        if (unit === 0) {
+            break;
         }
-        var rawJson = buffer.unwrap().readUtf16String();
+        chars.push(String.fromCharCode(unit));
+    }
+    return chars.join('');
+}
+
+function handleBridgeConnection(connection) {
+    var chunks = [];
+    var totalBytes = 0;
+
+    function finishRead() {
+        safeCloseConnection(connection);
+        var rawJson = decodeUtf16LeChunks(chunks, totalBytes);
         if (!rawJson || rawJson.length === 0) {
             return;
         }
@@ -583,10 +630,50 @@ function handleBridgeConnection(connection) {
         } catch (parseErr) {
             logBridgeError(parseErr);
         }
-    }).catch(function (err) {
-        safeCloseConnection(connection);
-        logBridgeError(err);
-    });
+    }
+
+    function readNext() {
+        connection.input.read(4096).then(function (buffer) {
+            if (!buffer || buffer.byteLength === 0) {
+                finishRead();
+                return;
+            }
+            var bytes = new Uint8Array(buffer);
+            var remaining = MAX_BRIDGE_PACKET_BYTES - totalBytes;
+            if (bytes.byteLength > remaining) {
+                chunks.push(bytes.subarray(0, remaining));
+                totalBytes += remaining;
+                finishRead();
+                return;
+            }
+            chunks.push(bytes);
+            totalBytes += bytes.byteLength;
+
+            // Stop immediately once UTF-16LE NUL terminator is present
+            var hasNull = false;
+            var evenLen = bytes.byteLength - (bytes.byteLength & 1);
+            for (var k = 0; k < evenLen; k += 2) {
+                if (bytes[k] === 0 && bytes[k + 1] === 0) {
+                    hasNull = true;
+                    break;
+                }
+            }
+            if (hasNull) {
+                finishRead();
+            } else {
+                readNext();
+            }
+        }).catch(function (err) {
+            if (totalBytes >= 2) {
+                finishRead();
+            } else {
+                safeCloseConnection(connection);
+                logBridgeError(err);
+            }
+        });
+    }
+
+    readNext();
 }
 
 function acceptBridgeLoop(listener) {
@@ -598,6 +685,7 @@ function acceptBridgeLoop(listener) {
         var errMsg = err && err.message ? String(err.message) : '';
         if (errMsg.indexOf('cancelled') !== -1 || errMsg.indexOf('closed') !== -1) {
             isBridgeServerRunning = false;
+            nextBridgeRetryAt = Date.now() + 1000;
             return;
         }
         logBridgeError(err);
@@ -614,12 +702,17 @@ function startBridgeServer() {
         .then(acceptBridgeLoop)
         .catch(function (err) {
             isBridgeServerRunning = false;
+            nextBridgeRetryAt = Date.now() + 1000;
             logBridgeError(err);
         });
 }
 
 Interceptor.attach(ADH_GameState_HandleMatchHasStarted_addr, {
     onEnter: function () {
-        startBridgeServer();
+        try {
+            if (!isBridgeServerRunning && Date.now() >= nextBridgeRetryAt) {
+                startBridgeServer();
+            }
+        } catch (e) {}
     }
 });

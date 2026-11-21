@@ -14,26 +14,44 @@ function newFString(Length) {
     return FString;
 }
 function getObjectName(UObject) {
+    if (UObject.isNull()) {
+        return '';
+    }
     var NamePrivate = UObject.add(0x18);
     var NameBuffer = newFString(100);
     FName_GetPlainNameString(NamePrivate, NameBuffer);
-    return NameBuffer.readPointer().readUtf16String();
+    var DataPtr = NameBuffer.readPointer();
+    if (DataPtr.isNull()) {
+        return '';
+    }
+    var text = DataPtr.readUtf16String();
+    return text ? text : '';
 }
 
 function arrayResize(Array, ElementSize, Num) {
     var Allocator = Array.readPointer();
-    Array.add(12).writeU32(Num);
     var NewOne = FMemory_Realloc(Allocator, Num * ElementSize, 0);
+    if (Num > 0 && NewOne.isNull()) {
+        return false;
+    }
     Array.writePointer(NewOne);
+    Array.add(12).writeU32(Num);
+    return true;
 }
 function getArraySize(TArray) {
+    if (TArray.isNull()) {
+        return 0;
+    }
     return TArray.add(8).readU32();
 }
 function getArrayItemAddr(TArray, size, index) {
     var ArrNum = getArraySize(TArray);
-    if (index > ArrNum)
+    if (index < 0 || index >= ArrNum)
         return null;
-    return TArray.readPointer().add(index * size);
+    var DataPtr = TArray.readPointer();
+    if (DataPtr.isNull())
+        return null;
+    return DataPtr.add(index * size);
 }
 
 function applyVomitCurveToCdo(CDO) {
@@ -46,10 +64,15 @@ function applyVomitCurveToCdo(CDO) {
     }
     var FloatCurve = PoisonReserveHealth.add(0x30);
     var FloatKeys = FloatCurve.add(0x70);
-    arrayResize(FloatKeys, 28, VomitCurve.length);
+    if (!arrayResize(FloatKeys, 28, VomitCurve.length)) {
+        return;
+    }
     FloatKeys.add(8).writeU32(VomitCurve.length);
     for(var i = 0; i < VomitCurve.length; i++) {
         var CurveKey = getArrayItemAddr(FloatKeys, 28, i);
+        if (CurveKey === null) {
+            continue;
+        }
         CurveKey.add(0x0).writeU8(0);
         CurveKey.add(0x1).writeU8(0);
         CurveKey.add(0x2).writeU8(0);
@@ -68,23 +91,31 @@ Interceptor.attach(UClass_SerializeDefaultObject_addr, {
         this.ClassDefaultObject = args[1];
     },
     onLeave : function(ret) {
-        if(this.UClass.isNull() || getObjectName(this.UClass) != 'BP_HumanCharacter_C') {
-            return;
-        }
-        applyVomitCurveToCdo(this.ClassDefaultObject);
+        try {
+            if (!this.UClass || this.UClass.isNull() || !this.ClassDefaultObject || this.ClassDefaultObject.isNull()) {
+                return;
+            }
+            if (getObjectName(this.UClass) != 'BP_HumanCharacter_C') {
+                return;
+            }
+            applyVomitCurveToCdo(this.ClassDefaultObject);
+        } catch (e) {}
     }
 });
 
 // Fallback for late external-attach mode (when UE4 is already initialized and CDO already serialized)
 try {
     if (!GWorld.readPointer().isNull()) {
-        var HumanClassName = '/Game/Blueprints/Player/BP_HumanCharacter.BP_HumanCharacter_C';
-        var NameBuf = Memory.alloc((HumanClassName.length + 1) * 2);
-        NameBuf.writeUtf16String(HumanClassName);
-        var HumanClass = StaticFindObject(UClass_GetPrivateStaticClass(), ptr(0xFFFFFFFFFFFFFFFF), NameBuf, 0);
-        if (!HumanClass.isNull()) {
-            var ExistingCdo = HumanClass.add(0x118).readPointer();
-            applyVomitCurveToCdo(ExistingCdo);
+        var staticClass = UClass_GetPrivateStaticClass();
+        if (!staticClass.isNull()) {
+            var HumanClassName = '/Game/Blueprints/Player/BP_HumanCharacter.BP_HumanCharacter_C';
+            var NameBuf = Memory.alloc((HumanClassName.length + 1) * 2);
+            NameBuf.writeUtf16String(HumanClassName);
+            var HumanClass = StaticFindObject(staticClass, ptr(0xFFFFFFFFFFFFFFFF), NameBuf, 0);
+            if (!HumanClass.isNull()) {
+                var ExistingCdo = HumanClass.add(0x118).readPointer();
+                applyVomitCurveToCdo(ExistingCdo);
+            }
         }
     }
 } catch (e) {}

@@ -2,6 +2,7 @@ import { runReconfigureMatchCli } from "./cli";
 import {
   C,
   DEFAULT_PATCH_SCRIPTS,
+  DETACH_EXIT_GRACE_MS,
   STARTUP_RETRY_DELAY_MS,
   UDP_MISSING_STREAK_LIMIT,
 } from "./constants";
@@ -120,6 +121,7 @@ export async function runServerSupervisor(
           ueMapArgument: activePlan.ueMapArgument,
           port: currentPort,
           patches,
+          signal,
           onDetached: (reason: string): void => {
             if (!signal.aborted) {
               println(
@@ -201,8 +203,15 @@ export async function runServerSupervisor(
       if (activeSession) {
         await activeSession.cleanup();
       }
-      if (signal.aborted && shippingPid !== null && isProcessAlive(shippingPid)) {
-        terminateProcessByPid(shippingPid);
+      if (shippingPid !== null && isProcessAlive(shippingPid)) {
+        if (!signal.aborted) {
+          // Give a normally-exiting server a brief grace window before force-terminating
+          // so a detached zombie process can never remain alive holding consolePatchPort
+          await sleepAbortable(DETACH_EXIT_GRACE_MS, signal);
+        }
+        if (isProcessAlive(shippingPid)) {
+          terminateProcessByPid(shippingPid);
+        }
       }
     }
 

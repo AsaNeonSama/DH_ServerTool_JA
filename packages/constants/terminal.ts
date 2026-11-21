@@ -1,4 +1,4 @@
-export const APP_CONSOLE_TITLE: string = "DHA_Server_Tool_JA";
+export const APP_CONSOLE_TITLE: string = "DH_Server_Tool_JA";
 
 export const C: Readonly<Record<
   | "RESET"

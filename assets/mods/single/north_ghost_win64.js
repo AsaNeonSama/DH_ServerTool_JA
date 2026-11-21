@@ -410,63 +410,64 @@ Interceptor.attach(ADH_GameState_HandleMatchHasStarted_addr, {
         this.gameState = args[0];
     },
     onLeave: function () {
-        var gameState = this.gameState;
-        var world = GWorld.readPointer();
-        if (gameState.isNull() || world.isNull()) {
-            activeWorldKey = null;
-            activeGameStateKey = null;
-            return;
-        }
-        if (gameState.add(OFF_ACTOR_ROLE).readU8() !== ROLE_AUTHORITY) {
-            return;
-        }
-        resetMatchState(gameState, world);
+        try {
+            var gameState = this.gameState;
+            var world = GWorld.readPointer();
+            if (!gameState || gameState.isNull() || world.isNull()) {
+                activeWorldKey = null;
+                activeGameStateKey = null;
+                return;
+            }
+            if (gameState.add(OFF_ACTOR_ROLE).readU8() !== ROLE_AUTHORITY) {
+                return;
+            }
+            resetMatchState(gameState, world);
+        } catch (e) {}
     }
 });
 
 Interceptor.attach(ADH_GameState_Tick_addr, {
     onEnter: function (args) {
-        this.gameState = args[0];
-    },
-    onLeave: function () {
-        if (activeWorldKey === null) {
-            return;
-        }
-        var gameState = this.gameState;
-        if (gameState.isNull() || gameState.toString() !== activeGameStateKey) {
-            return;
-        }
-        if (gameState.add(OFF_ACTOR_ROLE).readU8() !== ROLE_AUTHORITY) {
-            return;
-        }
-        var world = GWorld.readPointer();
-        if (world.isNull() || world.toString() !== activeWorldKey) {
-            activeWorldKey = null;
-            activeGameStateKey = null;
-            spellManagers = [];
-            return;
-        }
-        if (
-            gameState.add(OFF_GAMESTATE_SHIP_ARRIVED).readU8() !== 0 ||
-            gameState.add(OFF_GAMESTATE_WINNING_TEAM).readU8() !== 0
-        ) {
-            activeWorldKey = null;
-            activeGameStateKey = null;
-            spellManagers = [];
-            return;
-        }
+        try {
+            if (activeWorldKey === null) {
+                return;
+            }
+            var gameState = args[0];
+            if (gameState.isNull() || gameState.toString() !== activeGameStateKey) {
+                return;
+            }
+            if (gameState.add(OFF_ACTOR_ROLE).readU8() !== ROLE_AUTHORITY) {
+                return;
+            }
+            var world = GWorld.readPointer();
+            if (world.isNull() || world.toString() !== activeWorldKey) {
+                activeWorldKey = null;
+                activeGameStateKey = null;
+                spellManagers = [];
+                return;
+            }
+            if (
+                gameState.add(OFF_GAMESTATE_SHIP_ARRIVED).readU8() !== 0 ||
+                gameState.add(OFF_GAMESTATE_WINNING_TEAM).readU8() !== 0
+            ) {
+                activeWorldKey = null;
+                activeGameStateKey = null;
+                spellManagers = [];
+                return;
+            }
 
-        var nowMs = Date.now();
-        var deltaSec = (nowMs - lastTickMs) / 1000.0;
-        lastTickMs = nowMs;
-        if (!Number.isFinite(deltaSec) || deltaSec <= 0) {
-            return;
-        }
-        if (deltaSec > 1.0) {
-            deltaSec = 1.0;
-        }
+            var nowMs = Date.now();
+            var deltaSec = (nowMs - lastTickMs) / 1000.0;
+            lastTickMs = nowMs;
+            if (!Number.isFinite(deltaSec) || deltaSec <= 0) {
+                return;
+            }
+            if (deltaSec > 1.0) {
+                deltaSec = 1.0;
+            }
 
-        runGhostTick(gameState, world, deltaSec);
+            runGhostTick(gameState, world, deltaSec);
+        } catch (e) {}
     }
 });
 

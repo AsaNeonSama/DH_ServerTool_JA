@@ -46,20 +46,31 @@ function SendThrallMessage(PlayerController,Message,Usound){
     if (PlayerController.isNull()) {
         return;
     }
-    var FName_Message = newFName(Message)
-    var FText_Message = FNameToFText(FName_Message)
-    ADH_PlayerController_ReceiveThrallMessage(PlayerController,FText_Message,Usound)
+    try {
+        var FName_Message = newFName(Message);
+        var FText_Message = FNameToFText(FName_Message);
+        ADH_PlayerController_ReceiveThrallMessage(PlayerController,FText_Message,Usound);
+    } catch (e) {}
 }
 function getArraySize(TArray) {
+    if (TArray.isNull()) {
+        return 0;
+    }
     return TArray.add(8).readU32();
 }
 function getArrayItemAddr(TArray, size, index) {
     var ArrNum = getArraySize(TArray);
-    if (index > ArrNum)
+    if (index < 0 || index >= ArrNum)
         return null;
-    return TArray.readPointer().add(index * size);
+    var DataPtr = TArray.readPointer();
+    if (DataPtr.isNull())
+        return null;
+    return DataPtr.add(index * size);
 }
 function getPlayerRoleName(PlayerState) {
+    if (PlayerState.isNull()) {
+        return "不明";
+    }
     var roleNames = {
         1: "船長",
         2: "エンジニア",
@@ -82,9 +93,17 @@ function NotifyPlayers(GameState) {
         return [];
     }
     var PlayerArray = GameState.add(0x238);
+    var arrSize = getArraySize(PlayerArray);
+    if (arrSize === 0 || arrSize > 64) {
+        return [];
+    }
     var matchingPlayers = [];
-    for (var i = 0; i < getArraySize(PlayerArray); i++) {
-        var PlayerState = getArrayItemAddr(PlayerArray, 8, i).readPointer();
+    for (var i = 0; i < arrSize; i++) {
+        var entry = getArrayItemAddr(PlayerArray, 8, i);
+        if (entry === null) {
+            continue;
+        }
+        var PlayerState = entry.readPointer();
         if (PlayerState.isNull()) {
             continue;
         }
@@ -100,13 +119,16 @@ function NotifyPlayers(GameState) {
 
 
 function SendDeathMessage(PlayerState) {
-    var name = getPlayerRoleName(PlayerState)
+    if (PlayerState.isNull()) {
+        return;
+    }
+    var name = getPlayerRoleName(PlayerState);
     var DeathMessages = {
         0: `${name} が死亡しました`,
         1: `${name} があの世へ旅立ちました〜`
     };
-    var DeathCount = PlayerState.add(0x630).readU32()
-    var GameState = GetGameState()
+    var DeathCount = PlayerState.add(0x630).readU32();
+    var GameState = GetGameState();
     var DeathNews = DeathMessages[DeathCount] || `${name} が死亡しました`;
     var PlayerController = NotifyPlayers(GameState);
     for (var i = 0; i < PlayerController.length; i++) {
@@ -115,8 +137,11 @@ function SendDeathMessage(PlayerState) {
 }
 
 function SendDisconnectedMessage(PlayerState) {
+    if (PlayerState.isNull()) {
+        return;
+    }
     var name = getPlayerRoleName(PlayerState);
-	var GameState = GetGameState()
+	var GameState = GetGameState();
     var DisconnectedNews = `${name} がゲームから切断されました!`;
     var PlayerController = NotifyPlayers(GameState);
     for (var i = 0; i < PlayerController.length; i++) {
@@ -126,11 +151,16 @@ function SendDisconnectedMessage(PlayerState) {
 if (DeadNotice) {
     Interceptor.attach(ADH_PlayerState_SetIsDead_addr, {
         onEnter: function(args) {
-            var PlayerState = args[0];
-            var DeadFlag = args[1] & 1;
-            if (DeadFlag) {
-                SendDeathMessage(PlayerState);
-            }
+            try {
+                var PlayerState = args[0];
+                if (PlayerState.isNull()) {
+                    return;
+                }
+                var DeadFlag = args[1].toInt32() & 1;
+                if (DeadFlag) {
+                    SendDeathMessage(PlayerState);
+                }
+            } catch (e) {}
         }
     });
 }
@@ -139,8 +169,13 @@ if (DeadNotice) {
 if (DisconnectedNotice) {
     Interceptor.attach(ADH_PlayerState_SetIsDisconnected, {
         onEnter: function(args) {
-            var PlayerState = args[0];
-            SendDisconnectedMessage(PlayerState);
+            try {
+                var PlayerState = args[0];
+                if (PlayerState.isNull()) {
+                    return;
+                }
+                SendDisconnectedMessage(PlayerState);
+            } catch (e) {}
         }
     });
 }

@@ -16,11 +16,16 @@ import {
   INVALID_HANDLE_VALUE,
   IP_TABLE_EXTRA_BUFFER_SIZE,
   IP_TABLE_MIN_BUFFER_SIZE,
+  JOB_OBJECT_EXTENDED_LIMIT_INFORMATION_CLASS,
+  JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+  JOBOBJECT_EXTENDED_LIMIT_INFO_SIZE,
+  JOBOBJECT_LIMIT_FLAGS_OFFSET,
   PE32W_EXEFILE_MAX_BYTES,
   PE32W_EXEFILE_OFFSET,
   PE32W_PID_OFFSET,
   PE32W_PPID_OFFSET,
   PROCESS_QUERY_LIMITED_INFORMATION,
+  PROCESS_SET_QUOTA,
   PROCESS_TERMINATE,
   PROCESSENTRY32W_SIZE,
   STD_INPUT_HANDLE,
@@ -98,6 +103,18 @@ const kernel32: Kernel32Library = dlopen("kernel32.dll", {
   },
   CloseHandle: {
     args: [FFIType.u64],
+    returns: FFIType.i32,
+  },
+  CreateJobObjectW: {
+    args: [FFIType.ptr, FFIType.ptr],
+    returns: FFIType.u64,
+  },
+  SetInformationJobObject: {
+    args: [FFIType.u64, FFIType.u32, FFIType.ptr, FFIType.u32],
+    returns: FFIType.i32,
+  },
+  AssignProcessToJobObject: {
+    args: [FFIType.u64, FFIType.u64],
     returns: FFIType.i32,
   },
   GlobalAlloc: {
@@ -246,7 +263,7 @@ export function copyTextToClipboard(text: string): boolean {
       return false;
     }
     const locked: Pointer | bigint | null = kernel32.symbols.GlobalLock(hMem);
-    if (locked === null || typeof locked === "bigint") {
+    if (!locked || typeof locked === "bigint") {
       kernel32.symbols.GlobalFree(hMem);
       return false;
     }
@@ -264,7 +281,10 @@ export function copyTextToClipboard(text: string): boolean {
       return false;
     }
     try {
-      user32.symbols.EmptyClipboard();
+      if (user32.symbols.EmptyClipboard() === 0) {
+        kernel32.symbols.GlobalFree(hMem);
+        return false;
+      }
       const result: bigint = user32.symbols.SetClipboardData(CF_UNICODETEXT, hMem);
       if (result === 0n) {
         kernel32.symbols.GlobalFree(hMem);
@@ -279,10 +299,23 @@ export function copyTextToClipboard(text: string): boolean {
   }
 }
 
+function isValidWin32Pid(pid: number): boolean {
+  return Number.isInteger(pid) && pid > 0 && pid <= 0xffffffff;
+}
+
+function isValidWin32Handle(handle: bigint): boolean {
+  return handle !== 0n && BigInt.asIntN(64, handle) !== INVALID_HANDLE_VALUE;
+}
+
 export function listProcesses(): ProcessInfo[] {
   const results: ProcessInfo[] = [];
-  const snap: bigint = kernel32.symbols.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-  if (snap === INVALID_HANDLE_VALUE) {
+  let snap: bigint;
+  try {
+    snap = kernel32.symbols.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  } catch {
+    return results;
+  }
+  if (snap === INVALID_HANDLE_VALUE || snap === 0n) {
     return results;
   }
 
@@ -314,8 +347,14 @@ export function listProcesses(): ProcessInfo[] {
       results.push({ pid, parentPid, name });
       view.setUint32(0, PROCESSENTRY32W_SIZE, true);
     } while (kernel32.symbols.Process32NextW(snap, ptr(entry)) !== 0);
+  } catch {
+    // Return partial snapshot cleanly on transient Win32 error
   } finally {
-    kernel32.symbols.CloseHandle(BigInt.asUintN(64, snap));
+    try {
+      kernel32.symbols.CloseHandle(BigInt.asUintN(64, snap));
+    } catch {
+      // Ignore close failure
+    }
   }
 
   return results;
@@ -327,33 +366,113 @@ export function listProcessesByName(exeName: string): ProcessInfo[] {
 }
 
 export function isProcessAlive(pid: number): boolean {
-  if (pid <= 0) return false;
-  const handle: bigint = kernel32.symbols.OpenProcess(
-    PROCESS_QUERY_LIMITED_INFORMATION,
-    0,
-    pid
-  );
-  if (handle === 0n) {
-    return false;
-  }
+  if (!isValidWin32Pid(pid)) return false;
   try {
-    const exitCodeBuf: Uint32Array = new Uint32Array(1);
-    const ok: number = kernel32.symbols.GetExitCodeProcess(handle, ptr(exitCodeBuf));
-    if (ok === 0) return false;
-    return exitCodeBuf[0] === STILL_ACTIVE;
-  } finally {
-    kernel32.symbols.CloseHandle(handle);
+    const handle: bigint = kernel32.symbols.OpenProcess(
+      PROCESS_QUERY_LIMITED_INFORMATION,
+      0,
+      pid
+    );
+    if (!isValidWin32Handle(handle)) {
+      return false;
+    }
+    try {
+      const exitCodeBuf: Uint32Array = new Uint32Array(1);
+      const ok: number = kernel32.symbols.GetExitCodeProcess(handle, ptr(exitCodeBuf));
+      if (ok === 0) return false;
+      return exitCodeBuf[0] === STILL_ACTIVE;
+    } finally {
+      kernel32.symbols.CloseHandle(handle);
+    }
+  } catch {
+    return false;
   }
 }
 
 export function terminateProcessByPid(pid: number): boolean {
-  if (pid <= 0) return false;
-  const handle: bigint = kernel32.symbols.OpenProcess(PROCESS_TERMINATE, 0, pid);
-  if (handle === 0n) return false;
+  if (!isValidWin32Pid(pid)) return false;
   try {
-    return kernel32.symbols.TerminateProcess(handle, 0) !== 0;
-  } finally {
-    kernel32.symbols.CloseHandle(handle);
+    const handle: bigint = kernel32.symbols.OpenProcess(PROCESS_TERMINATE, 0, pid);
+    if (!isValidWin32Handle(handle)) return false;
+    try {
+      return kernel32.symbols.TerminateProcess(handle, 0) !== 0;
+    } finally {
+      kernel32.symbols.CloseHandle(handle);
+    }
+  } catch {
+    return false;
+  }
+}
+
+let launcherJobHandle: bigint | null = null;
+
+function ensureLauncherJob(): bigint | null {
+  if (launcherJobHandle !== null) {
+    return launcherJobHandle;
+  }
+  const hJob: bigint = kernel32.symbols.CreateJobObjectW(null, null);
+  if (!isValidWin32Handle(hJob)) {
+    return null;
+  }
+  const infoBuf: Uint8Array = new Uint8Array(JOBOBJECT_EXTENDED_LIMIT_INFO_SIZE);
+  const view: DataView = new DataView(infoBuf.buffer);
+  view.setUint32(
+    JOBOBJECT_LIMIT_FLAGS_OFFSET,
+    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    true
+  );
+  const ok: number = kernel32.symbols.SetInformationJobObject(
+    hJob,
+    JOB_OBJECT_EXTENDED_LIMIT_INFORMATION_CLASS,
+    ptr(infoBuf),
+    JOBOBJECT_EXTENDED_LIMIT_INFO_SIZE
+  );
+  if (ok === 0) {
+    kernel32.symbols.CloseHandle(hJob);
+    return null;
+  }
+  launcherJobHandle = hJob;
+  return hJob;
+}
+
+/**
+ * Assigns a spawned server process to an anonymous Win32 Job Object configured with
+ * JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE so the OS kernel immediately terminates that
+ * server process whenever this launcher exits (Ctrl+C, window close X, crash, or kill).
+ */
+export function bindProcessToLauncherJob(pid: number): boolean {
+  if (!isValidWin32Pid(pid)) return false;
+  try {
+    const hJob: bigint | null = ensureLauncherJob();
+    if (hJob === null) return false;
+    const hProc: bigint = kernel32.symbols.OpenProcess(
+      PROCESS_SET_QUOTA | PROCESS_TERMINATE,
+      0,
+      pid
+    );
+    if (!isValidWin32Handle(hProc)) return false;
+    try {
+      return kernel32.symbols.AssignProcessToJobObject(hJob, hProc) !== 0;
+    } finally {
+      kernel32.symbols.CloseHandle(hProc);
+    }
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Explicitly closes the launcher's Job Object handle, terminating any child
+ * server processes still bound to it.
+ */
+export function closeLauncherJob(): void {
+  if (launcherJobHandle === null) return;
+  const hJob: bigint = launcherJobHandle;
+  launcherJobHandle = null;
+  try {
+    kernel32.symbols.CloseHandle(hJob);
+  } catch {
+    // Ignore handle close error during shutdown
   }
 }
 
@@ -362,48 +481,59 @@ function ntohsFromDword(dword: number): number {
 }
 
 function queryUdpTable(query: UdpTableQuery): UdpLookupResult {
-  const sizeBuf: Uint32Array = new Uint32Array(1);
-  let status: number = iphlpapi.symbols.GetExtendedUdpTable(
-    null,
-    ptr(sizeBuf),
-    0,
-    query.addressFamily,
-    UDP_TABLE_OWNER_PID,
-    0
-  );
-  if (status !== ERROR_INSUFFICIENT_BUFFER && status !== 0) {
-    return { available: false, pid: null };
-  }
-  const allocSize: number =
-    Math.max(sizeBuf[0] ?? 0, IP_TABLE_MIN_BUFFER_SIZE) + IP_TABLE_EXTRA_BUFFER_SIZE;
-  sizeBuf[0] = allocSize;
-  const tableBuf: Uint8Array = new Uint8Array(allocSize);
-  status = iphlpapi.symbols.GetExtendedUdpTable(
-    ptr(tableBuf),
-    ptr(sizeBuf),
-    0,
-    query.addressFamily,
-    UDP_TABLE_OWNER_PID,
-    0
-  );
-  if (status !== 0) {
-    return { available: false, pid: null };
-  }
+  try {
+    const sizeBuf: Uint32Array = new Uint32Array(1);
+    let status: number = iphlpapi.symbols.GetExtendedUdpTable(
+      null,
+      ptr(sizeBuf),
+      0,
+      query.addressFamily,
+      UDP_TABLE_OWNER_PID,
+      0
+    );
+    if (status !== ERROR_INSUFFICIENT_BUFFER && status !== 0) {
+      return { available: false, pid: null };
+    }
+    let allocSize: number =
+      Math.max(sizeBuf[0] ?? 0, IP_TABLE_MIN_BUFFER_SIZE) + IP_TABLE_EXTRA_BUFFER_SIZE;
+    let tableBuf: Uint8Array = new Uint8Array(allocSize);
+    for (let attempt: number = 0; attempt < 3; attempt++) {
+      sizeBuf[0] = allocSize;
+      status = iphlpapi.symbols.GetExtendedUdpTable(
+        ptr(tableBuf),
+        ptr(sizeBuf),
+        0,
+        query.addressFamily,
+        UDP_TABLE_OWNER_PID,
+        0
+      );
+      if (status !== ERROR_INSUFFICIENT_BUFFER) {
+        break;
+      }
+      allocSize = Math.max(sizeBuf[0] ?? 0, allocSize) + IP_TABLE_EXTRA_BUFFER_SIZE;
+      tableBuf = new Uint8Array(allocSize);
+    }
+    if (status !== 0 || tableBuf.byteLength < 4) {
+      return { available: false, pid: null };
+    }
 
-  const view: DataView = new DataView(tableBuf.buffer);
-  const count: number = view.getUint32(0, true);
-  for (let i: number = 0; i < count; i++) {
-    const base: number = 4 + i * query.rowSize;
-    if (base + query.rowSize > tableBuf.byteLength) break;
-    const rawPort: number = view.getUint32(base + query.portOffset, true);
-    if (ntohsFromDword(rawPort) === query.targetPort) {
-      const ownerPid: number = view.getUint32(base + query.pidOffset, true);
-      if (query.expectedPid === undefined || ownerPid === query.expectedPid) {
-        return { available: true, pid: ownerPid };
+    const view: DataView = new DataView(tableBuf.buffer);
+    const count: number = view.getUint32(0, true);
+    for (let i: number = 0; i < count; i++) {
+      const base: number = 4 + i * query.rowSize;
+      if (base + query.rowSize > tableBuf.byteLength) break;
+      const rawPort: number = view.getUint32(base + query.portOffset, true);
+      if (ntohsFromDword(rawPort) === query.targetPort) {
+        const ownerPid: number = view.getUint32(base + query.pidOffset, true);
+        if (query.expectedPid === undefined || ownerPid === query.expectedPid) {
+          return { available: true, pid: ownerPid };
+        }
       }
     }
+    return { available: true, pid: null };
+  } catch {
+    return { available: false, pid: null };
   }
-  return { available: true, pid: null };
 }
 
 export function findUdpListenerPid(
@@ -434,43 +564,54 @@ export function findUdpListenerPid(
 }
 
 export function isTcpPortListening(port: number): boolean {
-  const sizeBuf: Uint32Array = new Uint32Array(1);
-  let status: number = iphlpapi.symbols.GetExtendedTcpTable(
-    null,
-    ptr(sizeBuf),
-    0,
-    AF_INET,
-    TCP_TABLE_OWNER_PID_LISTENER,
-    0
-  );
-  if (status !== ERROR_INSUFFICIENT_BUFFER && status !== 0) {
-    return false;
-  }
-  const allocSize: number =
-    Math.max(sizeBuf[0] ?? 0, IP_TABLE_MIN_BUFFER_SIZE) + IP_TABLE_EXTRA_BUFFER_SIZE;
-  sizeBuf[0] = allocSize;
-  const tableBuf: Uint8Array = new Uint8Array(allocSize);
-  status = iphlpapi.symbols.GetExtendedTcpTable(
-    ptr(tableBuf),
-    ptr(sizeBuf),
-    0,
-    AF_INET,
-    TCP_TABLE_OWNER_PID_LISTENER,
-    0
-  );
-  if (status !== 0) {
-    return false;
-  }
-
-  const view: DataView = new DataView(tableBuf.buffer);
-  const count: number = view.getUint32(0, true);
-  for (let i: number = 0; i < count; i++) {
-    const base: number = 4 + i * TCP_V4_ROW_SIZE;
-    if (base + TCP_V4_ROW_SIZE > tableBuf.byteLength) break;
-    const rawPort: number = view.getUint32(base + TCP_V4_PORT_OFFSET, true);
-    if (ntohsFromDword(rawPort) === port) {
-      return true;
+  try {
+    const sizeBuf: Uint32Array = new Uint32Array(1);
+    let status: number = iphlpapi.symbols.GetExtendedTcpTable(
+      null,
+      ptr(sizeBuf),
+      0,
+      AF_INET,
+      TCP_TABLE_OWNER_PID_LISTENER,
+      0
+    );
+    if (status !== ERROR_INSUFFICIENT_BUFFER && status !== 0) {
+      return false;
     }
+    let allocSize: number =
+      Math.max(sizeBuf[0] ?? 0, IP_TABLE_MIN_BUFFER_SIZE) + IP_TABLE_EXTRA_BUFFER_SIZE;
+    let tableBuf: Uint8Array = new Uint8Array(allocSize);
+    for (let attempt: number = 0; attempt < 3; attempt++) {
+      sizeBuf[0] = allocSize;
+      status = iphlpapi.symbols.GetExtendedTcpTable(
+        ptr(tableBuf),
+        ptr(sizeBuf),
+        0,
+        AF_INET,
+        TCP_TABLE_OWNER_PID_LISTENER,
+        0
+      );
+      if (status !== ERROR_INSUFFICIENT_BUFFER) {
+        break;
+      }
+      allocSize = Math.max(sizeBuf[0] ?? 0, allocSize) + IP_TABLE_EXTRA_BUFFER_SIZE;
+      tableBuf = new Uint8Array(allocSize);
+    }
+    if (status !== 0 || tableBuf.byteLength < 4) {
+      return false;
+    }
+
+    const view: DataView = new DataView(tableBuf.buffer);
+    const count: number = view.getUint32(0, true);
+    for (let i: number = 0; i < count; i++) {
+      const base: number = 4 + i * TCP_V4_ROW_SIZE;
+      if (base + TCP_V4_ROW_SIZE > tableBuf.byteLength) break;
+      const rawPort: number = view.getUint32(base + TCP_V4_PORT_OFFSET, true);
+      if (ntohsFromDword(rawPort) === port) {
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
   }
-  return false;
 }

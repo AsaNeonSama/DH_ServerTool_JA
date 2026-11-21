@@ -3,6 +3,8 @@ var UDH_ArmoryLockComponent_HasCorrectCombination_addr = base.add(0xE73240);
 
 Interceptor.attach(UDH_ArmoryLockComponent_HasCorrectCombination_addr, {
     onLeave: function (ret) {
-        ret.replace(ptr(1));
+        try {
+            ret.replace(ptr(1));
+        } catch (e) {}
     }
 });

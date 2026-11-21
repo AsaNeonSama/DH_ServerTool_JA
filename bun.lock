@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "dha-server-tool-ja",
+      "name": "dh-server-tool-ja",
       "dependencies": {
         "frida": "16.7.19",
       },

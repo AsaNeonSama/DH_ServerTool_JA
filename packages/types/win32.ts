@@ -34,6 +34,15 @@ export interface Kernel32Symbols {
   readonly GetExitCodeProcess: (processHandle: bigint, exitCodePtr: Pointer) => number;
   readonly TerminateProcess: (processHandle: bigint, exitCode: number) => number;
   readonly CloseHandle: (objectHandle: bigint) => number;
+  readonly CreateJobObjectW: (
+    securityAttributes: Pointer | null,
+    name: Pointer | null
+  ) => bigint;
+  readonly SetInformationJobObject: (...args: SetJobInfoArgs) => number;
+  readonly AssignProcessToJobObject: (
+    jobHandle: bigint,
+    processHandle: bigint
+  ) => number;
   readonly GlobalAlloc: (flags: number, bytes: bigint) => bigint;
   readonly GlobalLock: (memHandle: bigint) => Pointer | bigint | null;
   readonly GlobalUnlock: (memHandle: bigint) => number;
@@ -54,6 +63,13 @@ export interface User32Symbols {
 export interface User32Library {
   readonly symbols: User32Symbols;
 }
+
+export type SetJobInfoArgs = [
+  jobHandle: bigint,
+  infoClass: number,
+  infoPtr: Pointer,
+  infoLength: number
+];
 
 export type ExtendedIpTableArgs = [
   table: Pointer | null,

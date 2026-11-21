@@ -17,4 +17,4 @@ export const WINDOWS_NATIVE_FUNCTION_PRELUDE: string =
  * `STD_OUTPUT_HANDLE` to the newly created `-log` server console window.
  */
 export const WINDOWS_CONSOLE_BOOTSTRAP_SCRIPT: string =
-  '(function(){var SetStdHandle=new NativeFunction(Module.getExportByName("kernel32.dll","SetStdHandle"),"int32",["int32","pointer"],{abi:"win64",exceptions:"propagate"});SetStdHandle(-10,ptr(0));SetStdHandle(-11,ptr(0));SetStdHandle(-12,ptr(0));})();';
+  '(function(){try{var addr=Module.findExportByName("kernel32.dll","SetStdHandle");if(!addr){return;}var SetStdHandle=new NativeFunction(addr,"int32",["int32","pointer"],{abi:"win64",exceptions:"propagate"});SetStdHandle(-10,ptr(0));SetStdHandle(-11,ptr(0));SetStdHandle(-12,ptr(0));}catch(e){}})();';

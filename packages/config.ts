@@ -52,8 +52,12 @@ export function ensureServerWorkingDir(serverExecutable: string): boolean {
   }
   const exeDir: string = dirname(process.execPath);
   if (exeDir && existsSync(join(exeDir, serverExecutable))) {
-    process.chdir(exeDir);
-    return existsSync(serverExecutable);
+    try {
+      process.chdir(exeDir);
+      return existsSync(serverExecutable);
+    } catch {
+      return false;
+    }
   }
   return false;
 }

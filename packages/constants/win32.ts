@@ -11,8 +11,15 @@ export const CF_UNICODETEXT: number = 13;
 export const GMEM_MOVEABLE: number = 0x0002;
 export const TH32CS_SNAPPROCESS: number = 0x00000002;
 export const PROCESS_QUERY_LIMITED_INFORMATION: number = 0x1000;
+export const PROCESS_SET_QUOTA: number = 0x0100;
 export const PROCESS_TERMINATE: number = 0x0001;
 export const STILL_ACTIVE: number = 259;
+
+// Win64 JOBOBJECT_EXTENDED_LIMIT_INFORMATION (size = 144 bytes / 0x90, LimitFlags at +0x10)
+export const JOB_OBJECT_EXTENDED_LIMIT_INFORMATION_CLASS: number = 9;
+export const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE: number = 0x00002000;
+export const JOBOBJECT_EXTENDED_LIMIT_INFO_SIZE: number = 144;
+export const JOBOBJECT_LIMIT_FLAGS_OFFSET: number = 16;
 export const AF_INET: number = 2;
 export const AF_INET6: number = 23;
 export const UDP_TABLE_OWNER_PID: number = 1;

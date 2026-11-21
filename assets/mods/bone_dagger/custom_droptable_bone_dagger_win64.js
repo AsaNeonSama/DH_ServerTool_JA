@@ -7,9 +7,11 @@ var UClass_GetPrivateStaticClass = new NativeFunction(base.add(0x11F02E0), 'poin
 var StaticLoadObject = new NativeFunction(base.add(0x137B290), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer', 'int32', 'pointer', 'int8', 'pointer'], 'win64');
 var StaticFindObject = new NativeFunction(base.add(0x137AAA0), 'pointer', ['pointer', 'pointer', 'pointer', 'int8'], 'win64');
 function logInfo(Info) {
-    var f = new File('output.log', 'a');
-    f.write('[Patches] ' + Info + '\n');
-    f.close();
+    try {
+        var f = new File('output.log', 'a');
+        f.write('[Patches] ' + Info + '\n');
+        f.close();
+    } catch (e) {}
 }
 
 function newFString(Length) {
@@ -21,33 +23,56 @@ function newFString(Length) {
 }
 
 function getObjectName(UObject) {
+    if (UObject.isNull()) {
+        return '';
+    }
     var NamePrivate = UObject.add(0x18);
     var NameBuffer = newFString(100);
     FName_GetPlainNameString(NamePrivate, NameBuffer);
-    return NameBuffer.readPointer().readUtf16String();
+    var DataPtr = NameBuffer.readPointer();
+    if (DataPtr.isNull()) {
+        return '';
+    }
+    var text = DataPtr.readUtf16String();
+    return text ? text : '';
 }
 
 function arrayResize(Array, ElementSize, Num) {
     var Allocator = Array.readPointer();
-    Array.add(12).writeU32(Num);
     var NewOne = FMemory_Realloc(Allocator, Num * ElementSize, 0);
+    if (Num > 0 && NewOne.isNull()) {
+        return false;
+    }
     Array.writePointer(NewOne);
+    Array.add(12).writeU32(Num);
+    return true;
 }
 
 function arrayInit(Array, ElementSize, InitSize, MaxSize) {
     Array.writePointer(ptr(0));
+    Array.add(8).writeU32(0);
+    Array.add(12).writeU32(0);
+    if (MaxSize > 0 && !arrayResize(Array, ElementSize, MaxSize)) {
+        return false;
+    }
     Array.add(8).writeU32(InitSize);
-    arrayResize(Array, ElementSize, MaxSize);
+    return true;
 }
 
 function getArraySize(TArray) {
+    if (TArray.isNull()) {
+        return 0;
+    }
     return TArray.add(8).readU32();
 }
 function getArrayItemAddr(TArray, size, index) {
     var ArrNum = getArraySize(TArray);
-    if (index > ArrNum)
+    if (index < 0 || index >= ArrNum)
         return null;
-    return TArray.readPointer().add(index * size);
+    var DataPtr = TArray.readPointer();
+    if (DataPtr.isNull())
+        return null;
+    return DataPtr.add(index * size);
 }
 var ItemTable = new Map([
     [0, '/Game/Blueprints/Inventory/Fists/BP_Fists_Inventory.BP_Fists_Inventory_C'],
@@ -590,10 +615,15 @@ function applyCustomDropTable(DropTable) {
         });
     }
 
-    arrayResize(Table, 40, Length);
+    if (!arrayResize(Table, 40, Length)) {
+        return;
+    }
     Table.add(8).writeU32(Length);
     for (var k = 0; k < Length; k++) {
         var InventoryList = getArrayItemAddr(Table, 40, k);
+        if (InventoryList === null) {
+            continue;
+        }
         var Entry = ResolvedEntries[k];
         var EntryInfo = Entry.Info;
         var EntryItems = Entry.Items;
@@ -611,10 +641,14 @@ function applyCustomDropTable(DropTable) {
         InventoryList.add(0x20).writeU64(0); // CurrentSpawns / pad_20
 
         var ItemNum = EntryItems.length;
-        arrayInit(List, 8, ItemNum, ItemNum);
-        List.add(8).writeU32(ItemNum);
+        if (!arrayInit(List, 8, ItemNum, ItemNum)) {
+            continue;
+        }
         for (var m = 0; m < ItemNum; m++) {
-            getArrayItemAddr(List, 8, m).writePointer(EntryItems[m]);
+            var itemSlot = getArrayItemAddr(List, 8, m);
+            if (itemSlot !== null) {
+                itemSlot.writePointer(EntryItems[m]);
+            }
         }
     }
 
@@ -623,12 +657,16 @@ function applyCustomDropTable(DropTable) {
 
 Interceptor.attach(UDH_DropTable_GetGuaranteedDrops_addr, {
     onEnter: function (args) {
-        applyCustomDropTable(args[0]);
+        try {
+            applyCustomDropTable(args[0]);
+        } catch (e) {}
     },
 });
 
 Interceptor.attach(UDH_DropTable_GetRandomDrops_addr, {
     onEnter: function (args) {
-        applyCustomDropTable(args[0]);
+        try {
+            applyCustomDropTable(args[0]);
+        } catch (e) {}
     },
 });

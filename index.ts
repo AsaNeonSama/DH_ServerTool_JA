@@ -30,6 +30,7 @@ import type {
   WebConsoleSetupConfig,
 } from "./packages/types";
 import { startWebConsole } from "./packages/webConsole";
+import { closeLauncherJob } from "./packages/win32";
 
 async function main(): Promise<void> {
   setupTerminal(APP_CONSOLE_TITLE);
@@ -189,14 +190,33 @@ async function main(): Promise<void> {
       signal: stopController.signal,
     });
   } finally {
+    process.off("SIGINT", handleShutdown);
+    process.off("SIGTERM", handleShutdown);
     exitTabbedMode();
     webConsole.stop();
+    closeLauncherJob();
     println(`${C.LIGHT_GREEN} * 正常に終了しました。`);
   }
 }
 
+let fatalHandling: boolean = false;
+
+function handleFatalError(err: unknown): void {
+  if (fatalHandling) return;
+  fatalHandling = true;
+  exitTabbedMode();
+  closeLauncherJob();
+  const msg: string = err instanceof Error ? (err.stack ?? err.message) : String(err);
+  println(`${C.RED} * 予期しないエラーが発生しました:\n${msg}`);
+  process.exit(1);
+}
+
+process.on("uncaughtException", handleFatalError);
+process.on("unhandledRejection", handleFatalError);
+
 main().catch(async (err: unknown): Promise<void> => {
   exitTabbedMode();
+  closeLauncherJob();
   if (err instanceof Error && err.name === "AbortError") {
     println(`${C.LIGHT_GREEN} * 正常に終了しました。`);
     process.exit(0);

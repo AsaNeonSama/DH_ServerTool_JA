@@ -117,6 +117,9 @@ function getDefaultDamageTypeClass() {
         return cachedDefaultDamageTypeClass;
     }
     var uClassStatic = UClass_GetPrivateStaticClass();
+    if (uClassStatic.isNull()) {
+        return ptr(0);
+    }
     var candidates = [
         '/Script/DreadHunger.DH_DamageType',
         '/Script/Engine.DamageType'
@@ -143,35 +146,41 @@ function getDefaultDamageTypeClass() {
 Interceptor.attach(ADH_Inventory_CanBeAppliedTo_addr, {
     onEnter: function (args) {
         this.shouldAllowUpgrade = false;
-        var sourceInventory = args[0];
-        var targetInventory = args[1];
-        if (sourceInventory.isNull() || targetInventory.isNull()) {
-            return;
-        }
-        // Only override when applying an upgrade item (Whetstone)
-        if (sourceInventory.add(OFFSETS.inventory_bUpgradeItem).readU8() === 0) {
-            return;
-        }
-        // Do not consume Whetstone onto another Whetstone
-        if (targetInventory.add(OFFSETS.inventory_bUpgradeItem).readU8() !== 0) {
-            return;
-        }
-        // Allow sharpening if top item is not upgraded, or repairing if damaged
-        if (!isInventoryUpgraded(targetInventory)) {
-            this.shouldAllowUpgrade = true;
-            return;
-        }
-        if (
-            targetInventory.add(OFFSETS.inventory_bHasDurability).readU8() !== 0 &&
-            targetInventory.add(OFFSETS.inventory_replicatedTopDurability).readFloat() < 0.999
-        ) {
-            this.shouldAllowUpgrade = true;
+        try {
+            var sourceInventory = args[0];
+            var targetInventory = args[1];
+            if (sourceInventory.isNull() || targetInventory.isNull()) {
+                return;
+            }
+            // Only override when applying an upgrade item (Whetstone)
+            if (sourceInventory.add(OFFSETS.inventory_bUpgradeItem).readU8() === 0) {
+                return;
+            }
+            // Do not consume Whetstone onto another Whetstone
+            if (targetInventory.add(OFFSETS.inventory_bUpgradeItem).readU8() !== 0) {
+                return;
+            }
+            // Allow sharpening if top item is not upgraded, or repairing if damaged
+            if (!isInventoryUpgraded(targetInventory)) {
+                this.shouldAllowUpgrade = true;
+                return;
+            }
+            if (
+                targetInventory.add(OFFSETS.inventory_bHasDurability).readU8() !== 0 &&
+                targetInventory.add(OFFSETS.inventory_replicatedTopDurability).readFloat() < 0.999
+            ) {
+                this.shouldAllowUpgrade = true;
+            }
+        } catch (e) {
+            this.shouldAllowUpgrade = false;
         }
     },
     onLeave: function (retval) {
-        if (this.shouldAllowUpgrade) {
-            retval.replace(ptr(1));
-        }
+        try {
+            if (this.shouldAllowUpgrade) {
+                retval.replace(ptr(1));
+            }
+        } catch (e) {}
     }
 });
 
@@ -185,28 +194,34 @@ Interceptor.attach(ADH_Inventory_CanBeAppliedTo_addr, {
 //      GetDamage overrides (e.g. Sword/Shovel heavy swings) and add
 //      +UPGRADE_BONUS_DAMAGE for upgraded weapon and/or upgraded loaded ammo.
 // ============================================================================
-if (ADH_Weapon_GetDamage_Impl_je_addr.readU8() === 0x74) {
-    Memory.patchCode(ADH_Weapon_GetDamage_Impl_je_addr, 1, function (code) {
-        code.writeU8(0xEB);
-    });
-}
+try {
+    if (ADH_Weapon_GetDamage_Impl_je_addr.readU8() === 0x74) {
+        Memory.patchCode(ADH_Weapon_GetDamage_Impl_je_addr, 1, function (code) {
+            code.writeU8(0xEB);
+        });
+    }
+} catch (e) {}
 
 var weaponGetDamageReplacement = new NativeCallback(function (weaponPtr, useStatePtr) {
-    if (weaponPtr.isNull()) {
+    try {
+        if (weaponPtr.isNull()) {
+            return 0.0;
+        }
+        var finalDamage = origWeaponGetDamage
+            ? origWeaponGetDamage(weaponPtr, useStatePtr)
+            : weaponPtr.add(OFFSETS.inventory_damage).readFloat();
+
+        if (isInventoryUpgraded(weaponPtr)) {
+            finalDamage += UPGRADE_BONUS_DAMAGE;
+        }
+        if (isLoadedAmmoUpgraded(weaponPtr)) {
+            finalDamage += UPGRADE_BONUS_DAMAGE;
+        }
+
+        return Number.isFinite(finalDamage) ? finalDamage : 0.0;
+    } catch (e) {
         return 0.0;
     }
-    var finalDamage = origWeaponGetDamage
-        ? origWeaponGetDamage(weaponPtr, useStatePtr)
-        : weaponPtr.add(OFFSETS.inventory_damage).readFloat();
-
-    if (isInventoryUpgraded(weaponPtr)) {
-        finalDamage += UPGRADE_BONUS_DAMAGE;
-    }
-    if (isLoadedAmmoUpgraded(weaponPtr)) {
-        finalDamage += UPGRADE_BONUS_DAMAGE;
-    }
-
-    return finalDamage;
 }, 'float', ['pointer', 'pointer'], 'win64');
 
 var weaponGetDamageTrampoline = Interceptor.replaceFast(
@@ -230,60 +245,65 @@ Interceptor.attach(ADH_Weapon_Ranged_Reload_addr, {
         this.weaponPtr = ptr(0);
         this.hadAmmoToConsume = false;
         this.pendingAmmoUpgraded = false;
+        try {
+            var weaponPtr = args[0];
+            if (weaponPtr.isNull()) {
+                return;
+            }
+            if (weaponPtr.add(OFFSETS.actor_role).readU8() !== ROLE_AUTHORITY) {
+                return;
+            }
+            if (ADH_Weapon_Ranged_ReloadingConsumesAmmo(weaponPtr) === 0) {
+                return;
+            }
+            var humanOwner = weaponPtr.add(OFFSETS.inventory_humanOwner).readPointer();
+            if (humanOwner.isNull()) {
+                return;
+            }
+            var invManager = humanOwner.add(OFFSETS.human_inventoryManager).readPointer();
+            if (invManager.isNull()) {
+                return;
+            }
+            if (!invManager.add(OFFSETS.invManager_transactingInventory).readPointer().isNull()) {
+                return;
+            }
+            var ammoClass = weaponPtr.add(OFFSETS.weaponRanged_ammunitionClass).readPointer();
+            if (ammoClass.isNull()) {
+                return;
+            }
+            var slotIndex = weaponPtr.add(OFFSETS.inventory_slotIndex).readS32();
+            var ammoPtr = UDH_InventoryManager_FindInventory(invManager, ammoClass, slotIndex);
+            if (ammoPtr.isNull()) {
+                return;
+            }
+            var ammoCount = ammoPtr.add(OFFSETS.inventory_itemStatesNum).readS32();
+            if (ammoCount <= 0) {
+                return;
+            }
 
-        var weaponPtr = args[0];
-        if (weaponPtr.isNull()) {
-            return;
+            this.weaponPtr = weaponPtr;
+            this.hadAmmoToConsume = true;
+            this.pendingAmmoUpgraded = isInventoryUpgraded(ammoPtr);
+        } catch (e) {
+            this.hadAmmoToConsume = false;
         }
-        if (weaponPtr.add(OFFSETS.actor_role).readU8() !== ROLE_AUTHORITY) {
-            return;
-        }
-        if (ADH_Weapon_Ranged_ReloadingConsumesAmmo(weaponPtr) === 0) {
-            return;
-        }
-        var humanOwner = weaponPtr.add(OFFSETS.inventory_humanOwner).readPointer();
-        if (humanOwner.isNull()) {
-            return;
-        }
-        var invManager = humanOwner.add(OFFSETS.human_inventoryManager).readPointer();
-        if (invManager.isNull()) {
-            return;
-        }
-        if (!invManager.add(OFFSETS.invManager_transactingInventory).readPointer().isNull()) {
-            return;
-        }
-        var ammoClass = weaponPtr.add(OFFSETS.weaponRanged_ammunitionClass).readPointer();
-        if (ammoClass.isNull()) {
-            return;
-        }
-        var slotIndex = weaponPtr.add(OFFSETS.inventory_slotIndex).readS32();
-        var ammoPtr = UDH_InventoryManager_FindInventory(invManager, ammoClass, slotIndex);
-        if (ammoPtr.isNull()) {
-            return;
-        }
-        var ammoCount = ammoPtr.add(OFFSETS.inventory_itemStatesNum).readS32();
-        if (ammoCount <= 0) {
-            return;
-        }
-
-        this.weaponPtr = weaponPtr;
-        this.hadAmmoToConsume = true;
-        this.pendingAmmoUpgraded = isInventoryUpgraded(ammoPtr);
     },
     onLeave: function () {
-        if (!this.hadAmmoToConsume || this.weaponPtr.isNull()) {
-            return;
-        }
-        if (this.weaponPtr.add(OFFSETS.inventory_replicatedTopUsesRemaining).readU8() === 0) {
-            return;
-        }
-        var weaponKey = this.weaponPtr.toString();
-        if (this.pendingAmmoUpgraded) {
-            var weaponUID = this.weaponPtr.add(OFFSETS.inventory_replicatedTopItemUID).readS32();
-            setLoadedUpgradedAmmo(weaponKey, weaponUID);
-        } else {
-            clearLoadedUpgradedAmmo(weaponKey);
-        }
+        try {
+            if (!this.hadAmmoToConsume || !this.weaponPtr || this.weaponPtr.isNull()) {
+                return;
+            }
+            if (this.weaponPtr.add(OFFSETS.inventory_replicatedTopUsesRemaining).readU8() === 0) {
+                return;
+            }
+            var weaponKey = this.weaponPtr.toString();
+            if (this.pendingAmmoUpgraded) {
+                var weaponUID = this.weaponPtr.add(OFFSETS.inventory_replicatedTopItemUID).readS32();
+                setLoadedUpgradedAmmo(weaponKey, weaponUID);
+            } else {
+                clearLoadedUpgradedAmmo(weaponKey);
+            }
+        } catch (e) {}
     }
 });
 
@@ -294,31 +314,33 @@ Interceptor.attach(ADH_Weapon_Ranged_Reload_addr, {
 // ============================================================================
 Interceptor.attach(ADH_InventoryPickup_Launch_addr, {
     onEnter: function (args) {
-        var pickupPtr = args[0];
-        var isThrown = args[1].toInt32() & 1;
-        if (isThrown === 0 || pickupPtr.isNull()) {
-            return;
-        }
-        if (pickupPtr.add(OFFSETS.pickup_saveStateUpgraded).readU8() === 0) {
-            return;
-        }
-
-        // Enable thrown hit detection & damage path on non-weapon pickups
-        pickupPtr.add(OFFSETS.pickup_bDamaging).writeU8(1);
-
-        // Ensure valid DamageType & safe damage ramp multipliers
-        if (pickupPtr.add(OFFSETS.pickup_damageType).readPointer().isNull()) {
-            var defaultDamageType = getDefaultDamageTypeClass();
-            if (!defaultDamageType.isNull()) {
-                pickupPtr.add(OFFSETS.pickup_damageType).writePointer(defaultDamageType);
+        try {
+            var pickupPtr = args[0];
+            var isThrown = args[1].toInt32() & 1;
+            if (isThrown === 0 || pickupPtr.isNull()) {
+                return;
             }
-        }
-        if (pickupPtr.add(OFFSETS.pickup_damageRampStart).readFloat() <= 0.0) {
-            pickupPtr.add(OFFSETS.pickup_damageRampStart).writeFloat(DEFAULT_THROWN_DAMAGE_RAMP_START);
-        }
-        if (pickupPtr.add(OFFSETS.pickup_maxDamageMultiplier).readFloat() < 1.0) {
-            pickupPtr.add(OFFSETS.pickup_maxDamageMultiplier).writeFloat(DEFAULT_THROWN_MAX_DAMAGE_MULTIPLIER);
-        }
+            if (pickupPtr.add(OFFSETS.pickup_saveStateUpgraded).readU8() === 0) {
+                return;
+            }
+
+            // Enable thrown hit detection & damage path on non-weapon pickups
+            pickupPtr.add(OFFSETS.pickup_bDamaging).writeU8(1);
+
+            // Ensure valid DamageType & safe damage ramp multipliers
+            if (pickupPtr.add(OFFSETS.pickup_damageType).readPointer().isNull()) {
+                var defaultDamageType = getDefaultDamageTypeClass();
+                if (!defaultDamageType.isNull()) {
+                    pickupPtr.add(OFFSETS.pickup_damageType).writePointer(defaultDamageType);
+                }
+            }
+            if (pickupPtr.add(OFFSETS.pickup_damageRampStart).readFloat() <= 0.0) {
+                pickupPtr.add(OFFSETS.pickup_damageRampStart).writeFloat(DEFAULT_THROWN_DAMAGE_RAMP_START);
+            }
+            if (pickupPtr.add(OFFSETS.pickup_maxDamageMultiplier).readFloat() < 1.0) {
+                pickupPtr.add(OFFSETS.pickup_maxDamageMultiplier).writeFloat(DEFAULT_THROWN_MAX_DAMAGE_MULTIPLIER);
+            }
+        } catch (e) {}
     }
 });
 
@@ -330,20 +352,22 @@ var applyThrownDamageReplacement = new NativeCallback(function (
     hitResultPtr,
     checkRamp
 ) {
-    var effectiveDamage = baseDamage;
-    if (!pickupPtr.isNull() && pickupPtr.add(OFFSETS.pickup_saveStateUpgraded).readU8() !== 0) {
-        effectiveDamage = baseDamage + UPGRADE_BONUS_DAMAGE;
-    }
-    if (origApplyThrownDamage) {
-        origApplyThrownDamage(
-            pickupPtr,
-            targetActorPtr,
-            effectiveDamage,
-            hitLocationPtr,
-            hitResultPtr,
-            checkRamp
-        );
-    }
+    try {
+        var effectiveDamage = baseDamage;
+        if (!pickupPtr.isNull() && pickupPtr.add(OFFSETS.pickup_saveStateUpgraded).readU8() !== 0) {
+            effectiveDamage = baseDamage + UPGRADE_BONUS_DAMAGE;
+        }
+        if (origApplyThrownDamage) {
+            origApplyThrownDamage(
+                pickupPtr,
+                targetActorPtr,
+                effectiveDamage,
+                hitLocationPtr,
+                hitResultPtr,
+                checkRamp
+            );
+        }
+    } catch (e) {}
 }, 'void', ['pointer', 'pointer', 'float', 'pointer', 'pointer', 'uint8'], 'win64');
 
 var applyThrownDamageTrampoline = Interceptor.replaceFast(

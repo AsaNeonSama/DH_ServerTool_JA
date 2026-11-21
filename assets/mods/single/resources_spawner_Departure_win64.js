@@ -14,13 +14,19 @@ var StaticFindObject = new NativeFunction(base.add(0x137AAA0), 'pointer', ['poin
 
 
 function logInfo(Info) {
-    var f = new File('output.log', 'a');
-    f.write('[Patches] ' + Info + '\n');
-    f.close();
+    try {
+        var f = new File('output.log', 'a');
+        f.write('[Patches] ' + Info + '\n');
+        f.close();
+    } catch (e) {}
 }
 
 function findClassByName(ClassName) {
-    return findObjectByName(ClassName, UClass_GetPrivateStaticClass());
+    var staticClass = UClass_GetPrivateStaticClass();
+    if (staticClass.isNull()) {
+        return ptr(0);
+    }
+    return findObjectByName(ClassName, staticClass);
 }
 function findObjectByName(ObjectName, Clazz) {
     var Buffer = Memory.alloc((ObjectName.length + 1) * 2);
@@ -28,7 +34,11 @@ function findObjectByName(ObjectName, Clazz) {
     return StaticFindObject(Clazz, ptr(0xFFFFFFFFFFFFFFFF), Buffer, 0);
 }
 function loadClassByName(ClassName) {
-    return loadObjectByName(ClassName, UClass_GetPrivateStaticClass());
+    var staticClass = UClass_GetPrivateStaticClass();
+    if (staticClass.isNull()) {
+        return ptr(0);
+    }
+    return loadObjectByName(ClassName, staticClass);
 }
 function loadObjectByName(ObjectName, Clazz) {
     var Buffer = Memory.alloc((ObjectName.length + 1) * 2);
@@ -129,28 +139,35 @@ Interceptor.attach(ADH_HumanCharacter_AddStartingInventory_addr, {
     onEnter: function (args) {
     },
     onLeave: function (ret) {
-        var World = GWorld.readPointer();
-        var GameState = getGameState();
-        if (World.isNull() || GameState.isNull()) {
-            return;
-        }
-        var WorldKey = World.toString();
-        if (lastSpawnedWorld === WorldKey) {
-            return;
-        }
-        lastSpawnedWorld = WorldKey;
-        for (var i = 0; i < ActorToSpawn.length; i++) {
-            var ActorClass = getClass(ActorToSpawn[i][0]);
-            var Scale = ActorToSpawn[i][3];
-            var Transform = makeTransform(ActorToSpawn[i][1], ActorToSpawn[i][2], Scale);
-            var Actor = spawnActor(World, ActorClass, Transform, GameState);
-            if (!Actor.isNull() && (Scale[0] !== 1 || Scale[1] !== 1 || Scale[2] !== 1)) {
-                var ScaleVec = Memory.alloc(16);
-                ScaleVec.add(0).writeFloat(Scale[0]);
-                ScaleVec.add(4).writeFloat(Scale[1]);
-                ScaleVec.add(8).writeFloat(Scale[2]);
-                AActor_SetActorScale3D(Actor, ScaleVec);
+        try {
+            var World = GWorld.readPointer();
+            var GameState = getGameState();
+            if (World.isNull() || GameState.isNull()) {
+                return;
             }
-        }
+            var WorldKey = World.toString();
+            if (lastSpawnedWorld === WorldKey) {
+                return;
+            }
+            lastSpawnedWorld = WorldKey;
+            for (var i = 0; i < ActorToSpawn.length; i++) {
+                try {
+                    var ActorClass = getClass(ActorToSpawn[i][0]);
+                    if (ActorClass.isNull()) {
+                        continue;
+                    }
+                    var Scale = ActorToSpawn[i][3];
+                    var Transform = makeTransform(ActorToSpawn[i][1], ActorToSpawn[i][2], Scale);
+                    var Actor = spawnActor(World, ActorClass, Transform, GameState);
+                    if (!Actor.isNull() && (Scale[0] !== 1 || Scale[1] !== 1 || Scale[2] !== 1)) {
+                        var ScaleVec = Memory.alloc(16);
+                        ScaleVec.add(0).writeFloat(Scale[0]);
+                        ScaleVec.add(4).writeFloat(Scale[1]);
+                        ScaleVec.add(8).writeFloat(Scale[2]);
+                        AActor_SetActorScale3D(Actor, ScaleVec);
+                    }
+                } catch (e) {}
+            }
+        } catch (e) {}
     }
 });

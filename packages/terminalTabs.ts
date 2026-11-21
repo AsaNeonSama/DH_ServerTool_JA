@@ -84,6 +84,14 @@ let currentTab2Hit: HitRegion | null = null;
 let currentPublicBtnHit: HitRegion | null = null;
 let currentLocalBtnHit: HitRegion | null = null;
 
+function safeStdoutWrite(data: string): void {
+  try {
+    output.write(data);
+  } catch {
+    // Ignore EPIPE / closed stdout errors
+  }
+}
+
 export function isInteractiveTty(): boolean {
   return Boolean(input.isTTY && output.isTTY);
 }
@@ -451,7 +459,7 @@ function renderFrame(): void {
   }
   frame += "\x1b[?2026l";
 
-  output.write(frame);
+  safeStdoutWrite(frame);
 }
 
 function parseSgrMouse(buf: string, offset: number): ParsedMouseEvent | null {
@@ -797,7 +805,7 @@ export function enterTabbedMode(
   output.on("resize", onStdoutResize);
 
   // Enter Alternate Screen Buffer + wipe scrollback + enable SGR mouse tracking
-  output.write("\x1b[?1049h\x1b[3J\x1b[2J\x1b[H\x1b[?1000h\x1b[?1006h");
+  safeStdoutWrite("\x1b[?1049h\x1b[3J\x1b[2J\x1b[H\x1b[?1000h\x1b[?1006h");
   renderFrame();
 }
 
@@ -851,7 +859,7 @@ export function resetServerTabRound(): void {
   scrollOffset = 0;
   statusLine = null;
   if (active) {
-    output.write("\x1b[3J");
+    safeStdoutWrite("\x1b[3J");
     if (activeTab === "server") {
       renderFrame();
     }
@@ -881,6 +889,17 @@ export function askInTabbedMode(
 
   const promptPromise: Promise<string> = new Promise(
     (resolve: (value: string) => void, reject: (err: Error) => void): void => {
+      if (activePrompt) {
+        const prev: ActivePromptState = activePrompt;
+        activePrompt = null;
+        if (prev.signal && prev.onAbort) {
+          prev.signal.removeEventListener("abort", prev.onAbort);
+        }
+        const supersededErr: Error = new Error("Prompt aborted");
+        supersededErr.name = "AbortError";
+        prev.reject(supersededErr);
+      }
+
       const onAbort = (): void => {
         if (activePrompt?.onAbort === onAbort) {
           activePrompt = null;

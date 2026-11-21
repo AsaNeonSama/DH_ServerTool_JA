@@ -19,7 +19,14 @@ var FName_GetPlainNameString = new NativeFunction(base.add(0x11604F0), 'void', [
 var GWorld = base.add(0x46ED420);
 var ADH_GameState_HandleMatchHasStarted_addr = base.add(0xD99080);
 var ADH_GameState_Tick_addr = base.add(0xDAD420);
-var ADH_Warship_BreakupPackIce_addr = base.add(0xE62650);
+var ADH_Warship_Tick_OverpressureCheck_addr = base.add(0xE88272);
+
+// Expected instruction sequence in ADH_Warship::Tick at 0xE88272:
+//   0F 2F 05 4B DD 5B 02  -> comiss xmm0, [0x143445FC4] (0.7001f overpressure threshold)
+//   76 12                 -> jbe +0x12 (jump to pressure-decrease branch at 0xE8828D)
+// Patching byte +7 (0xE88279) from 0x76 (jbe) to 0xEB (jmp) makes the overpressure-rise
+// and overpressure-explosion code paths physically unreachable at the CPU level.
+var EXPECTED_OVERPRESSURE_BYTES = [0x0F, 0x2F, 0x05, 0x4B, 0xDD, 0x5B, 0x02, 0x76, 0x12];
 
 // Verified UE4 struct offsets (DreadHungerServer-Win64-Shipping.exe)
 var OFF_UOBJECT_NAME_PRIVATE = 0x18;
@@ -30,15 +37,11 @@ var OFF_GAMESTATE_WARSHIP = 0x2B0;
 var OFF_GAMESTATE_SHIP_ARRIVED = 0x3D0;
 var OFF_GAMESTATE_WINNING_TEAM = 0x51C;
 var OFF_WARSHIP_BOILER = 0x2E0;
-var OFF_WARSHIP_ENABLE_AUTO_MOVE = 0x493;
-var OFF_WARSHIP_SPEED_MODIFIER = 0x544; // PackIceSpeedModifier multiplied into target thrust in ADH_Warship::Tick
 var OFF_BOILER_PRESSURE_LEVEL = 0x2B4;
 var ROLE_AUTHORITY = 3;
 
 var SAILING_START_DELAY_MS = 1000;
 var SAILING_TICK_INTERVAL_MS = 100;
-// Cap auto-move thrust at 70% (<= 0.7001 overpressure threshold in ADH_Warship::Tick) so boiler never overpressurizes/explodes
-var AUTO_MOVE_SPEED_CAP = 0.7;
 
 var NITRO_EXPLOSION_CLASS = '/Game/Blueprints/Game/BP_Explosion_Nitro.BP_Explosion_Nitro_C';
 var NITRO_LOCATION = [20966.8984375, -12676.6982421875, 213.27685546875];
@@ -139,6 +142,9 @@ function applyYawOffset(warshipPtr, offsetYaw) {
     var pitch = gRotResult.readFloat();
     var yaw = gRotResult.add(4).readFloat();
     var roll = gRotResult.add(8).readFloat();
+    if (!Number.isFinite(pitch) || !Number.isFinite(yaw) || !Number.isFinite(roll)) {
+        return;
+    }
 
     gNewRotation.writeFloat(pitch);
     gNewRotation.add(4).writeFloat(yaw + offsetYaw);
@@ -204,84 +210,79 @@ function tickSightseeingSailing(gameStatePtr, worldPtr) {
 
 Interceptor.attach(ADH_GameState_HandleMatchHasStarted_addr, {
     onEnter: function (args) {
-        this.gameState = args[0];
-    },
-    onLeave: function () {
-        var gameState = this.gameState;
-        var world = GWorld.readPointer();
-        if (gameState.isNull() || world.isNull() || !isDepartureWorld(world)) {
-            activeWorldKey = null;
-            activeGameStateKey = null;
-            return;
-        }
-        activeWorldKey = world.toString();
-        activeGameStateKey = gameState.toString();
-        nextWaypointIndex = 0;
-        nitroSpawned = false;
-        startAtMs = Date.now() + SAILING_START_DELAY_MS;
-        lastTickMs = 0;
+        try {
+            var gameState = args[0];
+            var world = GWorld.readPointer();
+            if (gameState.isNull() || world.isNull() || !isDepartureWorld(world)) {
+                activeWorldKey = null;
+                activeGameStateKey = null;
+                return;
+            }
+            activeWorldKey = world.toString();
+            activeGameStateKey = gameState.toString();
+            nextWaypointIndex = 0;
+            nitroSpawned = false;
+            startAtMs = Date.now() + SAILING_START_DELAY_MS;
+            lastTickMs = 0;
+        } catch (e) {}
     }
 });
 
 Interceptor.attach(ADH_GameState_Tick_addr, {
     onEnter: function (args) {
-        this.gameState = args[0];
-    },
-    onLeave: function () {
-        if (activeWorldKey === null) {
-            return;
-        }
-        var now = Date.now();
-        if (now < startAtMs || now - lastTickMs < SAILING_TICK_INTERVAL_MS) {
-            return;
-        }
-        var gameState = this.gameState;
-        if (gameState.isNull() || gameState.toString() !== activeGameStateKey) {
-            return;
-        }
-        if (gameState.add(OFF_ACTOR_ROLE).readU8() !== ROLE_AUTHORITY) {
-            return;
-        }
-        var world = GWorld.readPointer();
-        if (world.isNull() || world.toString() !== activeWorldKey) {
-            activeWorldKey = null;
-            activeGameStateKey = null;
-            return;
-        }
-        if (
-            gameState.add(OFF_GAMESTATE_SHIP_ARRIVED).readU8() !== 0 ||
-            gameState.add(OFF_GAMESTATE_WINNING_TEAM).readU8() !== 0
-        ) {
-            activeWorldKey = null;
-            activeGameStateKey = null;
-            return;
-        }
-        lastTickMs = now;
-        tickSightseeingSailing(gameState, world);
+        try {
+            if (activeWorldKey === null) {
+                return;
+            }
+            var now = Date.now();
+            if (now < startAtMs || now - lastTickMs < SAILING_TICK_INTERVAL_MS) {
+                return;
+            }
+            var gameState = args[0];
+            if (gameState.isNull() || gameState.toString() !== activeGameStateKey) {
+                return;
+            }
+            if (gameState.add(OFF_ACTOR_ROLE).readU8() !== ROLE_AUTHORITY) {
+                return;
+            }
+            var world = GWorld.readPointer();
+            if (world.isNull() || world.toString() !== activeWorldKey) {
+                activeWorldKey = null;
+                activeGameStateKey = null;
+                return;
+            }
+            if (
+                gameState.add(OFF_GAMESTATE_SHIP_ARRIVED).readU8() !== 0 ||
+                gameState.add(OFF_GAMESTATE_WINNING_TEAM).readU8() !== 0
+            ) {
+                activeWorldKey = null;
+                activeGameStateKey = null;
+                return;
+            }
+            lastTickMs = now;
+            tickSightseeingSailing(gameState, world);
+        } catch (e) {}
     }
 });
 
-// Runs at the start of ADH_Warship::Tick right before target thrust calculation;
-// capping PackIceSpeedModifier (+0x544) at 0.70 keeps cruising speed at 70% (no boiler overpressure).
-Interceptor.attach(ADH_Warship_BreakupPackIce_addr, {
-    onEnter: function (args) {
-        this.warship = args[0];
-    },
-    onLeave: function () {
-        if (activeWorldKey === null) {
-            return;
-        }
-        var warship = this.warship;
-        if (warship.isNull() || warship.add(OFF_ACTOR_ROLE).readU8() !== ROLE_AUTHORITY) {
-            return;
-        }
-        if (warship.add(OFF_WARSHIP_ENABLE_AUTO_MOVE).readU8() === 0) {
-            return;
-        }
-        var speedModPtr = warship.add(OFF_WARSHIP_SPEED_MODIFIER);
-        var currentMod = speedModPtr.readFloat();
-        if (!Number.isFinite(currentMod) || currentMod > AUTO_MOVE_SPEED_CAP) {
-            speedModPtr.writeFloat(AUTO_MOVE_SPEED_CAP);
+function matchesExpectedBytes(addr, expected) {
+    var raw = addr.readByteArray(expected.length);
+    if (!raw) {
+        return false;
+    }
+    var view = new Uint8Array(raw);
+    for (var i = 0; i < expected.length; i++) {
+        if (view[i] !== expected[i]) {
+            return false;
         }
     }
-});
+    return true;
+}
+
+try {
+    if (matchesExpectedBytes(ADH_Warship_Tick_OverpressureCheck_addr, EXPECTED_OVERPRESSURE_BYTES)) {
+        Memory.patchCode(ADH_Warship_Tick_OverpressureCheck_addr.add(7), 1, function (code) {
+            code.writeU8(0xEB);
+        });
+    }
+} catch (e) {}

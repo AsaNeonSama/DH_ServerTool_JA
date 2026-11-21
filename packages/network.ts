@@ -17,8 +17,8 @@ export async function fetchPublicIp(
       return { ip: null, error: `HTTP ${res.status}` };
     }
     const text: string = (await res.text()).trim();
-    if (!text) {
-      return { ip: null, error: "Empty response" };
+    if (!text || text.length > 64 || !/^[0-9a-fA-F.:]+$/.test(text)) {
+      return { ip: null, error: "Invalid IP response" };
     }
     return { ip: text };
   } catch (err: unknown) {

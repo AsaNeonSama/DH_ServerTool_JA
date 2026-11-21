@@ -102,16 +102,11 @@ var thrallRoleNames = [];
 
 var notifiedPlayerKeys = {};
 var appliedStorageKeys = {};
-var activeMessageTimers = [];
+var scheduledMessageJobs = [];
 var spellPresetIndex = 0;
 
 function clearAllMessageTimers() {
-    for (var i = 0; i < activeMessageTimers.length; i++) {
-        try {
-            clearInterval(activeMessageTimers[i]);
-        } catch (e) {}
-    }
-    activeMessageTimers = [];
+    scheduledMessageJobs = [];
 }
 
 function resetMatchState(newWorldKey) {
@@ -219,6 +214,9 @@ function findLivePlayerStateByKey(gameState, targetKey) {
     }
     var playerArray = gameState.add(0x238);
     var count = getArraySize(playerArray);
+    if (count === 0 || count > 64) {
+        return ptr(0);
+    }
     for (var i = 0; i < count; i++) {
         var entry = getArrayItemAddr(playerArray, 8, i);
         if (entry === null) {
@@ -247,9 +245,13 @@ function resolvePlayerController(PlayerState) {
 }
 
 function findClassByName(ClassName) {
+    var staticClass = UClass_GetPrivateStaticClass();
+    if (staticClass.isNull()) {
+        return ptr(0);
+    }
     var buffer = Memory.alloc((ClassName.length + 1) * 2);
     buffer.writeUtf16String(ClassName);
-    return StaticFindObject(UClass_GetPrivateStaticClass(), ptr(0xFFFFFFFFFFFFFFFF), buffer, 0);
+    return StaticFindObject(staticClass, ptr(0xFFFFFFFFFFFFFFFF), buffer, 0);
 }
 
 function shuffleArray(array) {
@@ -287,45 +289,68 @@ function sendThrallMessage(PlayerController, Message) {
     } catch (e) {}
 }
 
-// Safely repeats notification up to 5 times every 10s, validating PlayerState is
-// still live in the same match World before each tick.
-function sendRepeatedMessagesToPlayerKey(targetWorldKey, playerStateKey, messageList) {
-    if (!playerStateKey || !messageList || messageList.length === 0) {
+function dispatchScheduledMessageJob(gameState, job) {
+    if (activeWorldKey !== job.worldKey) {
+        return false;
+    }
+    var livePs = findLivePlayerStateByKey(gameState, job.playerStateKey);
+    if (livePs.isNull() || livePs.add(0x571).readU8() !== 0) {
+        return false;
+    }
+    var ctrl = resolvePlayerController(livePs);
+    if (!ctrl.isNull()) {
+        for (var i = 0; i < job.messageList.length; i++) {
+            sendThrallMessage(ctrl, job.messageList[i]);
+        }
+    }
+    job.sentCount += 1;
+    job.nextDueAt = Date.now() + 10000;
+    return job.sentCount < 5;
+}
+
+function processScheduledMessageJobs(gameState) {
+    if (scheduledMessageJobs.length === 0 || gameState.isNull()) {
         return;
     }
-    var sentCount = 0;
-    var timerHandle = null;
-
-    function dispatchOnce() {
-        if (activeWorldKey !== targetWorldKey) {
-            if (timerHandle !== null) {
-                clearInterval(timerHandle);
-            }
-            return;
+    var now = Date.now();
+    var remaining = [];
+    for (var i = 0; i < scheduledMessageJobs.length; i++) {
+        var job = scheduledMessageJobs[i];
+        if (activeWorldKey !== job.worldKey) {
+            continue;
         }
-        var gameState = getLiveGameState();
-        var livePs = findLivePlayerStateByKey(gameState, playerStateKey);
-        if (livePs.isNull() || livePs.add(0x571).readU8() !== 0) {
-            if (timerHandle !== null) {
-                clearInterval(timerHandle);
-            }
-            return;
+        if (now < job.nextDueAt) {
+            remaining.push(job);
+            continue;
         }
-        var ctrl = resolvePlayerController(livePs);
-        if (!ctrl.isNull()) {
-            for (var i = 0; i < messageList.length; i++) {
-                sendThrallMessage(ctrl, messageList[i]);
-            }
-        }
-        sentCount++;
-        if (sentCount >= 5 && timerHandle !== null) {
-            clearInterval(timerHandle);
+        if (dispatchScheduledMessageJob(gameState, job)) {
+            remaining.push(job);
         }
     }
+    scheduledMessageJobs = remaining;
+}
 
-    dispatchOnce();
-    timerHandle = setInterval(dispatchOnce, 10000);
-    activeMessageTimers.push(timerHandle);
+// Safely repeats notification up to 5 times every 10s on the UE4 Game Thread,
+// validating PlayerState is still live in the same match World before each dispatch.
+function sendRepeatedMessagesToPlayerKey(targetWorldKey, playerStateKey, messageList) {
+    if (!targetWorldKey || !playerStateKey || !messageList || messageList.length === 0) {
+        return;
+    }
+    var job = {
+        worldKey: targetWorldKey,
+        playerStateKey: playerStateKey,
+        messageList: messageList,
+        sentCount: 0,
+        nextDueAt: Date.now()
+    };
+    var gameState = getLiveGameState();
+    if (!gameState.isNull()) {
+        if (dispatchScheduledMessageJob(gameState, job)) {
+            scheduledMessageJobs.push(job);
+        }
+    } else {
+        scheduledMessageJobs.push(job);
+    }
 }
 
 // ============================================================================
@@ -337,7 +362,7 @@ function tryAssignSpecialRoles(GameState) {
     }
     var playerArray = GameState.add(0x238);
     var totalPlayers = getArraySize(playerArray);
-    if (totalPlayers === 0) {
+    if (totalPlayers === 0 || totalPlayers > 64) {
         return;
     }
 
@@ -463,6 +488,9 @@ function applyPendingStorageAndNotices(GameState) {
     }
     var playerArray = GameState.add(0x238);
     var count = getArraySize(playerArray);
+    if (count === 0 || count > 64) {
+        return;
+    }
     for (var i = 0; i < count; i++) {
         var entry = getArrayItemAddr(playerArray, 8, i);
         if (entry === null) {
@@ -484,54 +512,60 @@ function applyPendingStorageAndNotices(GameState) {
 // ============================================================================
 Interceptor.attach(ADH_GameState_HandleMatchHasStarted_addr, {
     onEnter: function () {
-        ensureCurrentWorld();
+        try {
+            ensureCurrentWorld();
+        } catch (e) {}
     }
 });
 
 Interceptor.attach(ADH_PlayerState_SetPlayerRole_addr, {
     onEnter: function (args) {
-        ensureCurrentWorld();
-        var playerState = args[0];
-        var roleData = args[1];
-        if (playerState.isNull() || roleData.isNull()) {
-            return;
-        }
-        if (randomRole_on && availableRandomRoles.length > 0) {
-            var index = Math.floor(Math.random() * availableRandomRoles.length);
-            var roleId = availableRandomRoles[index];
-            var newRoleData = UDH_PlayerRoleData_FindByType(roleId, playerState);
-            if (!newRoleData.isNull()) {
-                availableRandomRoles.splice(index, 1);
-                args[1] = newRoleData;
+        try {
+            ensureCurrentWorld();
+            var playerState = args[0];
+            var roleData = args[1];
+            if (playerState.isNull() || roleData.isNull()) {
+                return;
             }
-        }
+            if (randomRole_on && availableRandomRoles.length > 0) {
+                var index = Math.floor(Math.random() * availableRandomRoles.length);
+                var roleId = availableRandomRoles[index];
+                var newRoleData = UDH_PlayerRoleData_FindByType(roleId, playerState);
+                if (!newRoleData.isNull()) {
+                    availableRandomRoles.splice(index, 1);
+                    args[1] = newRoleData;
+                }
+            }
+        } catch (e) {}
     }
 });
 
 Interceptor.attach(ADH_HumanCharacter_AddStartingInventory_addr, {
     onEnter: function (args) {
-        ensureCurrentWorld();
-        var humanCharacter = args[0];
-        if (humanCharacter.isNull()) {
-            return;
-        }
-        var playerState = humanCharacter.add(0x240).readPointer();
-        if (playerState.isNull()) {
-            return;
-        }
+        try {
+            ensureCurrentWorld();
+            var humanCharacter = args[0];
+            if (humanCharacter.isNull()) {
+                return;
+            }
+            var playerState = humanCharacter.add(0x240).readPointer();
+            if (playerState.isNull()) {
+                return;
+            }
 
-        // Slight initial spell charge boost (+0.05)
-        var spellManager = playerState.add(0x488).readPointer();
-        if (!spellManager.isNull()) {
-            var spellChargePtr = spellManager.add(0x284);
-            spellChargePtr.writeFloat(spellChargePtr.readFloat() + 0.05);
-        }
+            // Slight initial spell charge boost (+0.05)
+            var spellManager = playerState.add(0x488).readPointer();
+            if (!spellManager.isNull()) {
+                var spellChargePtr = spellManager.add(0x284);
+                spellChargePtr.writeFloat(spellChargePtr.readFloat() + 0.05);
+            }
 
-        var gameState = getLiveGameState();
-        if (!gameState.isNull()) {
-            tryAssignSpecialRoles(gameState);
-            applyStorageAndNoticeForPlayer(humanCharacter, playerState);
-        }
+            var gameState = getLiveGameState();
+            if (!gameState.isNull()) {
+                tryAssignSpecialRoles(gameState);
+                applyStorageAndNoticeForPlayer(humanCharacter, playerState);
+            }
+        } catch (e) {}
     }
 });
 
@@ -541,14 +575,16 @@ Interceptor.attach(SpellManagerInit_addr, {
         this.spellManager = args[0];
     },
     onLeave: function () {
-        var sm = this.spellManager;
-        if (sm.isNull()) {
-            return;
-        }
-        var currentMax = sm.add(0x228).readU32();
-        if (currentMax < MaxSpellsConfigured) {
-            sm.add(0x228).writeU32(MaxSpellsConfigured);
-        }
+        try {
+            var sm = this.spellManager;
+            if (!sm || sm.isNull()) {
+                return;
+            }
+            var currentMax = sm.add(0x228).readU32();
+            if (currentMax < MaxSpellsConfigured) {
+                sm.add(0x228).writeU32(MaxSpellsConfigured);
+            }
+        } catch (e) {}
     }
 });
 
@@ -558,100 +594,114 @@ spellListBuffer.add(12).writeU32(MaxSpellsConfigured);
 
 Interceptor.attach(ADH_SpellManager_SetEquippedSpells_addr, {
     onEnter: function (args) {
-        var spellManager = args[0];
-        if (spellManager.isNull()) {
-            return;
-        }
-        var gameInstance = UDH_GameInstance_GetInstance(spellManager);
-        if (gameInstance.isNull()) {
-            return;
-        }
-        var thrallSpells = gameInstance.add(0x440);
-        var spellPoolSize = getArraySize(thrallSpells);
-        if (spellPoolSize === 5) {
-            if (spellPresetIndex >= SpellSelection.length) {
-                spellPresetIndex = 0;
+        try {
+            var spellManager = args[0];
+            if (spellManager.isNull()) {
+                return;
             }
-            var preset = SpellSelection[spellPresetIndex];
-            spellListBuffer.add(8).writeU32(preset.length);
-            for (var i = 0; i < preset.length; i++) {
-                if (preset[i] >= spellPoolSize) {
+            var gameInstance = UDH_GameInstance_GetInstance(spellManager);
+            if (gameInstance.isNull()) {
+                return;
+            }
+            var thrallSpells = gameInstance.add(0x440);
+            var spellPoolSize = getArraySize(thrallSpells);
+            if (spellPoolSize === 5) {
+                if (spellPresetIndex >= SpellSelection.length) {
+                    spellPresetIndex = 0;
+                }
+                var preset = SpellSelection[spellPresetIndex];
+                if (!preset || preset.length > 30) {
                     return;
                 }
-                var spellTypePtr = getArrayItemAddr(thrallSpells, 8, preset[i]);
-                if (spellTypePtr === null) {
-                    return;
+                var resolvedPtrs = [];
+                for (var i = 0; i < preset.length; i++) {
+                    if (preset[i] < 0 || preset[i] >= spellPoolSize) {
+                        return;
+                    }
+                    var spellTypePtr = getArrayItemAddr(thrallSpells, 8, preset[i]);
+                    if (spellTypePtr === null) {
+                        return;
+                    }
+                    resolvedPtrs.push(spellTypePtr.readPointer());
                 }
-                spellListBuffer.add(16 + 8 * i).writePointer(spellTypePtr.readPointer());
+                spellListBuffer.add(8).writeU32(resolvedPtrs.length);
+                for (var j = 0; j < resolvedPtrs.length; j++) {
+                    spellListBuffer.add(16 + 8 * j).writePointer(resolvedPtrs[j]);
+                }
+                args[1] = spellListBuffer;
+                spellPresetIndex++;
             }
-            args[1] = spellListBuffer;
-            spellPresetIndex++;
-        }
+        } catch (e) {}
     }
 });
 
 Interceptor.attach(ADH_PlayerState_SetIsDead_addr, {
     onEnter: function (args) {
-        var deadFlag = args[1].toInt32() & 1;
-        if (deadFlag === 0) {
-            return;
-        }
-        var playerState = args[0];
-        if (playerState.isNull()) {
-            return;
-        }
-        if (thrallParentKey && playerState.toString() === thrallParentKey) {
-            parentDeathCount++;
-            logInfo("Thrall parent death count: " + parentDeathCount);
-        }
+        try {
+            var deadFlag = args[1].toInt32() & 1;
+            if (deadFlag === 0) {
+                return;
+            }
+            var playerState = args[0];
+            if (playerState.isNull()) {
+                return;
+            }
+            if (thrallParentKey && playerState.toString() === thrallParentKey) {
+                parentDeathCount++;
+                logInfo("Thrall parent death count: " + parentDeathCount);
+            }
+        } catch (e) {}
     }
 });
 
 Interceptor.attach(ADH_GameState_Tick_addr, {
     onEnter: function (args) {
-        var gameState = args[0];
-        if (gameState.isNull()) {
-            return;
-        }
-        ensureCurrentWorld();
-
-        if (!rolesAssigned) {
-            tryAssignSpecialRoles(gameState);
-        }
-        if (rolesAssigned) {
-            applyPendingStorageAndNotices(gameState);
-        }
-
-        // Notify Madmate when Thrall Parent dies (1st and 2nd death, once each)
-        if (madmateKey) {
-            if (parentDeathCount === 1 && !parentDeath1Announced) {
-                parentDeath1Announced = true;
-                sendRepeatedMessagesToPlayerKey(activeWorldKey, madmateKey, [
-                    "力が湧いてきたようだ"
-                ]);
-            } else if (parentDeathCount >= 2 && !parentDeath2Announced) {
-                parentDeath2Announced = true;
-                sendRepeatedMessagesToPlayerKey(activeWorldKey, madmateKey, [
-                    "今こそ復讐の時だ"
-                ]);
+        try {
+            var gameState = args[0];
+            if (gameState.isNull()) {
+                return;
             }
-        }
+            ensureCurrentWorld();
+            processScheduledMessageJobs(gameState);
 
-        // Reveal Madmate & Thralls to Leader when Blizzard begins
-        var blizzardStarted = gameState.add(0x359).readU8();
-        if (!blizzardAnnounced && blizzardStarted === 1) {
-            blizzardAnnounced = true;
-            if (leaderKey) {
-                var jpThralls = thrallRoleNames.map(getJapaneseName);
-                var jpMadmate = getJapaneseName(madmateRoleName);
-                var leaderMessages = [
-                    "",
-                    "狂人：" + jpMadmate,
-                    "傀儡：" + (jpThralls.length > 0 ? jpThralls.join(", ") : "なし")
-                ];
-                sendRepeatedMessagesToPlayerKey(activeWorldKey, leaderKey, leaderMessages);
+            if (!rolesAssigned) {
+                tryAssignSpecialRoles(gameState);
             }
-        }
+            if (rolesAssigned) {
+                applyPendingStorageAndNotices(gameState);
+            }
+
+            // Notify Madmate when Thrall Parent dies (1st and 2nd death, once each)
+            if (madmateKey) {
+                if (parentDeathCount === 1 && !parentDeath1Announced) {
+                    parentDeath1Announced = true;
+                    sendRepeatedMessagesToPlayerKey(activeWorldKey, madmateKey, [
+                        "力が湧いてきたようだ"
+                    ]);
+                } else if (parentDeathCount >= 2 && !parentDeath2Announced) {
+                    parentDeath2Announced = true;
+                    sendRepeatedMessagesToPlayerKey(activeWorldKey, madmateKey, [
+                        "今こそ復讐の時だ"
+                    ]);
+                }
+            }
+
+            // Reveal Madmate & Thralls to Leader when Blizzard begins
+            var blizzardStarted = gameState.add(0x359).readU8();
+            if (!blizzardAnnounced && blizzardStarted === 1) {
+                blizzardAnnounced = true;
+                if (leaderKey) {
+                    var jpThralls = thrallRoleNames.map(getJapaneseName);
+                    var jpMadmate = getJapaneseName(madmateRoleName);
+                    var leaderMessages = [
+                        "",
+                        "狂人：" + jpMadmate,
+                        "傀儡：" + (jpThralls.length > 0 ? jpThralls.join(", ") : "なし")
+                    ];
+                    sendRepeatedMessagesToPlayerKey(activeWorldKey, leaderKey, leaderMessages);
+                }
+            }
+        } catch (e) {}
     }
 });
 
@@ -689,51 +739,53 @@ function initSpellClasses() {
 
 Interceptor.attach(ADH_SpellManager_CastSpell_addr, {
     onEnter: function (args) {
-        if (!thrallChildKey) {
-            return;
-        }
-        if (!spellClassesInitialized) {
-            if (!initSpellClasses()) {
+        try {
+            if (!thrallChildKey) {
                 return;
             }
-            spellClassesInitialized = true;
-        }
+            if (!spellClassesInitialized) {
+                if (!initSpellClasses()) {
+                    return;
+                }
+                spellClassesInitialized = true;
+            }
 
-        var spellManager = args[0];
-        var spellType = args[2];
-        if (spellManager.isNull() || spellType.isNull()) {
-            return;
-        }
-        var playerState = spellManager.add(0xE0).readPointer();
-        if (playerState.isNull() || playerState.toString() !== thrallChildKey) {
-            return;
-        }
+            var spellManager = args[0];
+            var spellType = args[2];
+            if (spellManager.isNull() || spellType.isNull()) {
+                return;
+            }
+            var playerState = spellManager.add(0xE0).readPointer();
+            if (playerState.isNull() || playerState.toString() !== thrallChildKey) {
+                return;
+            }
 
-        var isDead = playerState.add(0x570).readU8();
-        if (isDead !== 0) {
-            return;
-        }
+            var isDead = playerState.add(0x570).readU8();
+            if (isDead !== 0) {
+                return;
+            }
 
-        var playerController = resolvePlayerController(playerState);
-        if (playerController.isNull()) {
-            return;
-        }
-        var controlledHuman = playerController.add(0x588).readPointer();
-        if (controlledHuman.isNull()) {
-            return;
-        }
+            var playerController = resolvePlayerController(playerState);
+            if (playerController.isNull()) {
+                return;
+            }
+            var controlledHuman = playerController.add(0x588).readPointer();
+            if (controlledHuman.isNull()) {
+                return;
+            }
 
-        var blocked = false;
-        if (parentDeathCount < 2 && (spellType.equals(WhiteoutClass) || spellType.equals(CannibalAttackClass))) {
-            blocked = true;
-        } else if (parentDeathCount < 1 && (spellType.equals(HushClass) || spellType.equals(DoppelgangerClass))) {
-            blocked = true;
-        }
+            var blocked = false;
+            if (parentDeathCount < 2 && (spellType.equals(WhiteoutClass) || spellType.equals(CannibalAttackClass))) {
+                blocked = true;
+            } else if (parentDeathCount < 1 && (spellType.equals(HushClass) || spellType.equals(DoppelgangerClass))) {
+                blocked = true;
+            }
 
-        if (blocked) {
-            args[2] = ptr(0);
-            var healthBoostRemaining = controlledHuman.add(0xFFC);
-            healthBoostRemaining.writeFloat(healthBoostRemaining.readFloat() + 8.0);
-        }
+            if (blocked) {
+                args[2] = ptr(0);
+                var healthBoostRemaining = controlledHuman.add(0xFFC);
+                healthBoostRemaining.writeFloat(healthBoostRemaining.readFloat() + 8.0);
+            }
+        } catch (e) {}
     }
 });

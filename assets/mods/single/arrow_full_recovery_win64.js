@@ -30,19 +30,23 @@ function matchesExpectedBytes(addr, expected) {
     return true;
 }
 
-if (matchesExpectedBytes(ADH_Character_ctor_SpawnPctPatch_addr, EXPECTED_CTOR_BYTES)) {
-    Memory.patchCode(ADH_Character_ctor_SpawnPctPatch_addr.add(9), 1, function (code) {
-        code.writeU8(0x80);
-    });
-}
+try {
+    if (matchesExpectedBytes(ADH_Character_ctor_SpawnPctPatch_addr, EXPECTED_CTOR_BYTES)) {
+        Memory.patchCode(ADH_Character_ctor_SpawnPctPatch_addr.add(9), 1, function (code) {
+            code.writeU8(0x80);
+        });
+    }
+} catch (e) {}
 
 // Also enforce DeathInventorySpawnPct = 1.0f on any character that receives embedded arrows
 // (covers actors spawned before this script was injected).
 Interceptor.attach(ADH_Character_AddDeathInventory_addr, {
     onEnter: function (args) {
-        var characterPtr = args[0];
-        if (!characterPtr.isNull()) {
-            characterPtr.add(OFF_CHARACTER_DEATH_INVENTORY_SPAWN_PCT).writeFloat(1.0);
-        }
+        try {
+            var characterPtr = args[0];
+            if (!characterPtr.isNull()) {
+                characterPtr.add(OFF_CHARACTER_DEATH_INVENTORY_SPAWN_PCT).writeFloat(1.0);
+            }
+        } catch (e) {}
     }
 });

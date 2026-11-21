@@ -25,10 +25,18 @@ function newFString(Length) {
 }
 
 function getObjectName(UObject) {
+    if (UObject.isNull()) {
+        return '';
+    }
     var NamePrivate = UObject.add(0x18);
     var NameBuffer = newFString(100);
     FName_GetPlainNameString(NamePrivate, NameBuffer);
-    return NameBuffer.readPointer().readUtf16String();
+    var DataPtr = NameBuffer.readPointer();
+    if (DataPtr.isNull()) {
+        return '';
+    }
+    var text = DataPtr.readUtf16String();
+    return text ? text : '';
 }
 
 function spawnBrigDoor(BrigCell) {
@@ -75,24 +83,39 @@ function resetBrigCell(BrigCell) {
 }
 Interceptor.attach(ADH_BrigCell_AddPrisoner, {
     onEnter: function(args) {
-    	this.ADH_BrigCell = args[0];
+        this.ADH_BrigCell = args[0];
     },
     onLeave: function(ret) {
-    	var ADH_BrigCell = this.ADH_BrigCell;
-    	ADH_BrigCell_FreePrisoner(ADH_BrigCell,ptr(0));
+        try {
+            var ADH_BrigCell = this.ADH_BrigCell;
+            if (!ADH_BrigCell || ADH_BrigCell.isNull()) {
+                return;
+            }
+            ADH_BrigCell_FreePrisoner(ADH_BrigCell, ptr(0));
+        } catch (e) {}
     }
 });
-var ADH_DoorActor_SetOpen = base.add(0xDE3A30)
-Interceptor.attach(ADH_DoorActor_SetOpen, {
+var ADH_DoorActor_SetOpen_addr = base.add(0xDE3A30);
+Interceptor.attach(ADH_DoorActor_SetOpen_addr, {
     onEnter: function(args) {
-    	this.ADH_DoorActor = args[0]
-    	this.bNewIsOpen = args[1]
+        this.ADH_DoorActor = args[0];
+        this.bNewIsOpen = args[1];
     },
     onLeave: function(ret) {
-    	var clazz = getObjectName(this.ADH_DoorActor.add(0x10).readPointer());
-    	if(clazz.includes('BP_BrigDoor')){
-    		var BrigCell = this.ADH_DoorActor.add(0xE0).readPointer();
-    		resetBrigCell(BrigCell);
-    	}
+        try {
+            var doorActor = this.ADH_DoorActor;
+            if (!doorActor || doorActor.isNull()) {
+                return;
+            }
+            var doorClass = doorActor.add(0x10).readPointer();
+            if (doorClass.isNull()) {
+                return;
+            }
+            var clazz = getObjectName(doorClass);
+            if (clazz.includes('BP_BrigDoor')) {
+                var BrigCell = doorActor.add(0xE0).readPointer();
+                resetBrigCell(BrigCell);
+            }
+        } catch (e) {}
     }
 });

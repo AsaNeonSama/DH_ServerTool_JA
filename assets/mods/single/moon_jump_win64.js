@@ -4,10 +4,20 @@ var UCharacterMovementComponent_DoJump_addr = base.add(0x2419404);
 var ADH_Character_TakeFallingDamage_addr = base.add(0xD74200);
 Interceptor.attach(UCharacterMovementComponent_DoJump_addr, {
     onEnter : function(args) {
-        var Component = this.context.rbx;
-        var VectorZ = Component.add(0xCC);
-        VectorZ.writeFloat(VectorZ.readFloat() * JumpScale);
+        try {
+            var Component = this.context.rbx;
+            if (!Component || Component.isNull()) {
+                return;
+            }
+            var VectorZ = Component.add(0xCC);
+            var curZ = VectorZ.readFloat();
+            if (Number.isFinite(curZ)) {
+                VectorZ.writeFloat(curZ * JumpScale);
+            }
+        } catch (e) {}
     }
 });
 
-Interceptor.replace(ADH_Character_TakeFallingDamage_addr, new NativeCallback(function(){}, 'void', ['pointer', 'pointer', 'pointer']));
+// Pin NativeCallback in top-level scope so JS GC never frees the native trampoline
+var noopTakeFallingDamage = new NativeCallback(function(){}, 'void', ['pointer', 'pointer', 'pointer'], 'win64');
+Interceptor.replace(ADH_Character_TakeFallingDamage_addr, noopTakeFallingDamage);

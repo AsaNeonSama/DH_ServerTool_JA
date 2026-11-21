@@ -46,7 +46,7 @@ if (!existsSync(compressedBindingAbs)) {
   );
 }
 
-const outfile: string = resolve(distDir, "DHA_ServerTool_JA.exe");
+const outfile: string = resolve(distDir, "DH_ServerTool_JA.exe");
 const iconPath: string = resolve(projectRoot, "assets", "icon.ico");
 
 console.log("[build] Compiling standalone executable:", outfile);
@@ -59,7 +59,7 @@ const result: BuildOutput = await Bun.build({
     outfile,
     windows: {
       icon: iconPath,
-      title: "DHA_ServerTool_JA",
+      title: "DH_ServerTool_JA",
       publisher: "アサネオン / Build With Antigravity",
       version: "2.0.0.0",
       description: "Dread Hunger Dedicated Server Controller & Web Console",
@@ -97,9 +97,24 @@ const result: BuildOutput = await Bun.build({
   const expectedSize = ${expectedSize};
   const fileName = "frida_binding_16.7.19_${hashHex}.node";
   const candidates = [];
-  if (process.env.LOCALAPPDATA) candidates.push(__join(process.env.LOCALAPPDATA, "DHA_ServerTool_JA"));
-  candidates.push(__join(__tmpdir(), "DHA_ServerTool_JA"));
-  candidates.push(__join(process.cwd(), ".dha_cache"));
+  if (process.env.LOCALAPPDATA) candidates.push(__join(process.env.LOCALAPPDATA, "DH_ServerTool_JA"));
+  candidates.push(__join(__tmpdir(), "DH_ServerTool_JA"));
+  candidates.push(__join(process.cwd(), ".dh_cache"));
+
+  const extractTo = (targetPath) => {
+    const compressed = __readFileSync(__fridaZstPath);
+    const decompressed = Bun.zstdDecompressSync(compressed);
+    const tmpPath = targetPath + "." + process.pid + ".tmp";
+    try {
+      __writeFileSync(tmpPath, decompressed);
+      __renameSync(tmpPath, targetPath);
+    } catch {
+      try { __unlinkSync(tmpPath); } catch {}
+      if (!__existsSync(targetPath) || __statSync(targetPath).size !== expectedSize) {
+        __writeFileSync(targetPath, decompressed);
+      }
+    }
+  };
 
   let lastErr;
   for (const cacheDir of candidates) {
@@ -113,20 +128,17 @@ const result: BuildOutput = await Bun.build({
         } catch {}
       }
       if (needExtract) {
-        const compressed = __readFileSync(__fridaZstPath);
-        const decompressed = Bun.zstdDecompressSync(compressed);
-        const tmpPath = targetPath + "." + process.pid + ".tmp";
-        __writeFileSync(tmpPath, decompressed);
-        try {
-          __renameSync(tmpPath, targetPath);
-        } catch {
-          try { __unlinkSync(tmpPath); } catch {}
-          if (!__existsSync(targetPath) || __statSync(targetPath).size !== expectedSize) {
-            __writeFileSync(targetPath, decompressed);
-          }
-        }
+        extractTo(targetPath);
       }
-      return __createRequire(import.meta.url)(targetPath);
+      try {
+        return __createRequire(import.meta.url)(targetPath);
+      } catch (loadErr) {
+        if (!needExtract) {
+          extractTo(targetPath);
+          return __createRequire(import.meta.url)(targetPath);
+        }
+        throw loadErr;
+      }
     } catch (err) {
       lastErr = err;
     }

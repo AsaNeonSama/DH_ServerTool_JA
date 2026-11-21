@@ -9,8 +9,8 @@ var ADH_GameState_GiveQuest = new NativeFunction(base.add(0xD973E0), 'void', ['p
 var ADH_Character_IsAlive = new NativeFunction(base.add(0xD5C850), 'int8', ['pointer'], 'win64');
 var UDH_InventoryManager_AddInventory = new NativeFunction(base.add(0xDBC040), 'void', ['pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'int8', 'pointer'], 'win64');
 var ADH_PlayerController_ReceiveThrallMessage = new NativeFunction(base.add(0xEE7810), 'void', ['pointer', 'pointer', 'pointer'], 'win64');
-var UWorld_SpawnActor = new NativeFunction(base.add(0x2621CB0), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer'], 'win64');
-var FActorSpawnParameters_FActorSpawnParameters = new NativeFunction(base.add(0x2955C40), 'void', ['pointer'], 'win64');
+var UWorld_SpawnActor = new NativeFunction(base.add(0x2624510), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer'], 'win64');
+var FActorSpawnParameters_FActorSpawnParameters = new NativeFunction(base.add(0x29584A0), 'void', ['pointer'], 'win64');
 
 var UClass_GetPrivateStaticClass = new NativeFunction(base.add(0x11F02E0), 'pointer', [], 'win64');
 var StaticLoadObject = new NativeFunction(base.add(0x137B290), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer', 'int32', 'pointer', 'int8', 'pointer'], 'win64');
@@ -58,6 +58,9 @@ function findObjectByName(ObjectName, Clazz) {
 
 function getClass(ClassName) {
     var StaticClass = UClass_GetPrivateStaticClass();
+    if (StaticClass.isNull()) {
+        return ptr(0);
+    }
     var Clazz = findObjectByName(ClassName, StaticClass);
     if (Clazz.isNull()) {
         Clazz = loadObjectByName(ClassName, StaticClass);
@@ -181,6 +184,9 @@ function spawnRewardPickupAtPawn(Pawn, ItemClass) {
     var x = RootComponent.add(0x1D0).readFloat();
     var y = RootComponent.add(0x1D4).readFloat();
     var z = RootComponent.add(0x1D8).readFloat() + 45.0;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+        return false;
+    }
 
     var transformBlock = makeTransform(x, y, z);
     var spawnParams = Memory.alloc(0x40);
@@ -260,7 +266,7 @@ function assignQuestsToMissingPlayers(GameState) {
     var PlayerArray = GameState.add(0x238);
     var Players = PlayerArray.readPointer();
     var PlayerNum = PlayerArray.add(8).readU32();
-    if (Players.isNull() || PlayerNum === 0) {
+    if (Players.isNull() || PlayerNum === 0 || PlayerNum > 64) {
         return;
     }
     for (var i = 0; i < PlayerNum; i++) {
@@ -288,7 +294,7 @@ function isPlayerStateInGame(GameState, TargetPlayerState) {
     var PlayerArray = GameState.add(0x238);
     var Players = PlayerArray.readPointer();
     var PlayerNum = PlayerArray.add(8).readU32();
-    if (Players.isNull() || PlayerNum === 0) {
+    if (Players.isNull() || PlayerNum === 0 || PlayerNum > 64) {
         return false;
     }
     for (var i = 0; i < PlayerNum; i++) {
@@ -312,72 +318,76 @@ Interceptor.attach(ADH_GameState_HandleMatchHasStarted_addr, {
 
 Interceptor.attach(ADH_GameState_Tick_addr, {
     onEnter: function (args) {
-        var GameState = args[0];
-        if (GameState.isNull()) {
-            return;
-        }
-        var now = Date.now();
+        try {
+            var GameState = args[0];
+            if (GameState.isNull()) {
+                return;
+            }
+            var now = Date.now();
 
-        // マッチ開始後2秒時点でクエスト未付与のプレイヤーに自動配布
-        // (骨の短剣モードの初期装備で既に付与済みならスキップ)
-        if (matchStartedAt > 0 && now - matchStartedAt >= QUEST_GIVE_DELAY_SECONDS * 1000) {
-            var World = GWorld.readPointer();
-            if (!World.isNull()) {
-                var worldKey = World.toString();
-                if (questAssignedWorldKey !== worldKey) {
-                    questAssignedWorldKey = worldKey;
-                    assignQuestsToMissingPlayers(GameState);
+            // マッチ開始後2秒時点でクエスト未付与のプレイヤーに自動配布
+            // (骨の短剣モードの初期装備で既に付与済みならスキップ)
+            if (matchStartedAt > 0 && now - matchStartedAt >= QUEST_GIVE_DELAY_SECONDS * 1000) {
+                var World = GWorld.readPointer();
+                if (!World.isNull()) {
+                    var worldKey = World.toString();
+                    if (questAssignedWorldKey !== worldKey) {
+                        questAssignedWorldKey = worldKey;
+                        assignQuestsToMissingPlayers(GameState);
+                    }
                 }
             }
-        }
 
-        // 死亡中にクエスト完了したプレイヤーが復活したら報酬を再配布
-        if (pendingDeadRewards.length > 0 && now - lastPendingRetryAt >= 1000) {
-            lastPendingRetryAt = now;
-            var remaining = [];
-            for (var i = 0; i < pendingDeadRewards.length; i++) {
-                var item = pendingDeadRewards[i];
-                if (!isPlayerStateInGame(GameState, item.playerState)) {
-                    continue;
+            // 死亡中にクエスト完了したプレイヤーが復活したら報酬を再配布
+            if (pendingDeadRewards.length > 0 && now - lastPendingRetryAt >= 1000) {
+                lastPendingRetryAt = now;
+                var remaining = [];
+                for (var i = 0; i < pendingDeadRewards.length; i++) {
+                    var item = pendingDeadRewards[i];
+                    if (!isPlayerStateInGame(GameState, item.playerState)) {
+                        continue;
+                    }
+                    var status = tryGrantReward(item.playerState, item.reward);
+                    if (status === 'defer') {
+                        remaining.push(item);
+                    }
                 }
-                var status = tryGrantReward(item.playerState, item.reward);
-                if (status === 'defer') {
-                    remaining.push(item);
-                }
+                pendingDeadRewards = remaining;
             }
-            pendingDeadRewards = remaining;
-        }
+        } catch (e) {}
     }
 });
 
 Interceptor.attach(ADH_QuestState_OnCompletedChanged_addr, {
     onEnter: function (args) {
-        var QuestState = args[0];
-        if (QuestState.isNull()) {
-            return;
-        }
-        var bCompleted = QuestState.add(0x228).readU8();
-        if (bCompleted === 0) {
-            return;
-        }
-        var QuestKey = QuestState.toString();
-        if (rewardedQuestStates[QuestKey]) {
-            return;
-        }
-        var PlayerState = QuestState.add(0x238).readPointer();
-        if (PlayerState.isNull()) {
-            return;
-        }
-        rewardedQuestStates[QuestKey] = true;
+        try {
+            var QuestState = args[0];
+            if (QuestState.isNull()) {
+                return;
+            }
+            var bCompleted = QuestState.add(0x228).readU8();
+            if (bCompleted === 0) {
+                return;
+            }
+            var QuestKey = QuestState.toString();
+            if (rewardedQuestStates[QuestKey]) {
+                return;
+            }
+            var PlayerState = QuestState.add(0x238).readPointer();
+            if (PlayerState.isNull()) {
+                return;
+            }
+            rewardedQuestStates[QuestKey] = true;
 
-        var Reward = pickRandomReward();
-        var status = tryGrantReward(PlayerState, Reward);
-        if (status === 'defer') {
-            pendingDeadRewards.push({
-                playerState: PlayerState,
-                reward: Reward
-            });
-            sendPlayerNotice(PlayerState, 'クエスト完了！復活時に報酬 (' + Reward.name + ') が配布されます');
-        }
+            var Reward = pickRandomReward();
+            var status = tryGrantReward(PlayerState, Reward);
+            if (status === 'defer') {
+                pendingDeadRewards.push({
+                    playerState: PlayerState,
+                    reward: Reward
+                });
+                sendPlayerNotice(PlayerState, 'クエスト完了！復活時に報酬 (' + Reward.name + ') が配布されます');
+            }
+        } catch (e) {}
     }
 });

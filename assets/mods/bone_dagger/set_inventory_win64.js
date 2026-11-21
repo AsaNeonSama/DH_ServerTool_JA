@@ -9,22 +9,33 @@ var FName_GetPlainNameString = new NativeFunction(base.add(0x11604F0), 'void', [
 var FMemory_Realloc = new NativeFunction(base.add(0x106C3D0), 'pointer', ['pointer', 'int64', 'int32'], 'win64');
 
 function logInfo(Info) {
-    var f = new File('output.log', 'a');
-    f.write('[Patches] ' + Info + '\n');
-    f.close();
+    try {
+        var f = new File('output.log', 'a');
+        f.write('[Patches] ' + Info + '\n');
+        f.close();
+    } catch (e) {}
 }
 
 function arrayResize(Array, ElementSize, Num) {
     var Allocator = Array.readPointer();
-    Array.add(12).writeU32(Num);
     var NewOne = FMemory_Realloc(Allocator, Num * ElementSize, 0);
+    if (Num > 0 && NewOne.isNull()) {
+        return false;
+    }
     Array.writePointer(NewOne);
+    Array.add(12).writeU32(Num);
+    return true;
 }
 
 function arrayInit(Array, ElementSize, InitSize, MaxSize) {
     Array.writePointer(ptr(0));
+    Array.add(8).writeU32(0);
+    Array.add(12).writeU32(0);
+    if (MaxSize > 0 && !arrayResize(Array, ElementSize, MaxSize)) {
+        return false;
+    }
     Array.add(8).writeU32(InitSize);
-    arrayResize(Array, ElementSize, MaxSize);
+    return true;
 }
 
 function newFString(Length) {
@@ -183,71 +194,80 @@ function initItemClass() {
 
 Interceptor.attach(ADH_GameMode_InitGame_addr, {
     onEnter: function (args) {
-        var GameMode = args[0];
-        if (GameMode.isNull()) {
-            return;
-        }
-        var GameInstance = UDH_GameInstance_GetInstance(GameMode);
-        if (GameInstance.isNull()) {
-            return;
-        }
-        var PlayerRoleList = GameInstance.add(0x3B8);
-        if (!initItemClass()) {
-            return;
-        }
+        try {
+            var GameMode = args[0];
+            if (GameMode.isNull()) {
+                return;
+            }
+            var GameInstance = UDH_GameInstance_GetInstance(GameMode);
+            if (GameInstance.isNull()) {
+                return;
+            }
+            var PlayerRoleList = GameInstance.add(0x3B8);
+            if (!initItemClass()) {
+                return;
+            }
 
-        var roleCount = getArraySize(PlayerRoleList);
-        for (var i = 0; i < roleCount; i++) {
-            var RoleEntryPtr = getArrayItemAddr(PlayerRoleList, 8, i);
-            if (RoleEntryPtr === null) {
-                continue;
+            var roleCount = getArraySize(PlayerRoleList);
+            if (roleCount === 0 || roleCount > 64) {
+                return;
             }
-            var RoleData = RoleEntryPtr.readPointer();
-            if (RoleData.isNull()) {
-                continue;
-            }
-            var OnlineName = getString(RoleData.add(0x48));
-            var DesiredInventory = RoleInitInventory.get(OnlineName);
-            if (!DesiredInventory || DesiredInventory.length === 0) {
-                continue;
-            }
-            var StartingDropTable = RoleData.add(0x128).readPointer();
-            if (StartingDropTable.isNull()) {
-                continue;
-            }
-            var Table = StartingDropTable.add(0x40);
-
-            arrayResize(Table, 40, DesiredInventory.length);
-            Table.add(8).writeU32(DesiredInventory.length);
-            for (var j = 0; j < DesiredInventory.length; j++) {
-                var InventoryInfo = DesiredInventory[j];
-                if (!InventoryInfo || InventoryInfo.length !== 2) {
+            for (var i = 0; i < roleCount; i++) {
+                var RoleEntryPtr = getArrayItemAddr(PlayerRoleList, 8, i);
+                if (RoleEntryPtr === null) {
                     continue;
                 }
-                var ClassId = InventoryInfo[0];
-                var DesiredNum = InventoryInfo[1];
-                var Clazz = ResolvedItemClass.get(ClassId);
-                if (!Clazz || Clazz.isNull()) {
+                var RoleData = RoleEntryPtr.readPointer();
+                if (RoleData.isNull()) {
                     continue;
                 }
+                var OnlineName = getString(RoleData.add(0x48));
+                var DesiredInventory = RoleInitInventory.get(OnlineName);
+                if (!DesiredInventory || DesiredInventory.length === 0) {
+                    continue;
+                }
+                var StartingDropTable = RoleData.add(0x128).readPointer();
+                if (StartingDropTable.isNull()) {
+                    continue;
+                }
+                var Table = StartingDropTable.add(0x40);
 
-                var InventoryList = getArrayItemAddr(Table, 40, j);
-                if (InventoryList === null) {
+                if (!arrayResize(Table, 40, DesiredInventory.length)) {
                     continue;
                 }
-                arrayInit(InventoryList, 8, 1, 1);
-                var ItemClass = getArrayItemAddr(InventoryList, 8, 0);
-                if (ItemClass === null) {
-                    continue;
-                }
-                InventoryList.add(0x10).writeFloat(1.0);          // Weight
-                InventoryList.add(0x14).writeU32(DesiredNum);     // GuaranteedSpawns
-                InventoryList.add(0x18).writeU32(0);              // MaximumSpawns
-                InventoryList.add(0x1C).writeU32(1);              // StackSizeToSpawn
-                InventoryList.add(0x20).writeU64(0);              // pad_20[8]
+                Table.add(8).writeU32(DesiredInventory.length);
+                for (var j = 0; j < DesiredInventory.length; j++) {
+                    var InventoryInfo = DesiredInventory[j];
+                    if (!InventoryInfo || InventoryInfo.length !== 2) {
+                        continue;
+                    }
+                    var ClassId = InventoryInfo[0];
+                    var DesiredNum = InventoryInfo[1];
+                    var Clazz = ResolvedItemClass.get(ClassId);
+                    if (!Clazz || Clazz.isNull()) {
+                        continue;
+                    }
 
-                ItemClass.writePointer(Clazz);
+                    var InventoryList = getArrayItemAddr(Table, 40, j);
+                    if (InventoryList === null) {
+                        continue;
+                    }
+                    if (!arrayInit(InventoryList, 8, 1, 1)) {
+                        continue;
+                    }
+                    var ItemClass = getArrayItemAddr(InventoryList, 8, 0);
+                    if (ItemClass === null) {
+                        continue;
+                    }
+                    InventoryList.add(0x10).writeFloat(1.0);          // Weight
+                    InventoryList.add(0x14).writeU32(DesiredNum);     // GuaranteedSpawns
+                    InventoryList.add(0x18).writeU32(0);              // MaximumSpawns
+                    InventoryList.add(0x1C).writeU32(1);              // StackSizeToSpawn
+                    InventoryList.add(0x20).writeU64(0);              // pad_20[8]
+
+                    ItemClass.writePointer(Clazz);
+                }
             }
-        }
+        } catch (e) {}
     },
 });
