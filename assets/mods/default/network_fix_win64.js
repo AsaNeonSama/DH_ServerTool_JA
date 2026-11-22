@@ -1,31 +1,27 @@
 'use strict';
 
 // ============================================================================
-// Network & Reconnect Fix (Server-Side Default Patch)
-// Fixes verified DreadHungerServer-Win64-Shipping.exe reconnect & join issues:
-//   1. Opening-roster lock at match start (anti-intrusion guard): snapshots
-//      all opening participants when poker finishes and the match starts
+// Server Connection Hygiene & Opening-Roster Guard (Server-Side Default Patch)
+// Keeps server-side connection health & poker/opening-roster protection:
+//   1. Opening-roster whitelist at match start (anti-intrusion guard):
+//      snapshots all opening participants when poker completes / match starts
 //      (ADH_GameMode::RandomizeThralls / ADH_GameMode::HandleMatchHasStarted /
 //      leaving MatchState::WaitingToStart). Captures PlayerArray, active
-//      ClientConnections, and ExpectedPlayerIDs so already-loading players are
-//      never dropped while slow-connecting teammates can still join during
-//      WaitingToStart / poker, and blocks any outsider once the match starts.
-//   2. Stale/zombie UNetConnection (ConnectionTimeout = 60s) blocking reconnect
-//      with "Server full." on full servers or corrupting active PlayerState on
-//      delayed timeout -> proactively cleans up old UNetConnection with the
-//      same UniqueId during PreLogin/Login (strictly excluding incoming conn),
-//      plus proactive zombie OldPC/OldConn teardown in FindInactivePlayer.
-//   3. AGameSession::AtCapacity rejecting returning opening-roster participants
-//      whose APlayerState already exists or whose roster slot is locked.
+//      ClientConnections, and ExpectedPlayerIDs so slow-connecting teammates
+//      can finish joining during WaitingToStart / poker, while rejecting any
+//      outsider once the match starts.
+//   2. Stale/zombie UNetConnection (ConnectionTimeout = 60s) & zombie OldPC
+//      maintenance: proactively cleans up old UNetConnection with the same
+//      UniqueId during PreLogin/Login (strictly excluding incoming conn),
+//      and tears down lingering zombie OldPC/OldConn in FindInactivePlayer
+//      onEnter before vanilla re-binding (prevents delayed 60s timeout from
+//      calling SetIsDisconnected(1) -> UnPossess/Destroy(NewPC)).
+//   3. AGameSession::AtCapacity bypass for returning opening-roster / existing
+//      PlayerState participants so full-server slots do not block them.
 //   4. ADH_GameMode::AddInactivePlayer 10s empty-server CloseServer timer
-//      (GameMode + 0x478) never being cancelled when a player reconnects, plus
-//      CloseServer guard preventing premature exit while players are active.
-//   5. ADH_GameMode::FindInactivePlayer fallback matching (case-insensitive
-//      UniqueId string match + unambiguous single-match inactive/disconnected
-//      PlayerName fallback restricted to opening-roster participants).
-//   6. ADH_GameMode::HandleStartingNewPlayer_Implementation RealPawn (+0x638)
-//      recovery when PawnPrivate (+0x280) is null/dead (e.g. disconnected
-//      while controlling a Doppelganger).
+//      (GameMode + 0x478) cancellation on incoming connection/login, plus
+//      CloseServer guard preventing premature exit while players or open
+//      connections remain active.
 // ============================================================================
 
 var moduleBase = Module.findBaseAddress('DreadHungerServer-Win64-Shipping.exe');
@@ -44,12 +40,10 @@ var RVA = {
     ADH_GameMode_Login: 0xDA0700,
     AGameMode_PostLogin: 0x256FEB0,
     ADH_GameMode_FindInactivePlayer: 0xD8F900,
-    ADH_GameMode_HandleStartingNewPlayer: 0xD995A0,
     ADH_GameMode_RandomizeThralls: 0xDA4620,
     ADH_GameMode_HandleMatchHasStarted: 0xD98A50,
     ADH_GameMode_CloseServer: 0xD89800,
     AGameMode_HasMatchEnded: 0x2568770,
-    AGameMode_OverridePlayerState: 0x256EEB0,
     AGameModeBase_MustSpectate: 0x29EA330,
 
     UNetConnection_CleanUp: 0x2670DF0,
@@ -61,20 +55,13 @@ var RVA = {
     FTimerManager_InternalClearTimer: 0x28F6A00,
 
     APlayerState_GetPlayerName: 0x27CAED0,
-    APlayerState_SetIsInactive: 0x27D68B0,
-    APlayerState_SetUniqueId: 0x27D6D60,
-    AActor_SetOwner: 0x22E9CE0,
     AActor_Destroy: 0x22D1D40,
-    APawn_SetPlayerState: 0x2752480,
-    ADH_Character_IsAlive: 0xD5C850,
-    ADH_PlayerController_SetDHPlayerState: 0xE4D880,
 
     ADH_GameMode_GetPrivateStaticClass: 0xEB5E20,
     ADH_GameState_StaticClass: 0xEBE030,
     ADH_PlayerState_GetPrivateStaticClass: 0xEED6B0,
     APlayerController_GetPrivateStaticClass: 0x2AA84E0,
-    ADH_PlayerController_GetPrivateStaticClass: 0xEE2F70,
-    ADH_HumanCharacter_StaticClass: 0xEC3DA0
+    ADH_PlayerController_GetPrivateStaticClass: 0xEE2F70
 };
 
 var OFF = {
@@ -86,7 +73,6 @@ var OFF = {
     actorOwner: 0xE0,
 
     worldNetDriver: 0x38,
-    worldAuthorityGameMode: 0x118,
 
     netDriverClientConnections: 0x90,
     netConnPlayerController: 0x30,
@@ -103,18 +89,13 @@ var OFF = {
     gameStateExpectedPlayerIds: 0x420,
 
     controllerPlayerState: 0x228,
-    controllerStartSpotWeak: 0x230,
     playerControllerNetConnection: 0x418,
     dhControllerPlayerState: 0x658,
 
     playerStateFlags: 0x22A,
     playerStateSavedNetworkAddress: 0x240,
     playerStateUniqueId: 0x250,
-    playerStatePawnPrivate: 0x280,
-    playerStateIsDead: 0x570,
-    playerStateIsDisconnected: 0x571,
-    playerStateSelectedRole: 0x590,
-    playerStateRealPawn: 0x638
+    playerStateIsDisconnected: 0x571
 };
 
 var NMT_LOGIN = 5;
@@ -142,28 +123,18 @@ var AActor_GetWorldTimerManager = new NativeFunction(moduleBase.add(RVA.AActor_G
 var FTimerManager_FindTimer = new NativeFunction(moduleBase.add(RVA.FTimerManager_FindTimer), 'pointer', ['pointer', 'pointer'], 'win64');
 var FTimerManager_InternalClearTimer = new NativeFunction(moduleBase.add(RVA.FTimerManager_InternalClearTimer), 'void', ['pointer', 'uint64'], 'win64');
 var AGameMode_HasMatchEnded = new NativeFunction(moduleBase.add(RVA.AGameMode_HasMatchEnded), 'uint8', ['pointer'], 'win64');
-var AGameMode_OverridePlayerState = new NativeFunction(moduleBase.add(RVA.AGameMode_OverridePlayerState), 'void', ['pointer', 'pointer', 'pointer'], 'win64');
 var AGameModeBase_MustSpectate = new NativeFunction(moduleBase.add(RVA.AGameModeBase_MustSpectate), 'uint8', ['pointer', 'pointer'], 'win64');
 var APlayerState_GetPlayerName = new NativeFunction(moduleBase.add(RVA.APlayerState_GetPlayerName), 'pointer', ['pointer', 'pointer'], 'win64');
-var APlayerState_SetIsInactive = new NativeFunction(moduleBase.add(RVA.APlayerState_SetIsInactive), 'void', ['pointer', 'uint8'], 'win64');
-var APlayerState_SetUniqueId = new NativeFunction(moduleBase.add(RVA.APlayerState_SetUniqueId), 'void', ['pointer', 'pointer'], 'win64');
-var AActor_SetOwner = new NativeFunction(moduleBase.add(RVA.AActor_SetOwner), 'void', ['pointer', 'pointer'], 'win64');
 var AActor_Destroy = new NativeFunction(moduleBase.add(RVA.AActor_Destroy), 'uint8', ['pointer', 'uint8', 'uint8'], 'win64');
-var APawn_SetPlayerState = new NativeFunction(moduleBase.add(RVA.APawn_SetPlayerState), 'void', ['pointer', 'pointer'], 'win64');
-var ADH_Character_IsAlive = new NativeFunction(moduleBase.add(RVA.ADH_Character_IsAlive), 'uint8', ['pointer'], 'win64');
-var ADH_PlayerController_SetDHPlayerState = new NativeFunction(moduleBase.add(RVA.ADH_PlayerController_SetDHPlayerState), 'void', ['pointer', 'pointer'], 'win64');
 
 var ADH_GameMode_StaticClass = new NativeFunction(moduleBase.add(RVA.ADH_GameMode_GetPrivateStaticClass), 'pointer', [], 'win64');
 var ADH_GameState_StaticClass = new NativeFunction(moduleBase.add(RVA.ADH_GameState_StaticClass), 'pointer', [], 'win64');
 var ADH_PlayerState_StaticClass = new NativeFunction(moduleBase.add(RVA.ADH_PlayerState_GetPrivateStaticClass), 'pointer', [], 'win64');
 var APlayerController_StaticClass = new NativeFunction(moduleBase.add(RVA.APlayerController_GetPrivateStaticClass), 'pointer', [], 'win64');
 var ADH_PlayerController_StaticClass = new NativeFunction(moduleBase.add(RVA.ADH_PlayerController_GetPrivateStaticClass), 'pointer', [], 'win64');
-var ADH_HumanCharacter_StaticClass = new NativeFunction(moduleBase.add(RVA.ADH_HumanCharacter_StaticClass), 'pointer', [], 'win64');
 
-// Reusable scratch buffers (Game Thread only)
+// Reusable scratch buffer (Game Thread only)
 var scratchFStringBuf = Memory.alloc(16);
-var emptySharedPtrBuf = Memory.alloc(16);
-emptySharedPtrBuf.writeByteArray([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
 var ZERO_16 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
 // Cached UClass* pointers (lazily populated once UE4 classes are initialized)
@@ -172,7 +143,6 @@ var cachedDHGameStateClass = ptr(0);
 var cachedDHPlayerStateClass = ptr(0);
 var cachedPlayerControllerClass = ptr(0);
 var cachedDHPlayerControllerClass = ptr(0);
-var cachedDHHumanCharacterClass = ptr(0);
 
 // Game-thread call-stack state
 var currentLoginConnection = ptr(0);
@@ -238,13 +208,6 @@ function getDHPlayerControllerClass() {
         cachedDHPlayerControllerClass = ADH_PlayerController_StaticClass();
     }
     return cachedDHPlayerControllerClass;
-}
-
-function getDHHumanCharacterClass() {
-    if (cachedDHHumanCharacterClass.isNull()) {
-        cachedDHHumanCharacterClass = ADH_HumanCharacter_StaticClass();
-    }
-    return cachedDHHumanCharacterClass;
 }
 
 function isA(objPtr, targetClassPtr) {
@@ -859,32 +822,6 @@ function cleanupStaleControllersForCandidatePlayerState(gameModePtr, newPC) {
         }
     }
 
-    // 3. Unambiguous single inactive/disconnected PlayerName match (roster-checked, never kicks active players)
-    if (candidatePS.isNull() && incomingName.length > 0 && allowedNames[incomingName] === true) {
-        var nameMatches = [];
-        var activeNameConflict = false;
-        for (var m = 0; m < count; m++) {
-            var psNameCand = dataPtr.add(m * 8).readPointer();
-            if (psNameCand.isNull() || psNameCand.equals(newPS) || isPendingKill(psNameCand) || !isA(psNameCand, dhPsClass)) {
-                continue;
-            }
-            var psNm = getNormalizedPlayerName(psNameCand);
-            if (psNm.length === 0 || psNm !== incomingName) {
-                continue;
-            }
-            var isInact = (psNameCand.add(OFF.playerStateFlags).readU8() & PLAYER_STATE_INACTIVE_MASK) !== 0;
-            var isDisc = psNameCand.add(OFF.playerStateIsDisconnected).readU8() !== 0;
-            if (!isInact && !isDisc) {
-                activeNameConflict = true;
-                break;
-            }
-            nameMatches.push(psNameCand);
-        }
-        if (!activeNameConflict && nameMatches.length === 1) {
-            candidatePS = nameMatches[0];
-        }
-    }
-
     if (candidatePS.isNull()) {
         return 0;
     }
@@ -1267,225 +1204,22 @@ Interceptor.attach(moduleBase.add(RVA.AGameMode_PostLogin), {
 });
 
 // ============================================================================
-// Hook 6: ADH_GameMode::FindInactivePlayer
-//   - onEnter: proactively tear down any lingering zombie OldPC/OldConn still
-//     referencing the target PlayerState (prevents delayed 60s ConnectionTimeout
-//     from calling SetIsDisconnected(1) -> UnPossess/Destroy(NewPC) after
-//     reconnect via IP+Name or UID mismatch!)
-//   - onLeave: fallback recovery if vanilla exact UniqueId/IP match returned false:
-//     (a) Case-insensitive UniqueId string match against PlayerArray
-//     (b) Unambiguous single inactive/disconnected PlayerName match restricted
-//         to locked opening-roster participants (handles IP / subsystem change)
+// Hook 6: ADH_GameMode::FindInactivePlayer (onEnter only)
+//   - Proactively tears down any lingering zombie OldPC/OldConn still
+//     referencing the target PlayerState before vanilla re-binding (prevents
+//     delayed 60s ConnectionTimeout from calling SetIsDisconnected(1) ->
+//     UnPossess/Destroy(NewPC)).
 // ============================================================================
 Interceptor.attach(moduleBase.add(RVA.ADH_GameMode_FindInactivePlayer), {
     onEnter: function (args) {
-        this.gameMode = args[0];
-        this.newPC = args[1];
         try {
-            cleanupStaleControllersForCandidatePlayerState(this.gameMode, this.newPC);
-        } catch (e) {}
-    },
-    onLeave: function (retval) {
-        try {
-            var gameMode = this.gameMode;
-            var newPC = this.newPC;
-            if (gameMode.isNull() || isPendingKill(gameMode) || newPC.isNull() || isPendingKill(newPC)) {
-                return;
-            }
-            if (!isA(gameMode, getDHGameModeClass()) || isMatchWaitingToStart(gameMode) || isMatchEnded(gameMode)) {
-                return;
-            }
-            var vanillaMatched = (retval.toInt32() & 1) !== 0;
-            var curPS = newPC.add(OFF.controllerPlayerState).readPointer();
-            if (vanillaMatched) {
-                var vUid = !curPS.isNull() ? getNormalizedUniqueIdString(curPS.add(OFF.playerStateUniqueId)) : '';
-                var vName = !curPS.isNull() ? getNormalizedPlayerName(curPS) : '';
-                logEvent(
-                    '[状態復元] 既存PlayerStateを再紐付けしました (標準一致 / UID: ' +
-                    sanitizeLogValue(vUid) + ' / Name: ' + sanitizeLogValue(vName) + ')'
-                );
-                return;
-            }
-
-            if ((AGameModeBase_MustSpectate(gameMode, newPC) & 1) !== 0) {
-                return;
-            }
-            var newPS = curPS;
-            if (newPS.isNull() || isPendingKill(newPS)) {
-                return;
-            }
-            var gameState = gameMode.add(OFF.gameModeGameState).readPointer();
-            if (gameState.isNull() || isPendingKill(gameState)) {
-                return;
-            }
-            var arrPtr = gameState.add(OFF.gameStatePlayerArray);
-            var dataPtr = arrPtr.readPointer();
-            var count = arrPtr.add(8).readS32();
-            if (dataPtr.isNull() || count <= 0 || count > MAX_PLAYER_ARRAY) {
-                return;
-            }
-
-            isRosterEnforced(gameMode);
-
-            var incomingUid = getNormalizedUniqueIdString(newPS.add(OFF.playerStateUniqueId));
-            var incomingName = getNormalizedPlayerName(newPS);
-            var dhPsClass = getDHPlayerStateClass();
-            var matchedPS = ptr(0);
-            var matchMode = '';
-
-            // Pass 1: case-insensitive UniqueId string match (must belong to opening roster)
-            if (incomingUid.length > 0 && allowedUids[incomingUid] === true) {
-                for (var i = 0; i < count; i++) {
-                    var cand = dataPtr.add(i * 8).readPointer();
-                    if (cand.isNull() || cand.equals(newPS) || isPendingKill(cand) || !isA(cand, dhPsClass)) {
-                        continue;
-                    }
-                    var candUid = getNormalizedUniqueIdString(cand.add(OFF.playerStateUniqueId));
-                    if (candUid.length > 0 && candUid === incomingUid) {
-                        matchedPS = cand;
-                        matchMode = 'UID大文字小文字';
-                        break;
-                    }
-                }
-            }
-
-            // Pass 2: unambiguous single inactive/disconnected exact PlayerName match (must belong to opening roster)
-            if (matchedPS.isNull() && incomingName.length > 0 && allowedNames[incomingName] === true) {
-                var nameMatches = [];
-                var activeNameConflict = false;
-                for (var j = 0; j < count; j++) {
-                    var ps = dataPtr.add(j * 8).readPointer();
-                    if (ps.isNull() || ps.equals(newPS) || isPendingKill(ps) || !isA(ps, dhPsClass)) {
-                        continue;
-                    }
-                    var psName = getNormalizedPlayerName(ps);
-                    if (psName.length === 0 || psName !== incomingName) {
-                        continue;
-                    }
-                    var isInactive = (ps.add(OFF.playerStateFlags).readU8() & PLAYER_STATE_INACTIVE_MASK) !== 0;
-                    var isDisc = ps.add(OFF.playerStateIsDisconnected).readU8() !== 0;
-                    if (!isInactive && !isDisc) {
-                        activeNameConflict = true;
-                        break;
-                    }
-                    nameMatches.push(ps);
-                }
-                if (!activeNameConflict && nameMatches.length === 1) {
-                    matchedPS = nameMatches[0];
-                    matchMode = '名前一致';
-                }
-            }
-
-            if (matchedPS.isNull()) {
-                logEvent(
-                    '[状態復元なし] 既存PlayerStateが見つかりませんでした (UID: ' +
-                    sanitizeLogValue(incomingUid) + ' / Name: ' + sanitizeLogValue(incomingName) +
-                    ' / PlayerArray: ' + count + '件)'
-                );
-                return;
-            }
-
-            // If a player legitimately recovered via Name fallback after UID change, register new UID too.
-            if (incomingUid.length > 0) {
-                allowedUids[incomingUid] = true;
-            }
-
-            // Mirror ADH_GameMode::FindInactivePlayer+0x21a..+0x330 swap sequence
-            newPC.add(OFF.controllerPlayerState).writePointer(matchedPS);
-            if (isA(newPC, getDHPlayerControllerClass())) {
-                ADH_PlayerController_SetDHPlayerState(newPC, matchedPS);
-            }
-            AActor_SetOwner(matchedPS, newPC);
-            APlayerState_SetIsInactive(matchedPS, 0);
-            AGameMode_OverridePlayerState(gameMode, newPC, newPS);
-            APlayerState_SetIsInactive(newPS, 1);
-            APlayerState_SetUniqueId(newPS, emptySharedPtrBuf);
-            AActor_Destroy(newPS, 0, 1);
-            // Reset FWeakObjectPtr StartSpot to INDEX_NONE (-1, 0)
-            newPC.add(OFF.controllerStartSpotWeak).writeS32(-1);
-            newPC.add(OFF.controllerStartSpotWeak + 4).writeS32(0);
-
-            logEvent(
-                '[状態復元] フォールバック一致でPlayerStateを再紐付けしました (一致: ' + matchMode +
-                ' / UID: ' + sanitizeLogValue(incomingUid) +
-                ' / Name: ' + sanitizeLogValue(incomingName) + ')'
-            );
-
-            retval.replace(ptr(1));
+            cleanupStaleControllersForCandidatePlayerState(args[0], args[1]);
         } catch (e) {}
     }
 });
 
 // ============================================================================
-// Hook 7: ADH_GameMode::HandleStartingNewPlayer_Implementation
-//   - If PawnPrivate (+0x280) is null/dead while RealPawn (+0x638) is still a
-//     living pawn (e.g. Thrall disconnected while controlling a Doppelganger),
-//     restore PawnPrivate = RealPawn so vanilla re-possesses their real body.
-// ============================================================================
-Interceptor.attach(moduleBase.add(RVA.ADH_GameMode_HandleStartingNewPlayer), {
-    onEnter: function (args) {
-        try {
-            var gameMode = args[0];
-            var newPC = args[1];
-            if (newPC.isNull() || isPendingKill(newPC)) {
-                return;
-            }
-            var ps = newPC.add(OFF.controllerPlayerState).readPointer();
-            if (ps.isNull() || isPendingKill(ps) || !isA(ps, getDHPlayerStateClass())) {
-                return;
-            }
-            if (ps.add(OFF.playerStateSelectedRole).readPointer().isNull()) {
-                return;
-            }
-            if (ps.add(OFF.playerStateIsDead).readU8() !== 0) {
-                return;
-            }
-
-            var humanClass = getDHHumanCharacterClass();
-            var pawn = ps.add(OFF.playerStatePawnPrivate).readPointer();
-            var pawnUsable = false;
-            if (!pawn.isNull() && !isPendingKill(pawn)) {
-                if (isA(pawn, humanClass)) {
-                    pawnUsable = (ADH_Character_IsAlive(pawn) & 1) !== 0;
-                } else {
-                    pawnUsable = true;
-                }
-            }
-
-            var restoredRealPawn = false;
-            if (!pawnUsable) {
-                var realPawn = ps.add(OFF.playerStateRealPawn).readPointer();
-                if (!realPawn.isNull() && !isPendingKill(realPawn)) {
-                    var realUsable = !isA(realPawn, humanClass) || (ADH_Character_IsAlive(realPawn) & 1) !== 0;
-                    if (realUsable) {
-                        APawn_SetPlayerState(realPawn, ps);
-                        pawn = realPawn;
-                        pawnUsable = true;
-                        restoredRealPawn = true;
-                    }
-                }
-            }
-
-            if (!gameMode.isNull() && !isMatchWaitingToStart(gameMode)) {
-                var psName = getNormalizedPlayerName(ps);
-                if (pawnUsable) {
-                    logEvent(
-                        '[操作復帰] 既存キャラを再憑依します (Name: ' + sanitizeLogValue(psName) +
-                        ' / RealPawn復元: ' + (restoredRealPawn ? 'あり' : 'なし') + ')'
-                    );
-                } else {
-                    logEvent(
-                        '[操作復帰] 生存Pawnなしのため標準リスポーン経路へ進みます (Name: ' +
-                        sanitizeLogValue(psName) + ')'
-                    );
-                }
-            }
-        } catch (e) {}
-    }
-});
-
-// ============================================================================
-// Hook 8: ADH_GameMode::CloseServer guard (pinned NativeCallback at top level)
+// Hook 7: ADH_GameMode::CloseServer guard (pinned NativeCallback at top level)
 //   - Prevents premature empty-server exit if any active player or client
 //     connection exists while the match has not ended.
 // ============================================================================

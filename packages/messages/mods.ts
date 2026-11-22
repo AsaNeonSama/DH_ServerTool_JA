@@ -47,7 +47,7 @@ export const MOD_MESSAGES: ModMessages = {
     console: "Webコンソール連携",
     spellChargeFix: "スペルチャージ修正",
     deathOfflineAnnouncement: "オフラインアナウンス",
-    networkFix: "ネットワーク・再接続修正",
+    networkFix: "ネットワーク接続保護・乱入防止",
   },
   selectable: {
     randRole: "役職ランダム",

@@ -14,7 +14,7 @@ Dread Hunger Windows Dedicated Server（原生未改造サーバー）用の統�
   - `console_win64.js`（Web コンソール連携・召喚前ブループリント自動ロード・幽体状態/傀儡解除対応・ポート変数化）
   - `spell_charge_fix_win64.js`（スペルチャージ修正）
   - `death_offline_announcement_win64.js`（オフライン・死亡アナウンス日本語版）
-  - `network_fix_win64.js`（ネットワーク・再接続修正：ポーカー終了・試合開始時ロックによる途中乱入防止・ゾンビ接続および残留旧Controllerの即時クリーンアップ・満員時の再接続許可・無人10秒サーバー終了タイマー解除・PlayerState フォールバック復元・分身中切断時の `RealPawn` 復元・診断ログ出力）
+  - `network_fix_win64.js`（ネットワーク接続保護・乱入防止：ポーカー／試合開始時ロックによる途中乱入防止・ゾンビ接続および残留旧Controllerの即時クリーンアップ・満員時の開局メンバー許可・無人10秒サーバー終了タイマー解除＆CloseServer抑止・診断ログ出力）
 - **JS パッチ実行ログのファイル出力 (`./patch_runtime.log`)**:
   - Frida JS パッチのランタイムログおよびエラーは、`DH_ServerTool_JA.exe` と同階層の `./patch_runtime.log` に集約出力されます（サーバータブ `[2]` には出力しません）。
   - 試合開始ごとに上書きされ、常に最新 1 試合分のみ保持されます。
