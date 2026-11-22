@@ -3,8 +3,8 @@ import {
   CONSOLE_PATCH_PORT_TOKEN,
   DEFAULT_PATCH_SCRIPTS,
   SELECTABLE_MOD_OPTIONS,
-} from "./constants";
-import type { ModMenuOption, PatchScript } from "./types";
+} from "../constants";
+import type { ModMenuOption, PatchScript } from "../types";
 
 export function areModOptionsConflicting(
   a: ModMenuOption,

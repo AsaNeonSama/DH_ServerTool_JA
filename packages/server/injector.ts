@@ -1,5 +1,5 @@
 import { resolve } from "path";
-import frida, { MessageType, Stdio } from "frida";
+import frida, { LogLevel, MessageType, Stdio } from "frida";
 import type { Message, Script, Session, SessionDetachReason } from "frida";
 import {
   C,
@@ -10,18 +10,21 @@ import {
   UE_PROJECT_NAME,
   WINDOWS_CONSOLE_BOOTSTRAP_SCRIPT,
   WINDOWS_NATIVE_FUNCTION_PRELUDE,
-} from "./constants";
-import { println } from "./terminal";
+} from "../constants";
+import { SERVER_MESSAGES } from "../messages";
+import { println } from "../terminal";
 import type {
   ActiveInjectionSession,
   PatchScript,
   SpawnAndInjectOptions,
-} from "./types";
+} from "../types";
 import {
   bindProcessToLauncherJob,
   isProcessAlive,
   terminateProcessByPid,
-} from "./win32";
+} from "../win32";
+import { appendPatchRuntimeLog, resetPatchRuntimeLog } from "./patchLogger";
+import type { PatchLogLevel } from "./patchLogger";
 
 interface TimedOpOptions {
   readonly timeoutMs: number;
@@ -45,6 +48,16 @@ function toError(err: unknown, fallback: string): Error {
   return new Error(fallback);
 }
 
+function mapFridaLogLevel(level: LogLevel): PatchLogLevel {
+  if (level === LogLevel.Error) {
+    return "ERROR";
+  }
+  if (level === LogLevel.Warning) {
+    return "WARN";
+  }
+  return "INFO";
+}
+
 function runWithTimeout<T>(
   promise: Promise<T>,
   options: TimedOpOptions
@@ -53,7 +66,7 @@ function runWithTimeout<T>(
   if (signal?.aborted) {
     // Suppress potential late rejection from the abandoned operation
     promise.catch((): void => undefined);
-    return Promise.reject(createAbortError(`${label} が中断されました`));
+    return Promise.reject(createAbortError(SERVER_MESSAGES.opAborted(label)));
   }
 
   const guarded: Promise<T> = new Promise(
@@ -71,14 +84,14 @@ function runWithTimeout<T>(
         if (settled) return;
         settled = true;
         cleanup();
-        rejectPromise(createAbortError(`${label} が中断されました`));
+        rejectPromise(createAbortError(SERVER_MESSAGES.opAborted(label)));
       };
 
       const timer: ReturnType<typeof setTimeout> = setTimeout((): void => {
         if (settled) return;
         settled = true;
         cleanup();
-        rejectPromise(new Error(`${label} がタイムアウトしました (${timeoutMs}ms)`));
+        rejectPromise(new Error(SERVER_MESSAGES.opTimedOut(label, timeoutMs)));
       }, timeoutMs);
 
       if (signal) {
@@ -96,7 +109,7 @@ function runWithTimeout<T>(
           if (settled) return;
           settled = true;
           cleanup();
-          rejectPromise(toError(err, `${label} に失敗しました`));
+          rejectPromise(toError(err, SERVER_MESSAGES.opFailed(label)));
         }
       );
     }
@@ -106,13 +119,13 @@ function runWithTimeout<T>(
 
 function sleepDelay(ms: number, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted) {
-    return Promise.reject(createAbortError("注入処理が中断されました"));
+    return Promise.reject(createAbortError(SERVER_MESSAGES.injectionAborted));
   }
   const waiter: Promise<void> = new Promise(
     (resolveDelay: () => void, rejectDelay: (err: Error) => void): void => {
       const onAbort = (): void => {
         clearTimeout(timer);
-        rejectDelay(createAbortError("注入処理が中断されました"));
+        rejectDelay(createAbortError(SERVER_MESSAGES.injectionAborted));
       };
       const timer: ReturnType<typeof setTimeout> = setTimeout((): void => {
         signal?.removeEventListener("abort", onAbort);
@@ -142,29 +155,37 @@ async function attachWithRetry(
   let lastError: unknown = null;
   for (let attempt: number = 1; attempt <= FRIDA_ATTACH_MAX_RETRIES; attempt++) {
     if (signal?.aborted) {
-      throw createAbortError("Fridaアタッチが中断されました");
+      throw createAbortError(SERVER_MESSAGES.attachAborted);
     }
     try {
       return await runWithTimeout(frida.attach(pid), {
         timeoutMs: FRIDA_RPC_TIMEOUT_MS,
-        label: `Fridaアタッチ (PID: ${pid})`,
+        label: SERVER_MESSAGES.attachLabel(pid),
         signal,
       });
     } catch (err: unknown) {
       lastError = err;
-      if (signal?.aborted || !isProcessAlive(pid) || attempt >= FRIDA_ATTACH_MAX_RETRIES) {
+      if (
+        signal?.aborted ||
+        !isProcessAlive(pid) ||
+        attempt >= FRIDA_ATTACH_MAX_RETRIES
+      ) {
         throw err;
       }
       await sleepDelay(FRIDA_ATTACH_RETRY_DELAY_MS * attempt, signal);
     }
   }
-  throw toError(lastError, "Frida attach failed");
+  throw toError(lastError, SERVER_MESSAGES.attachFailedFallback);
 }
 
 /**
  * Spawns DreadHungerServer-Win64-Shipping.exe directly in a suspended state
  * via Frida, injects all selected MOD scripts at 0s (before UE4 PreInit and
  * UObject::Serialize run), and then resumes the process.
+ *
+ * All Frida JS patch runtime logs (`send(...)`, `console.*`, and JS errors) are
+ * written to `./patch_runtime.log` (overwritten every match round) and never
+ * printed to Tab 2.
  */
 export async function spawnAndInjectServer(
   options: SpawnAndInjectOptions
@@ -179,8 +200,11 @@ export async function spawnAndInjectServer(
   }: SpawnAndInjectOptions = options;
 
   if (signal?.aborted) {
-    throw createAbortError("サーバー起動が中断されました");
+    throw createAbortError(SERVER_MESSAGES.launchAborted);
   }
+
+  // Overwrite per-match patch runtime log file in the WindowsServer root directory
+  resetPatchRuntimeLog({ port, patches });
 
   const resolvedExe: string = resolve(shippingExecutable);
   const argv: string[] = [
@@ -192,7 +216,7 @@ export async function spawnAndInjectServer(
   ];
 
   println(
-    `${C.LIGHT_CYAN} * ${shippingExecutable} を一時停止状態で直接起動中 (ポート: ${port})...`
+    `${C.LIGHT_CYAN} * ${SERVER_MESSAGES.spawningSuspended(shippingExecutable, port)}`
   );
 
   const pid: number = await runWithTimeout(
@@ -202,7 +226,7 @@ export async function spawnAndInjectServer(
     }),
     {
       timeoutMs: FRIDA_RPC_TIMEOUT_MS,
-      label: "サーバープロセス生成",
+      label: SERVER_MESSAGES.spawnLabel,
       signal,
     }
   );
@@ -210,7 +234,7 @@ export async function spawnAndInjectServer(
   bindProcessToLauncherJob(pid);
 
   println(
-    `${C.LIGHT_GREEN} * プロセス生成完了 (PID: ${C.LIGHT_WHITE}${pid}${C.LIGHT_GREEN}) — パッチ注入を開始します`
+    `${C.LIGHT_GREEN} * ${SERVER_MESSAGES.spawnedProcessPrefix} ${C.LIGHT_WHITE}${pid}${C.LIGHT_GREEN}${SERVER_MESSAGES.spawnedProcessSuffix}`
   );
 
   let session: Session | null = null;
@@ -236,13 +260,20 @@ export async function spawnAndInjectServer(
         }),
         {
           timeoutMs: FRIDA_RPC_TIMEOUT_MS,
-          label: "コンソール初期化スクリプト生成",
+          label: SERVER_MESSAGES.consoleBootstrapCreateLabel,
           signal,
         }
       );
+      consoleBootstrap.logHandler = (level: LogLevel, text: string): void => {
+        appendPatchRuntimeLog({
+          level: mapFridaLogLevel(level),
+          fileName: "windows_console_bootstrap",
+          message: text,
+        });
+      };
       await runWithTimeout(consoleBootstrap.load(), {
         timeoutMs: FRIDA_RPC_TIMEOUT_MS,
-        label: "コンソール初期化スクリプト実行",
+        label: SERVER_MESSAGES.consoleBootstrapLoadLabel,
         signal,
       });
     } finally {
@@ -250,7 +281,7 @@ export async function spawnAndInjectServer(
         try {
           await runWithTimeout(consoleBootstrap.unload(), {
             timeoutMs: FRIDA_CLEANUP_TIMEOUT_MS,
-            label: "コンソール初期化スクリプト解放",
+            label: SERVER_MESSAGES.consoleBootstrapUnloadLabel,
           });
         } catch {
           // Non-fatal cleanup failure
@@ -263,17 +294,17 @@ export async function spawnAndInjectServer(
       if (!patch) continue;
 
       if (signal?.aborted) {
-        throw createAbortError("パッチ注入が中断されました");
+        throw createAbortError(SERVER_MESSAGES.patchInjectionAborted);
       }
 
       if (detached) {
         throw new Error(
-          `プロセスから切断されたため注入を中断しました (${reasonStr ?? "detached"})`
+          SERVER_MESSAGES.processDetachedDuringInjection(reasonStr ?? "detached")
         );
       }
 
       println(
-        `${C.CYAN}   [${i + 1}/${patches.length}] 注入中: ${C.LIGHT_WHITE}${patch.label} ${C.LIGHT_BLACK}(${patch.fileName})`
+        `${C.CYAN}   ${SERVER_MESSAGES.injectingPatchPrefix(i + 1, patches.length)} ${C.LIGHT_WHITE}${patch.label} ${C.LIGHT_BLACK}(${patch.fileName})`
       );
 
       const cleanSource: string =
@@ -284,7 +315,7 @@ export async function spawnAndInjectServer(
         }),
         {
           timeoutMs: FRIDA_RPC_TIMEOUT_MS,
-          label: `スクリプト生成 (${patch.fileName})`,
+          label: SERVER_MESSAGES.scriptCreateLabel(patch.fileName),
           signal,
         }
       );
@@ -292,6 +323,14 @@ export async function spawnAndInjectServer(
       const loadState: { loading: boolean; error: string | null } = {
         loading: true,
         error: null,
+      };
+
+      script.logHandler = (level: LogLevel, text: string): void => {
+        appendPatchRuntimeLog({
+          level: mapFridaLogLevel(level),
+          fileName: patch.fileName,
+          message: text,
+        });
       };
 
       script.message.connect((message: Message): void => {
@@ -307,16 +346,24 @@ export async function spawnAndInjectServer(
           if (loadState.loading && loadState.error === null) {
             loadState.error = desc;
           }
-          println(`${C.RED}   [PATCH ERROR:${patch.fileName}] ${desc}${stack}`);
+          appendPatchRuntimeLog({
+            level: "ERROR",
+            fileName: patch.fileName,
+            message: `${desc}${stack}`,
+          });
         } else if (message.type === MessageType.Send) {
           const text: string = safeStringifyPayload(message.payload);
-          println(`${C.LIGHT_CYAN}   [PATCH:${patch.fileName}] ${text}`);
+          appendPatchRuntimeLog({
+            level: "INFO",
+            fileName: patch.fileName,
+            message: text,
+          });
         }
       });
 
       await runWithTimeout(script.load(), {
         timeoutMs: FRIDA_RPC_TIMEOUT_MS,
-        label: `スクリプト注入 (${patch.fileName})`,
+        label: SERVER_MESSAGES.scriptLoadLabel(patch.fileName),
         signal,
       });
       loadState.loading = false;
@@ -324,26 +371,26 @@ export async function spawnAndInjectServer(
 
       if (loadState.error !== null) {
         throw new Error(
-          `パッチ初期化エラー (${patch.fileName}): ${loadState.error}`
+          SERVER_MESSAGES.patchInitError(patch.fileName, loadState.error)
         );
       }
 
       println(
-        `${C.LIGHT_GREEN}   [${i + 1}/${patches.length}] 注入完了: ${patch.label}`
+        `${C.LIGHT_GREEN}   ${SERVER_MESSAGES.injectedPatchDone(i + 1, patches.length, patch.label)}`
       );
     }
 
     if (signal?.aborted) {
-      throw createAbortError("サーバー再開が中断されました");
+      throw createAbortError(SERVER_MESSAGES.resumeAborted);
     }
 
     await runWithTimeout(frida.resume(pid), {
       timeoutMs: FRIDA_RPC_TIMEOUT_MS,
-      label: `サーバー再開 (PID: ${pid})`,
+      label: SERVER_MESSAGES.resumeLabel(pid),
       signal,
     });
     println(
-      `${C.LIGHT_GREEN} * 全 ${patches.length} 件のMODパッチの注入完了 -> サーバー実行を再開しました!`
+      `${C.LIGHT_GREEN} * ${SERVER_MESSAGES.allPatchesInjectedResumed(patches.length)}`
     );
   } catch (err: unknown) {
     for (const s of scripts) {
@@ -351,7 +398,7 @@ export async function spawnAndInjectServer(
         if (!detached) {
           await runWithTimeout(s.unload(), {
             timeoutMs: FRIDA_CLEANUP_TIMEOUT_MS,
-            label: "スクリプト解放",
+            label: SERVER_MESSAGES.scriptUnloadLabel,
           });
         }
       } catch {
@@ -362,7 +409,7 @@ export async function spawnAndInjectServer(
       try {
         await runWithTimeout(session.detach(), {
           timeoutMs: FRIDA_CLEANUP_TIMEOUT_MS,
-          label: "セッション切断",
+          label: SERVER_MESSAGES.sessionDetachLabel,
         });
       } catch {
         // Ignore detach failure
@@ -371,7 +418,7 @@ export async function spawnAndInjectServer(
     try {
       await runWithTimeout(frida.kill(pid), {
         timeoutMs: FRIDA_CLEANUP_TIMEOUT_MS,
-        label: "プロセス終了",
+        label: SERVER_MESSAGES.processKillLabel,
       });
     } catch {
       // Fallback to Win32 TerminateProcess below
@@ -403,7 +450,7 @@ export async function spawnAndInjectServer(
           if (!detached) {
             await runWithTimeout(s.unload(), {
               timeoutMs: FRIDA_CLEANUP_TIMEOUT_MS,
-              label: "スクリプト解放",
+              label: SERVER_MESSAGES.scriptUnloadLabel,
             });
           }
         } catch {
@@ -415,7 +462,7 @@ export async function spawnAndInjectServer(
         if (!detached) {
           await runWithTimeout(activeSession.detach(), {
             timeoutMs: FRIDA_CLEANUP_TIMEOUT_MS,
-            label: "セッション切断",
+            label: SERVER_MESSAGES.sessionDetachLabel,
           });
         }
       } catch {

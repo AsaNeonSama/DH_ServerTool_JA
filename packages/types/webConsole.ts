@@ -104,5 +104,6 @@ export type ConsoleBridgePayload =
 export type RouteHandler = (req: Request) => Response | Promise<Response>;
 
 export type EncryptedRouteHandler = (
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  clientIp: string
 ) => ApiResultPayload | Promise<ApiResultPayload>;

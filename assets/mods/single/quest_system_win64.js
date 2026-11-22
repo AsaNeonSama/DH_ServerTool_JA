@@ -15,7 +15,10 @@ var FActorSpawnParameters_FActorSpawnParameters = new NativeFunction(base.add(0x
 var UClass_GetPrivateStaticClass = new NativeFunction(base.add(0x11F02E0), 'pointer', [], 'win64');
 var StaticLoadObject = new NativeFunction(base.add(0x137B290), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer', 'int32', 'pointer', 'int8', 'pointer'], 'win64');
 var StaticFindObject = new NativeFunction(base.add(0x137AAA0), 'pointer', ['pointer', 'pointer', 'pointer', 'int8'], 'win64');
-var FText_FromString = new NativeFunction(base.add(0x10963B0), 'pointer', ['pointer', 'pointer'], 'win64');
+// Use const FString& overload (0x10964E0) so UE4 deep-copies into FMemory instead of
+// moving Frida's Memory.alloc buffer (0x10963B0 is FString&& move -> UAF garbled text over RPC)
+var FText_FromString = new NativeFunction(base.add(0x10964E0), 'pointer', ['pointer', 'pointer'], 'win64');
+var FText_Dtor = new NativeFunction(base.add(0x75CB30), 'void', ['pointer'], 'win64');
 
 // クエスト完了時のランダム報酬プール (1つをランダム配布)
 var REWARD_POOL = [
@@ -99,7 +102,11 @@ function sendPlayerNotice(PlayerState, Message) {
     }
     try {
         var FText_Message = newFText(Message);
-        ADH_PlayerController_ReceiveThrallMessage(PlayerController, FText_Message, ptr(0));
+        try {
+            ADH_PlayerController_ReceiveThrallMessage(PlayerController, FText_Message, ptr(0));
+        } finally {
+            FText_Dtor(FText_Message);
+        }
     } catch (e) {}
 }
 

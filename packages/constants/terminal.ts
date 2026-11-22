@@ -34,6 +34,7 @@ export const C: Readonly<Record<
 export const MOD_MENU_COLS: number = 4;
 export const MOD_MENU_COL_WIDTH: number = 27;
 export const MAX_SERVER_TAB_LINES: number = 400;
+export const MAX_WEB_LOG_LINES: number = 512;
 export const TAB_ACTIVE_STYLE: string = "\x1b[1;30;106m";
 export const TAB_INACTIVE_STYLE: string = "\x1b[37;100m";
 export const TAB_BUTTON_STYLE: string = "\x1b[1;30;47m";

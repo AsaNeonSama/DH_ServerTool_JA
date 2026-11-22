@@ -6,10 +6,19 @@ var MAX_PENDING_COMMANDS = 100;
 // ============================================================================
 // UE4 Native Function Bindings & Hook Addresses
 // ============================================================================
-var FText_FromString = new NativeFunction(moduleBase.add(0x10963B0), 'pointer', ['pointer', 'pointer']);
+// Use const FString& overload (0x10964E0) so UE4 deep-copies into FMemory instead of
+// moving Frida's Memory.alloc buffer (0x10963B0 is FString&& move -> UAF garbled text over RPC)
+var FText_FromString = new NativeFunction(moduleBase.add(0x10964E0), 'pointer', ['pointer', 'pointer'], 'win64');
+var FText_Dtor = new NativeFunction(moduleBase.add(0x75CB30), 'void', ['pointer'], 'win64');
 var FName_GetPlainNameString = new NativeFunction(moduleBase.add(0x11604F0), 'void', ['pointer', 'pointer'], 'win64');
+var FMemory_Free = new NativeFunction(moduleBase.add(0x105DD50), 'void', ['pointer'], 'win64');
 
 var UClass_GetPrivateStaticClass = new NativeFunction(moduleBase.add(0x11F02E0), 'pointer', [], 'win64');
+var ADH_Character_GetPrivateStaticClass = new NativeFunction(moduleBase.add(0xEA0F90), 'pointer', [], 'win64');
+var APlayerController_GetPrivateStaticClass = new NativeFunction(moduleBase.add(0x2AA84E0), 'pointer', [], 'win64');
+var GUObjectArray_ptr = moduleBase.add(0x45C40C8);
+var cachedDHCharacterClass = ptr(0);
+var cachedPlayerControllerClass = ptr(0);
 var StaticLoadObject = new NativeFunction(moduleBase.add(0x137B290), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer', 'int32', 'pointer', 'int8', 'pointer'], 'win64');
 var StaticFindObject = new NativeFunction(moduleBase.add(0x137AAA0), 'pointer', ['pointer', 'pointer', 'pointer', 'int8'], 'win64');
 
@@ -34,8 +43,11 @@ var ADH_GameState_HandleMatchHasStarted_addr = moduleBase.add(0xD99080);
 // UE4 Struct Field Offsets
 // ============================================================================
 var UE_OFFSETS = {
+    uObjectInternalIndex: 0x0C,
     uObjectClassPrivate: 0x10,
     uObjectNamePrivate: 0x18,
+    uStructChainArray: 0x30,
+    uStructChainDepth: 0x38,
     actorVtableK2DestroyActor: 0x310,
     gameStateAuthorityGameMode: 0x228,
     gameStatePlayerArray: 0x238,
@@ -126,18 +138,111 @@ function createFTextFromString(text) {
     return fTextPtr;
 }
 
+function getDHCharacterClass() {
+    if (cachedDHCharacterClass.isNull()) {
+        cachedDHCharacterClass = ADH_Character_GetPrivateStaticClass();
+    }
+    return cachedDHCharacterClass;
+}
+
+function getPlayerControllerClass() {
+    if (cachedPlayerControllerClass.isNull()) {
+        cachedPlayerControllerClass = APlayerController_GetPrivateStaticClass();
+    }
+    return cachedPlayerControllerClass;
+}
+
+function isA(objPtr, targetClassPtr) {
+    if (objPtr.isNull() || targetClassPtr.isNull()) {
+        return false;
+    }
+    var objClass = objPtr.add(UE_OFFSETS.uObjectClassPrivate).readPointer();
+    if (objClass.isNull()) {
+        return false;
+    }
+    var targetDepth = targetClassPtr.add(UE_OFFSETS.uStructChainDepth).readS32();
+    var objDepth = objClass.add(UE_OFFSETS.uStructChainDepth).readS32();
+    if (targetDepth < 0 || targetDepth > objDepth) {
+        return false;
+    }
+    var chainArray = objClass.add(UE_OFFSETS.uStructChainArray).readPointer();
+    if (chainArray.isNull()) {
+        return false;
+    }
+    return chainArray.add(targetDepth * 8).readPointer().equals(targetClassPtr.add(UE_OFFSETS.uStructChainArray));
+}
+
+function isPendingKill(objPtr) {
+    if (objPtr.isNull()) {
+        return true;
+    }
+    var internalIndex = objPtr.add(UE_OFFSETS.uObjectInternalIndex).readS32();
+    var numElements = GUObjectArray_ptr.add(0x24).readS32();
+    if (internalIndex < 0 || internalIndex >= numElements) {
+        return true;
+    }
+    var objectsPtr = GUObjectArray_ptr.add(0x10).readPointer();
+    if (objectsPtr.isNull()) {
+        return true;
+    }
+    var numChunks = GUObjectArray_ptr.add(0x2C).readS32();
+    var chunkIndex = internalIndex >> 16;
+    if (chunkIndex < 0 || chunkIndex >= numChunks) {
+        return true;
+    }
+    var withinChunkIndex = internalIndex & 0xFFFF;
+    var chunkPtr = objectsPtr.add(chunkIndex * 8).readPointer();
+    if (chunkPtr.isNull()) {
+        return true;
+    }
+    var itemPtr = chunkPtr.add(withinChunkIndex * 24);
+    if (!itemPtr.readPointer().equals(objPtr)) {
+        return true;
+    }
+    var flags = itemPtr.add(8).readU32();
+    return ((flags >>> 29) & 1) !== 0;
+}
+
+function readFStringNonOwning(fstrPtr) {
+    if (fstrPtr.isNull()) {
+        return '';
+    }
+    var dataPtr = fstrPtr.readPointer();
+    var num = fstrPtr.add(8).readS32();
+    if (dataPtr.isNull() || num <= 1 || num >= 4096) {
+        return '';
+    }
+    try {
+        return dataPtr.readUtf16String(num - 1);
+    } catch (e) {
+        return '';
+    }
+}
+
 function getUObjectName(uObjectPtr) {
     if (uObjectPtr.isNull()) {
         return '';
     }
     var namePrivatePtr = uObjectPtr.add(UE_OFFSETS.uObjectNamePrivate);
-    var nameBuffer = allocateFString(100);
+    var nameBuffer = Memory.alloc(16);
+    nameBuffer.writePointer(ptr(0));
+    nameBuffer.add(8).writeS32(0);
+    nameBuffer.add(12).writeS32(0);
     FName_GetPlainNameString(namePrivatePtr, nameBuffer);
     var namePtr = nameBuffer.readPointer();
-    if (namePtr.isNull()) {
-        return '';
+    var num = nameBuffer.add(8).readS32();
+    var text = '';
+    try {
+        if (!namePtr.isNull() && num > 1 && num < 4096) {
+            text = namePtr.readUtf16String(num - 1);
+        }
+    } catch (e) {
+        text = '';
+    } finally {
+        if (!namePtr.isNull()) {
+            FMemory_Free(namePtr);
+        }
     }
-    var text = namePtr.readUtf16String();
     return text ? text : '';
 }
 
@@ -254,11 +359,11 @@ function removeFromOtherThrallsArray(playerStatePtr, targetToRemovePtr) {
 }
 
 function setTargetPlayerIsThrall(gameStatePtr, playerControllerPtr, isThrall) {
-    if (gameStatePtr.isNull() || playerControllerPtr.isNull()) {
+    if (gameStatePtr.isNull() || isPendingKill(gameStatePtr) || playerControllerPtr.isNull() || isPendingKill(playerControllerPtr)) {
         return;
     }
     var playerStatePtr = playerControllerPtr.add(UE_OFFSETS.playerControllerPlayerState).readPointer();
-    if (playerStatePtr.isNull()) {
+    if (playerStatePtr.isNull() || isPendingKill(playerStatePtr)) {
         return;
     }
     if (isThrall) {
@@ -280,7 +385,7 @@ function setTargetPlayerIsThrall(gameStatePtr, playerControllerPtr, isThrall) {
     if (!playerListDataPtr.isNull() && playerCount > 0 && playerCount <= 64) {
         for (var i = 0; i < playerCount; i++) {
             var otherPlayerStatePtr = playerListDataPtr.add(8 * i).readPointer();
-            if (!otherPlayerStatePtr.isNull() && !otherPlayerStatePtr.equals(playerStatePtr)) {
+            if (!otherPlayerStatePtr.isNull() && !isPendingKill(otherPlayerStatePtr) && !otherPlayerStatePtr.equals(playerStatePtr)) {
                 removeFromOtherThrallsArray(otherPlayerStatePtr, playerStatePtr);
             }
         }
@@ -289,7 +394,9 @@ function setTargetPlayerIsThrall(gameStatePtr, playerControllerPtr, isThrall) {
     // 3. Destroy and clear SpellManager (+0x488) so spells/totems are revoked and re-promotion spawns cleanly
     var spellManagerPtr = playerStatePtr.add(UE_OFFSETS.playerStateSpellManager).readPointer();
     if (!spellManagerPtr.isNull()) {
-        destroyActorSafe(spellManagerPtr);
+        if (!isPendingKill(spellManagerPtr)) {
+            destroyActorSafe(spellManagerPtr);
+        }
         playerStatePtr.add(UE_OFFSETS.playerStateSpellManager).writePointer(ptr(0));
     }
 
@@ -298,11 +405,11 @@ function setTargetPlayerIsThrall(gameStatePtr, playerControllerPtr, isThrall) {
 }
 
 function setHumanCharacterProperty(playerControllerPtr, propertyName, propertyValue) {
-    if (playerControllerPtr.isNull()) {
+    if (playerControllerPtr.isNull() || isPendingKill(playerControllerPtr)) {
         return;
     }
     var pawnPtr = playerControllerPtr.add(UE_OFFSETS.playerControllerPawn).readPointer();
-    if (pawnPtr.isNull()) {
+    if (pawnPtr.isNull() || isPendingKill(pawnPtr)) {
         return;
     }
     var pawnClassPtr = pawnPtr.add(UE_OFFSETS.uObjectClassPrivate).readPointer();
@@ -333,19 +440,19 @@ function initializeItemState(itemStatePtr, isUpgraded, isTainted) {
 }
 
 function giveInventoryItem(playerControllerPtr, itemBlueprintPath, itemCount) {
-    if (playerControllerPtr.isNull()) {
+    if (playerControllerPtr.isNull() || isPendingKill(playerControllerPtr)) {
+        return;
+    }
+    var pawnPtr = playerControllerPtr.add(UE_OFFSETS.playerControllerPawn).readPointer();
+    if (pawnPtr.isNull() || isPendingKill(pawnPtr) || !isA(pawnPtr, getDHCharacterClass())) {
+        return;
+    }
+    var inventoryManagerPtr = pawnPtr.add(UE_OFFSETS.humanInventoryManager).readPointer();
+    if (inventoryManagerPtr.isNull() || isPendingKill(inventoryManagerPtr)) {
         return;
     }
     var itemClassPtr = resolveBlueprintClass(itemBlueprintPath);
     if (itemClassPtr.isNull()) {
-        return;
-    }
-    var pawnPtr = playerControllerPtr.add(UE_OFFSETS.playerControllerPawn).readPointer();
-    if (pawnPtr.isNull()) {
-        return;
-    }
-    var inventoryManagerPtr = pawnPtr.add(UE_OFFSETS.humanInventoryManager).readPointer();
-    if (inventoryManagerPtr.isNull()) {
         return;
     }
 
@@ -372,15 +479,15 @@ function giveInventoryItem(playerControllerPtr, itemBlueprintPath, itemCount) {
 }
 
 function updateStorageLimit(playerControllerPtr, storageLimit) {
-    if (playerControllerPtr.isNull()) {
+    if (playerControllerPtr.isNull() || isPendingKill(playerControllerPtr)) {
         return;
     }
     var pawnPtr = playerControllerPtr.add(UE_OFFSETS.playerControllerPawn).readPointer();
-    if (pawnPtr.isNull()) {
+    if (pawnPtr.isNull() || isPendingKill(pawnPtr) || !isA(pawnPtr, getDHCharacterClass())) {
         return;
     }
     var inventoryManagerPtr = pawnPtr.add(UE_OFFSETS.humanInventoryManager).readPointer();
-    if (inventoryManagerPtr.isNull()) {
+    if (inventoryManagerPtr.isNull() || isPendingKill(inventoryManagerPtr)) {
         return;
     }
     UDH_InventoryManager_SetStorageLimit(inventoryManagerPtr, storageLimit);
@@ -399,7 +506,11 @@ function kickTargetPlayer(gameStatePtr, playerControllerPtr) {
         return;
     }
     var kickReasonText = createFTextFromString('kick');
-    AGameSession_KickPlayer(gameSessionPtr, playerControllerPtr, kickReasonText);
+    try {
+        AGameSession_KickPlayer(gameSessionPtr, playerControllerPtr, kickReasonText);
+    } finally {
+        FText_Dtor(kickReasonText);
+    }
 }
 
 function deliverThrallMessage(playerControllerPtr, messageText) {
@@ -407,7 +518,11 @@ function deliverThrallMessage(playerControllerPtr, messageText) {
         return;
     }
     var messageFText = createFTextFromString(messageText);
-    ADH_PlayerController_ReceiveThrallMessage(playerControllerPtr, messageFText, ptr(0));
+    try {
+        ADH_PlayerController_ReceiveThrallMessage(playerControllerPtr, messageFText, ptr(0));
+    } finally {
+        FText_Dtor(messageFText);
+    }
 }
 
 // ============================================================================
@@ -431,7 +546,7 @@ function dequeueCommand() {
 }
 
 function findPlayerControllerByTarget(gameStatePtr, targetName, matchPlayerName) {
-    if (gameStatePtr.isNull() || !targetName) {
+    if (gameStatePtr.isNull() || isPendingKill(gameStatePtr) || !targetName) {
         return ptr(0);
     }
     var playerArrayPtr = gameStatePtr.add(UE_OFFSETS.gameStatePlayerArray);
@@ -440,31 +555,28 @@ function findPlayerControllerByTarget(gameStatePtr, targetName, matchPlayerName)
     if (playerListDataPtr.isNull() || playerCount === 0 || playerCount > 64) {
         return ptr(0);
     }
+    var pcClass = getPlayerControllerClass();
     for (var i = 0; i < playerCount; i++) {
         var playerStatePtr = playerListDataPtr.add(8 * i).readPointer();
-        if (playerStatePtr.isNull()) {
+        if (playerStatePtr.isNull() || isPendingKill(playerStatePtr)) {
             continue;
         }
         var candidateName = '';
         if (matchPlayerName) {
-            var playerNamePtr = playerStatePtr.add(UE_OFFSETS.playerStatePlayerName).readPointer();
-            if (playerNamePtr.isNull()) {
-                continue;
-            }
-            candidateName = playerNamePtr.readUtf16String();
+            candidateName = readFStringNonOwning(playerStatePtr.add(UE_OFFSETS.playerStatePlayerName));
         } else {
             var selectedRolePtr = playerStatePtr.add(UE_OFFSETS.playerStateSelectedRole).readPointer();
-            if (selectedRolePtr.isNull()) {
+            if (selectedRolePtr.isNull() || isPendingKill(selectedRolePtr)) {
                 continue;
             }
-            var roleNamePtr = selectedRolePtr.add(UE_OFFSETS.roleDataOnlineName).readPointer();
-            if (roleNamePtr.isNull()) {
-                continue;
-            }
-            candidateName = roleNamePtr.readUtf16String();
+            candidateName = readFStringNonOwning(selectedRolePtr.add(UE_OFFSETS.roleDataOnlineName));
         }
         if (candidateName === targetName) {
-            return playerStatePtr.add(UE_OFFSETS.playerStateOwnerController).readPointer();
+            var ownerController = playerStatePtr.add(UE_OFFSETS.playerStateOwnerController).readPointer();
+            if (!ownerController.isNull() && !isPendingKill(ownerController) && isA(ownerController, pcClass)) {
+                return ownerController;
+            }
+            return ptr(0);
         }
     }
     return ptr(0);
@@ -560,7 +672,7 @@ Interceptor.attach(APlayerController_BeginPlay_addr, {
     },
     onLeave: function () {
         try {
-            if (this.playerControllerPtr && !this.playerControllerPtr.isNull()) {
+            if (this.playerControllerPtr && !this.playerControllerPtr.isNull() && !isPendingKill(this.playerControllerPtr)) {
                 ADH_PlayerController_AddCheats(this.playerControllerPtr, 1);
             }
         } catch (e) {}
@@ -615,6 +727,8 @@ function decodeUtf16LeChunks(chunks, totalBytes) {
 function handleBridgeConnection(connection) {
     var chunks = [];
     var totalBytes = 0;
+    var hasCarryByte = false;
+    var carryByte = 0;
 
     function finishRead() {
         safeCloseConnection(connection);
@@ -649,13 +763,28 @@ function handleBridgeConnection(connection) {
             chunks.push(bytes);
             totalBytes += bytes.byteLength;
 
-            // Stop immediately once UTF-16LE NUL terminator is present
+            // Stop immediately once a 2-byte-aligned UTF-16LE NUL terminator is present
             var hasNull = false;
-            var evenLen = bytes.byteLength - (bytes.byteLength & 1);
-            for (var k = 0; k < evenLen; k += 2) {
-                if (bytes[k] === 0 && bytes[k + 1] === 0) {
+            var pos = 0;
+            if (hasCarryByte) {
+                if (carryByte === 0 && bytes[0] === 0) {
                     hasNull = true;
-                    break;
+                }
+                hasCarryByte = false;
+                pos = 1;
+            }
+            if (!hasNull) {
+                var end = bytes.byteLength - 1;
+                while (pos < end) {
+                    if (bytes[pos] === 0 && bytes[pos + 1] === 0) {
+                        hasNull = true;
+                        break;
+                    }
+                    pos += 2;
+                }
+                if (!hasNull && pos === end) {
+                    carryByte = bytes[pos];
+                    hasCarryByte = true;
                 }
             }
             if (hasNull) {
@@ -676,11 +805,14 @@ function handleBridgeConnection(connection) {
     readNext();
 }
 
-function acceptBridgeLoop(listener) {
+var MAX_CONSECUTIVE_ACCEPT_ERRORS = 5;
+
+function acceptBridgeLoop(listener, consecutiveErrors) {
+    var errorStreak = consecutiveErrors || 0;
     tcpListener = listener;
     listener.accept().then(function (connection) {
         handleBridgeConnection(connection);
-        setImmediate(function () { acceptBridgeLoop(listener); });
+        setImmediate(function () { acceptBridgeLoop(listener, 0); });
     }).catch(function (err) {
         var errMsg = err && err.message ? String(err.message) : '';
         if (errMsg.indexOf('cancelled') !== -1 || errMsg.indexOf('closed') !== -1) {
@@ -689,7 +821,15 @@ function acceptBridgeLoop(listener) {
             return;
         }
         logBridgeError(err);
-        setImmediate(function () { acceptBridgeLoop(listener); });
+        errorStreak += 1;
+        if (errorStreak >= MAX_CONSECUTIVE_ACCEPT_ERRORS) {
+            safeCloseConnection(listener);
+            tcpListener = null;
+            isBridgeServerRunning = false;
+            nextBridgeRetryAt = Date.now() + 1000;
+            return;
+        }
+        setTimeout(function () { acceptBridgeLoop(listener, errorStreak); }, 250);
     });
 }
 

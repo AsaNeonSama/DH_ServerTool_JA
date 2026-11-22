@@ -1,6 +1,7 @@
 // Default mods (always injected without asking)
 import consoleWin64Js from "../../assets/mods/default/console_win64.js" with { type: "text" };
 import deathOfflineAnnouncementJs from "../../assets/mods/default/death_offline_announcement_win64.js" with { type: "text" };
+import networkFixJs from "../../assets/mods/default/network_fix_win64.js" with { type: "text" };
 import spellChargeFixJs from "../../assets/mods/default/spell_charge_fix_win64.js" with { type: "text" };
 
 // Bone dagger mode (injected together as a single mode choice)
@@ -30,6 +31,7 @@ import spellNoCdJs from "../../assets/mods/single/spell_no_cd_win64.js" with { t
 import startArmoryOpenJs from "../../assets/mods/single/start_armory_open_win64.js" with { type: "text" };
 import vomitModifyJs from "../../assets/mods/single/vomit_modify_win64.js" with { type: "text" };
 import whetstoneAnyItemJs from "../../assets/mods/single/whetstone_any_item_win64.js" with { type: "text" };
+import { MOD_MESSAGES } from "../messages";
 import type { ModMenuOption, PatchScript } from "../types";
 
 export const CONSOLE_PATCH_ID: string = "default:console_win64";
@@ -39,23 +41,30 @@ export const DEFAULT_PATCH_SCRIPTS: readonly PatchScript[] = [
   {
     id: CONSOLE_PATCH_ID,
     fileName: "console_win64.js",
-    label: "Webコンソール連携",
+    label: MOD_MESSAGES.defaults.console,
     group: "default",
     source: consoleWin64Js,
   },
   {
     id: "default:spell_charge_fix_win64",
     fileName: "spell_charge_fix_win64.js",
-    label: "スペルチャージ修正",
+    label: MOD_MESSAGES.defaults.spellChargeFix,
     group: "default",
     source: spellChargeFixJs,
   },
   {
     id: "default:death_offline_announcement_win64",
     fileName: "death_offline_announcement_win64.js",
-    label: "オフラインアナウンス",
+    label: MOD_MESSAGES.defaults.deathOfflineAnnouncement,
     group: "default",
     source: deathOfflineAnnouncementJs,
+  },
+  {
+    id: "default:network_fix_win64",
+    fileName: "network_fix_win64.js",
+    label: MOD_MESSAGES.defaults.networkFix,
+    group: "default",
+    source: networkFixJs,
   },
 ];
 
@@ -64,13 +73,13 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   {
     id: "rand_role",
     number: 1,
-    label: "役職ランダム",
+    label: MOD_MESSAGES.selectable.randRole,
     kind: "single",
     scripts: [
       {
         id: "single:rand_role_win64",
         fileName: "rand_role_win64.js",
-        label: "役職ランダム",
+        label: MOD_MESSAGES.selectable.randRole,
         group: "single",
         source: randRoleJs,
       },
@@ -79,13 +88,13 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   {
     id: "spell_cast_start",
     number: 2,
-    label: "開幕沈黙",
+    label: MOD_MESSAGES.selectable.spellCastStart,
     kind: "single",
     scripts: [
       {
         id: "single:spell_cast_start_win64",
         fileName: "spell_cast_start_win64.js",
-        label: "開幕沈黙",
+        label: MOD_MESSAGES.selectable.spellCastStart,
         group: "single",
         source: spellCastStartJs,
       },
@@ -94,14 +103,14 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   {
     id: "resources_spawner_departure",
     number: 3,
-    label: "マップ補強(山頂)",
+    label: MOD_MESSAGES.selectable.resourcesSpawnerDeparture,
     kind: "single",
     conflictsWith: ["sightseeing_departure"],
     scripts: [
       {
         id: "single:resources_spawner_Departure_win64",
         fileName: "resources_spawner_Departure_win64.js",
-        label: "マップ補強(山頂)",
+        label: MOD_MESSAGES.selectable.resourcesSpawnerDeparture,
         group: "single",
         source: resourcesSpawnerDepartureJs,
       },
@@ -110,14 +119,14 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   {
     id: "resources_spawner_expanse",
     number: 4,
-    label: "マップ補強(広漠)",
+    label: MOD_MESSAGES.selectable.resourcesSpawnerExpanse,
     kind: "single",
     conflictsWith: ["sightseeing_expanse"],
     scripts: [
       {
         id: "single:resources_spawner_Expanse_win64",
         fileName: "resources_spawner_Expanse_win64.js",
-        label: "マップ補強(広漠)",
+        label: MOD_MESSAGES.selectable.resourcesSpawnerExpanse,
         group: "single",
         source: resourcesSpawnerExpanseJs,
       },
@@ -126,13 +135,13 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   {
     id: "spell_custom",
     number: 5,
-    label: "五サボタージュ",
+    label: MOD_MESSAGES.selectable.spellCustom,
     kind: "single",
     scripts: [
       {
         id: "single:spell_custom_win64",
         fileName: "spell_custom_win64.js",
-        label: "五サボタージュ",
+        label: MOD_MESSAGES.selectable.spellCustom,
         group: "single",
         source: spellCustomJs,
       },
@@ -141,13 +150,13 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   {
     id: "madmate_normal_nolimit",
     number: 6,
-    label: "狂人モード",
+    label: MOD_MESSAGES.selectable.madmateNormalNolimit,
     kind: "single",
     scripts: [
       {
         id: "single:madmate_normal_nolimit",
         fileName: "madmate_normal_nolimit.js",
-        label: "狂人モード",
+        label: MOD_MESSAGES.selectable.madmateNormalNolimit,
         group: "single",
         source: madmateNormalNolimitJs,
       },
@@ -156,27 +165,27 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   {
     id: "bone_dagger_mode",
     number: 7,
-    label: "骨の短剣モード",
+    label: MOD_MESSAGES.selectable.boneDaggerMode,
     kind: "mode",
     scripts: [
       {
         id: "bone_dagger:bone_dagger_win64",
         fileName: "bone_dagger_win64.js",
-        label: "骨の短剣モード (短剣本体)",
+        label: MOD_MESSAGES.selectable.boneDaggerScripts.main,
         group: "bone_dagger",
         source: boneDaggerJs,
       },
       {
         id: "bone_dagger:custom_droptable_bone_dagger_win64",
         fileName: "custom_droptable_bone_dagger_win64.js",
-        label: "骨の短剣モード (ドロップテーブル)",
+        label: MOD_MESSAGES.selectable.boneDaggerScripts.dropTable,
         group: "bone_dagger",
         source: customDroptableBoneDaggerJs,
       },
       {
         id: "bone_dagger:set_inventory_win64",
         fileName: "set_inventory_win64.js",
-        label: "骨の短剣モード (初期装備設定)",
+        label: MOD_MESSAGES.selectable.boneDaggerScripts.inventory,
         group: "bone_dagger",
         source: setInventoryJs,
       },
@@ -185,13 +194,13 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   {
     id: "quest_system",
     number: 8,
-    label: "クエスト報酬",
+    label: MOD_MESSAGES.selectable.questSystem,
     kind: "single",
     scripts: [
       {
         id: "single:quest_system_win64",
         fileName: "quest_system_win64.js",
-        label: "クエスト報酬",
+        label: MOD_MESSAGES.selectable.questSystem,
         group: "single",
         source: questSystemJs,
       },
@@ -200,13 +209,13 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   {
     id: "add_storage",
     number: 9,
-    label: "全員バックパック",
+    label: MOD_MESSAGES.selectable.addStorage,
     kind: "single",
     scripts: [
       {
         id: "single:add_storage_win64",
         fileName: "add_storage_win64.js",
-        label: "全員バックパック",
+        label: MOD_MESSAGES.selectable.addStorage,
         group: "single",
         source: addStorageJs,
       },
@@ -215,13 +224,13 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   {
     id: "whetstone_any_item",
     number: 10,
-    label: "万能砥石",
+    label: MOD_MESSAGES.selectable.whetstoneAnyItem,
     kind: "single",
     scripts: [
       {
         id: "single:whetstone_any_item_win64",
         fileName: "whetstone_any_item_win64.js",
-        label: "万能砥石",
+        label: MOD_MESSAGES.selectable.whetstoneAnyItem,
         group: "single",
         source: whetstoneAnyItemJs,
       },
@@ -230,13 +239,13 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   {
     id: "arrow_full_recovery",
     number: 11,
-    label: "矢回収100%",
+    label: MOD_MESSAGES.selectable.arrowFullRecovery,
     kind: "single",
     scripts: [
       {
         id: "single:arrow_full_recovery_win64",
         fileName: "arrow_full_recovery_win64.js",
-        label: "矢回収100%",
+        label: MOD_MESSAGES.selectable.arrowFullRecovery,
         group: "single",
         source: arrowFullRecoveryJs,
       },
@@ -245,14 +254,14 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   {
     id: "blizzard_armory_open",
     number: 12,
-    label: "暴風雪マスケット",
+    label: MOD_MESSAGES.selectable.blizzardArmoryOpen,
     kind: "single",
     conflictsWith: ["start_armory_open"],
     scripts: [
       {
         id: "single:blizzard_armory_open_win64",
         fileName: "blizzard_armory_open_win64.js",
-        label: "暴風雪マスケット",
+        label: MOD_MESSAGES.selectable.blizzardArmoryOpen,
         group: "single",
         source: blizzardArmoryOpenJs,
       },
@@ -261,13 +270,13 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   {
     id: "gun_and_bow",
     number: 13,
-    label: "銃・弓同時所持",
+    label: MOD_MESSAGES.selectable.gunAndBow,
     kind: "single",
     scripts: [
       {
         id: "single:gun_and_bow_win64",
         fileName: "gun_and_bow_win64.js",
-        label: "銃・弓同時所持",
+        label: MOD_MESSAGES.selectable.gunAndBow,
         group: "single",
         source: gunAndBowJs,
       },
@@ -277,14 +286,14 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   {
     id: "start_armory_open",
     number: 14,
-    label: "開幕マスケット",
+    label: MOD_MESSAGES.selectable.startArmoryOpen,
     kind: "single",
     conflictsWith: ["blizzard_armory_open"],
     scripts: [
       {
         id: "single:start_armory_open_win64",
         fileName: "start_armory_open_win64.js",
-        label: "開幕マスケット",
+        label: MOD_MESSAGES.selectable.startArmoryOpen,
         group: "single",
         source: startArmoryOpenJs,
       },
@@ -293,13 +302,13 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   {
     id: "vomit_modify",
     number: 15,
-    label: "毒耐性",
+    label: MOD_MESSAGES.selectable.vomitModify,
     kind: "single",
     scripts: [
       {
         id: "single:vomit_modify_win64",
         fileName: "vomit_modify_win64.js",
-        label: "毒耐性",
+        label: MOD_MESSAGES.selectable.vomitModify,
         group: "single",
         source: vomitModifyJs,
       },
@@ -308,13 +317,13 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   {
     id: "north_ghost",
     number: 16,
-    label: "ミステリーモード",
+    label: MOD_MESSAGES.selectable.northGhost,
     kind: "single",
     scripts: [
       {
         id: "single:north_ghost_win64",
         fileName: "north_ghost_win64.js",
-        label: "ミステリーモード",
+        label: MOD_MESSAGES.selectable.northGhost,
         group: "single",
         source: northGhostJs,
       },
@@ -323,13 +332,13 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   {
     id: "grenade",
     number: 17,
-    label: "グレネード",
+    label: MOD_MESSAGES.selectable.grenade,
     kind: "single",
     scripts: [
       {
         id: "single:grenade_win64",
         fileName: "grenade_win64.js",
-        label: "グレネード",
+        label: MOD_MESSAGES.selectable.grenade,
         group: "single",
         source: grenadeJs,
       },
@@ -338,13 +347,13 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   {
     id: "moon_jump",
     number: 18,
-    label: "八艘飛び",
+    label: MOD_MESSAGES.selectable.moonJump,
     kind: "single",
     scripts: [
       {
         id: "single:moon_jump_win64",
         fileName: "moon_jump_win64.js",
-        label: "八艘飛び",
+        label: MOD_MESSAGES.selectable.moonJump,
         group: "single",
         source: moonJumpJs,
       },
@@ -353,13 +362,13 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   {
     id: "spell_no_cd",
     number: 19,
-    label: "スペルチャージ無限",
+    label: MOD_MESSAGES.selectable.spellNoCd,
     kind: "single",
     scripts: [
       {
         id: "single:spell_no_cd_win64",
         fileName: "spell_no_cd_win64.js",
-        label: "スペルチャージ無限",
+        label: MOD_MESSAGES.selectable.spellNoCd,
         group: "single",
         source: spellNoCdJs,
       },
@@ -368,13 +377,13 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   {
     id: "no_death",
     number: 20,
-    label: "無限復活",
+    label: MOD_MESSAGES.selectable.noDeath,
     kind: "single",
     scripts: [
       {
         id: "single:no_death_win64",
         fileName: "no_death_win64.js",
-        label: "無限復活",
+        label: MOD_MESSAGES.selectable.noDeath,
         group: "single",
         source: noDeathJs,
       },
@@ -383,14 +392,14 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   {
     id: "sightseeing_departure",
     number: 21,
-    label: "観光モード(山頂)",
+    label: MOD_MESSAGES.selectable.sightseeingDeparture,
     kind: "single",
     conflictsWith: ["resources_spawner_departure", "sightseeing_expanse"],
     scripts: [
       {
         id: "single:sightseeing_departure_win64",
         fileName: "sightseeing_departure_win64.js",
-        label: "観光モード(山頂)",
+        label: MOD_MESSAGES.selectable.sightseeingDeparture,
         group: "single",
         source: sightseeingDepartureJs,
       },
@@ -399,14 +408,14 @@ export const SELECTABLE_MOD_OPTIONS: readonly ModMenuOption[] = [
   {
     id: "sightseeing_expanse",
     number: 22,
-    label: "観光モード(広漠)",
+    label: MOD_MESSAGES.selectable.sightseeingExpanse,
     kind: "single",
     conflictsWith: ["resources_spawner_expanse", "sightseeing_departure"],
     scripts: [
       {
         id: "single:sightseeing_expanse_win64",
         fileName: "sightseeing_expanse_win64.js",
-        label: "観光モード(広漠)",
+        label: MOD_MESSAGES.selectable.sightseeingExpanse,
         group: "single",
         source: sightseeingExpanseJs,
       },

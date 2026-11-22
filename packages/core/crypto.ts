@@ -10,8 +10,8 @@ import {
   AES_GCM_ALGORITHM,
   AES_IV_BYTES,
   AES_KEY_BYTES,
-} from "./constants";
-import type { AesGcmSessionCipher } from "./types";
+} from "../constants";
+import type { AesGcmSessionCipher } from "../types";
 
 export function timingSafeStringEquals(a: string, b: string): boolean {
   const bufA: Buffer = Buffer.from(a, "utf8");

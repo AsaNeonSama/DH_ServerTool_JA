@@ -1,5 +1,5 @@
-import { DEFAULT_PUBLIC_IP_TIMEOUT_MS, PUBLIC_IP_ENDPOINT } from "./constants";
-import type { PublicIpResult } from "./types";
+import { DEFAULT_PUBLIC_IP_TIMEOUT_MS, PUBLIC_IP_ENDPOINT } from "../constants";
+import type { PublicIpResult } from "../types";
 
 export async function fetchPublicIp(
   timeoutMs: number = DEFAULT_PUBLIC_IP_TIMEOUT_MS

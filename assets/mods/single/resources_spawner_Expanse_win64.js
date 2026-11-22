@@ -104,7 +104,7 @@ function getGameState()
 var ActorToSpawn = [
     ['/Game/Blueprints/AI/Prey/BP_Prey_Rat.BP_Prey_Rat_C', //左巨型老鼠
         [0, 0, 0], //朝向
-        [-15019.61, -3055.90, 265.73], //位置
+        [-15019.61, -3055.90, 575.00], //位置 (地表 Z=748.46 へ落下ゼロでスナップ着地)
         [20, 20, 20] //大小
     ],
     ['/Game/Blueprints/AI/Predators/BP_Predator_Bear.BP_Predator_Bear_C',//中岛熊

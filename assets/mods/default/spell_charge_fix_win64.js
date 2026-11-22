@@ -1,5 +1,3 @@
-//qq群421015336定期发布最新脚本
-//作者：提莫
 var base = Module.findBaseAddress('DreadHungerServer-Win64-Shipping.exe');
 var ADH_HumanCharacter_AddStartingInventory_addr = base.add(0xD46F10);
 

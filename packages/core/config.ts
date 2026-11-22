@@ -8,9 +8,10 @@ import {
   MIN_CHECK_INTERVAL_MS,
   MIN_RESTART_WAIT_SECONDS,
   MIN_VALID_PORT,
-} from "./constants";
-import { println } from "./terminal";
-import type { AppConfig, RawConfig } from "./types";
+} from "../constants";
+import { APP_MESSAGES } from "../messages";
+import { println } from "../terminal";
+import type { AppConfig, RawConfig } from "../types";
 
 function isValidPort(n: unknown): n is number {
   return (
@@ -69,9 +70,7 @@ export async function loadOrCreateConfig(): Promise<AppConfig> {
         CONFIG_RELATIVE_PATH,
         `${JSON.stringify(DEFAULT_CONFIG, null, 2)}\n`
       );
-      println(
-        `${C.LIGHT_CYAN} * デフォルト設定ファイル (${CONFIG_RELATIVE_PATH}) を作成しました`
-      );
+      println(`${C.LIGHT_CYAN} * ${APP_MESSAGES.configCreated(CONFIG_RELATIVE_PATH)}`);
     } catch {
       // Non-fatal if directory is read-only
     }
@@ -142,9 +141,7 @@ export async function loadOrCreateConfig(): Promise<AppConfig> {
     };
   } catch (err: unknown) {
     const msg: string = err instanceof Error ? err.message : String(err);
-    println(
-      `${C.RED} * config.json の読み込みに失敗しました。デフォルト設定を使用します: ${msg}`
-    );
+    println(`${C.RED} * ${APP_MESSAGES.configLoadFailed(msg)}`);
     return cloneDefaultConfig();
   }
 }

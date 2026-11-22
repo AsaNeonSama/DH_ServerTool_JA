@@ -1,11 +1,15 @@
 var base = Module.findBaseAddress('DreadHungerServer-Win64-Shipping.exe');
-var FName_FName = new NativeFunction(base.add(0x1158F20), "void", ["pointer", "pointer", "int8"]);
-var FText_FromName = new NativeFunction(base.add(0x1096370), "pointer", ["pointer","pointer"]);
-var ADH_PlayerController_ReceiveThrallMessage = new NativeFunction(base.add(0xEE7810), "void", ["pointer", "pointer", "pointer"]);
-var UGameplayStatics_GetPlayerController = new NativeFunction(base.add(0x25630D0), 'pointer', ['pointer', 'int32']);
+// Use const FString& overload (0x10964E0) + FText::~FText (0x75CB30) to avoid FNamePool pollution,
+// UAF from FString&& (0x10963B0), and TTextData heap leaks.
+var FText_FromString = new NativeFunction(base.add(0x10964E0), "pointer", ["pointer", "pointer"], "win64");
+var FText_Dtor = new NativeFunction(base.add(0x75CB30), "void", ["pointer"], "win64");
+var ADH_PlayerController_ReceiveThrallMessage = new NativeFunction(base.add(0xEE7810), "void", ["pointer", "pointer", "pointer"], "win64");
+var APlayerController_GetPrivateStaticClass = new NativeFunction(base.add(0x2AA84E0), "pointer", [], "win64");
 var ADH_PlayerState_SetIsDead_addr = base.add(0xE4E700);
 var ADH_PlayerState_SetIsDisconnected = base.add(0xE4E770);
 var GWorld = base.add(0x46ED420);
+var GUObjectArray_ptr = base.add(0x45C40C8);
+var cachedPlayerControllerClass = ptr(0);
 
 /*
 true: オン
@@ -18,46 +22,109 @@ var DeadNotice = false;
 var DisconnectedNotice = true;
 
 
+function getPlayerControllerClass() {
+    if (cachedPlayerControllerClass.isNull()) {
+        cachedPlayerControllerClass = APlayerController_GetPrivateStaticClass();
+    }
+    return cachedPlayerControllerClass;
+}
+
+function isA(objPtr, targetClassPtr) {
+    if (objPtr.isNull() || targetClassPtr.isNull()) {
+        return false;
+    }
+    var objClass = objPtr.add(0x10).readPointer();
+    if (objClass.isNull()) {
+        return false;
+    }
+    var targetDepth = targetClassPtr.add(0x38).readS32();
+    var objDepth = objClass.add(0x38).readS32();
+    if (targetDepth < 0 || targetDepth > objDepth) {
+        return false;
+    }
+    var chainArray = objClass.add(0x30).readPointer();
+    if (chainArray.isNull()) {
+        return false;
+    }
+    return chainArray.add(targetDepth * 8).readPointer().equals(targetClassPtr.add(0x30));
+}
+
+function isPendingKill(objPtr) {
+    if (objPtr.isNull()) {
+        return true;
+    }
+    var internalIndex = objPtr.add(0x0C).readS32();
+    var numElements = GUObjectArray_ptr.add(0x24).readS32();
+    if (internalIndex < 0 || internalIndex >= numElements) {
+        return true;
+    }
+    var objectsPtr = GUObjectArray_ptr.add(0x10).readPointer();
+    if (objectsPtr.isNull()) {
+        return true;
+    }
+    var numChunks = GUObjectArray_ptr.add(0x2C).readS32();
+    var chunkIndex = internalIndex >> 16;
+    if (chunkIndex < 0 || chunkIndex >= numChunks) {
+        return true;
+    }
+    var withinChunkIndex = internalIndex & 0xFFFF;
+    var chunkPtr = objectsPtr.add(chunkIndex * 8).readPointer();
+    if (chunkPtr.isNull()) {
+        return true;
+    }
+    var itemPtr = chunkPtr.add(withinChunkIndex * 24);
+    if (!itemPtr.readPointer().equals(objPtr)) {
+        return true;
+    }
+    var flags = itemPtr.add(8).readU32();
+    return ((flags >>> 29) & 1) !== 0;
+}
 
 function GetGameState() {
     var World = GWorld.readPointer();
-    if (World.isNull()) {
+    if (World.isNull() || isPendingKill(World)) {
         return ptr(0);
     }
     var AuthorityGameMode = World.add(0x118).readPointer();
-    if (AuthorityGameMode.isNull()) {
+    if (AuthorityGameMode.isNull() || isPendingKill(AuthorityGameMode)) {
         return ptr(0);
     }
     return AuthorityGameMode.add(0x280).readPointer();
 }
-function newFName(Name) {
-    var FName_Buffer = Memory.alloc(8);
-    var Buffer = Memory.alloc((Name.length + 4) * 2);
-    Buffer.writeUtf16String("   " + Name);
-    FName_FName(FName_Buffer,Buffer,1)
-    return FName_Buffer
+
+function createFTextFromString(text) {
+    var fTextPtr = Memory.alloc(24);
+    var capacityChars = text.length + 3;
+    var fStringPtr = Memory.alloc(16 + capacityChars * 2);
+    fStringPtr.writePointer(fStringPtr.add(16));
+    fStringPtr.add(8).writeU32(text.length + 1);
+    fStringPtr.add(12).writeU32(capacityChars);
+    fStringPtr.add(16).writeUtf16String(text);
+    FText_FromString(fTextPtr, fStringPtr);
+    return fTextPtr;
 }
-function FNameToFText(FName){
-    var FText_Buffer = Memory.alloc(24)
-    FText_FromName(FText_Buffer,FName)
-    return FText_Buffer
-}
-function SendThrallMessage(PlayerController,Message,Usound){
-    if (PlayerController.isNull()) {
+
+function SendThrallMessage(PlayerController, Message, Usound) {
+    if (PlayerController.isNull() || isPendingKill(PlayerController)) {
         return;
     }
     try {
-        var FName_Message = newFName(Message);
-        var FText_Message = FNameToFText(FName_Message);
-        ADH_PlayerController_ReceiveThrallMessage(PlayerController,FText_Message,Usound);
+        var FText_Message = createFTextFromString(Message);
+        try {
+            ADH_PlayerController_ReceiveThrallMessage(PlayerController, FText_Message, Usound);
+        } finally {
+            FText_Dtor(FText_Message);
+        }
     } catch (e) {}
 }
+
 function getArraySize(TArray) {
     if (TArray.isNull()) {
         return 0;
     }
     return TArray.add(8).readU32();
 }
+
 function getArrayItemAddr(TArray, size, index) {
     var ArrNum = getArraySize(TArray);
     if (index < 0 || index >= ArrNum)
@@ -67,8 +134,9 @@ function getArrayItemAddr(TArray, size, index) {
         return null;
     return DataPtr.add(index * size);
 }
+
 function getPlayerRoleName(PlayerState) {
-    if (PlayerState.isNull()) {
+    if (PlayerState.isNull() || isPendingKill(PlayerState)) {
         return "不明";
     }
     var roleNames = {
@@ -82,14 +150,15 @@ function getPlayerRoleName(PlayerState) {
         8: "医師"
     };
     var SelectedRole = PlayerState.add(0x590).readPointer();
-    if (SelectedRole.isNull()) {
+    if (SelectedRole.isNull() || isPendingKill(SelectedRole)) {
         return "不明";
     }
     var number = SelectedRole.add(0x58).readU8();
     return roleNames[number] || "不明";
 }
+
 function NotifyPlayers(GameState) {
-    if (GameState.isNull()) {
+    if (GameState.isNull() || isPendingKill(GameState)) {
         return [];
     }
     var PlayerArray = GameState.add(0x238);
@@ -97,6 +166,7 @@ function NotifyPlayers(GameState) {
     if (arrSize === 0 || arrSize > 64) {
         return [];
     }
+    var pcClass = getPlayerControllerClass();
     var matchingPlayers = [];
     for (var i = 0; i < arrSize; i++) {
         var entry = getArrayItemAddr(PlayerArray, 8, i);
@@ -104,13 +174,15 @@ function NotifyPlayers(GameState) {
             continue;
         }
         var PlayerState = entry.readPointer();
-        if (PlayerState.isNull()) {
+        if (PlayerState.isNull() || isPendingKill(PlayerState)) {
             continue;
         }
         var bIsDisconnected = PlayerState.add(0x571).readU8();
-        var PlayerId = PlayerState.add(0x224).readU8();
-        var PlayerController = UGameplayStatics_GetPlayerController(PlayerState,PlayerId);
-        if (!bIsDisconnected && !PlayerController.isNull()) {
+        if (bIsDisconnected) {
+            continue;
+        }
+        var PlayerController = PlayerState.add(0xE0).readPointer();
+        if (!PlayerController.isNull() && !isPendingKill(PlayerController) && isA(PlayerController, pcClass)) {
             matchingPlayers.push(PlayerController);
         }
     }
@@ -119,7 +191,7 @@ function NotifyPlayers(GameState) {
 
 
 function SendDeathMessage(PlayerState) {
-    if (PlayerState.isNull()) {
+    if (PlayerState.isNull() || isPendingKill(PlayerState)) {
         return;
     }
     var name = getPlayerRoleName(PlayerState);
@@ -137,17 +209,18 @@ function SendDeathMessage(PlayerState) {
 }
 
 function SendDisconnectedMessage(PlayerState) {
-    if (PlayerState.isNull()) {
+    if (PlayerState.isNull() || isPendingKill(PlayerState)) {
         return;
     }
     var name = getPlayerRoleName(PlayerState);
-	var GameState = GetGameState();
+    var GameState = GetGameState();
     var DisconnectedNews = `${name} がゲームから切断されました!`;
     var PlayerController = NotifyPlayers(GameState);
     for (var i = 0; i < PlayerController.length; i++) {
         SendThrallMessage(PlayerController[i], DisconnectedNews, ptr(0));
     }
 }
+
 if (DeadNotice) {
     Interceptor.attach(ADH_PlayerState_SetIsDead_addr, {
         onEnter: function(args) {
@@ -172,6 +245,10 @@ if (DisconnectedNotice) {
             try {
                 var PlayerState = args[0];
                 if (PlayerState.isNull()) {
+                    return;
+                }
+                var discFlag = args[1].toInt32() & 1;
+                if (!discFlag || PlayerState.add(0x571).readU8() !== 0) {
                     return;
                 }
                 SendDisconnectedMessage(PlayerState);

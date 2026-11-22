@@ -1,90 +1,20 @@
 import { stdin as input, stdout as output } from "process";
-import * as readline from "readline/promises";
-import { C } from "./constants";
+import { C } from "../constants";
+import { TERMINAL_MESSAGES } from "../messages";
+import type { PostMatchAction } from "../types";
 import {
-  appendServerTabLine,
-  askInTabbedMode,
-  enterTabbedMode,
-  exitTabbedMode,
-  getDisplayWidth,
-  isInteractiveTty,
   isTabbedModeActive,
-  resetServerTabRound,
   setServerKeyHandler,
   setServerStatusLine,
-} from "./terminalTabs";
-import type { PostMatchAction } from "./types";
-import { initWindowsConsole } from "./win32";
+} from "./tabs";
 
-export {
-  enterTabbedMode,
-  exitTabbedMode,
-  getDisplayWidth,
-  isInteractiveTty,
-  isTabbedModeActive,
-  resetServerTabRound,
-};
-
-export function setupTerminal(title: string): void {
-  initWindowsConsole(title);
-  if (process.stdout.isTTY) {
-    process.stdout.write(`\x1b[2J\x1b[H\x1b]0;${title}\x07`);
-  }
-}
-
-export function println(text: string = ""): void {
-  if (isTabbedModeActive()) {
-    appendServerTabLine(text);
-    return;
-  }
-  process.stdout.write(`${text}${C.RESET}\n`);
-}
-
-export function formatSeconds(ms: number): string {
-  const seconds: number = ms / 1000;
-  const formatted: string = Number.isInteger(seconds)
-    ? String(seconds)
-    : seconds.toFixed(2).replace(/\.?0+$/, "");
-  return `${formatted}s`;
-}
-
-export class Prompter {
-  private readonly rl: readline.Interface | null;
-
-  constructor() {
-    this.rl = isTabbedModeActive()
-      ? null
-      : readline.createInterface({ input, output });
-  }
-
-  async ask(promptText: string, signal?: AbortSignal): Promise<string> {
-    if (isTabbedModeActive()) {
-      return await askInTabbedMode(promptText, signal);
-    }
-    if (!this.rl) {
-      throw new Error("Prompter is closed");
-    }
-    const answer: string = signal
-      ? await this.rl.question(`${promptText}${C.RESET}`, { signal })
-      : await this.rl.question(`${promptText}${C.RESET}`);
-    return answer.trim();
-  }
-
-  close(): void {
-    this.rl?.close();
-  }
-}
-
-export async function waitForExitKey(): Promise<void> {
-  if (!process.stdin.isTTY) return;
-  const prompter: Prompter = new Prompter();
-  try {
-    await prompter.ask(`\n${C.LIGHT_YELLOW} * Enterキーを押して終了してください... `);
-  } catch {
-    // Ignore EOF when stdin closes
-  } finally {
-    prompter.close();
-  }
+function buildCountdownText(remaining: number): string {
+  return (
+    `${C.LIGHT_YELLOW} * ${TERMINAL_MESSAGES.postMatchCountdownPrefix} ` +
+    `${C.LIGHT_GREEN}${remaining}${C.LIGHT_YELLOW} ${TERMINAL_MESSAGES.postMatchCountdownMid}` +
+    `${C.LIGHT_CYAN}R${C.LIGHT_YELLOW}${TERMINAL_MESSAGES.postMatchCountdownReconfigure} ` +
+    `${C.LIGHT_CYAN}Enter${C.LIGHT_YELLOW}${TERMINAL_MESSAGES.postMatchCountdownRestart}`
+  );
 }
 
 function waitForPostMatchDecisionTabbed(
@@ -97,9 +27,7 @@ function waitForPostMatchDecisionTabbed(
       let done: boolean = false;
 
       const render = (): void => {
-        setServerStatusLine(
-          `${C.LIGHT_YELLOW} * 自動再起動まで残り ${C.LIGHT_GREEN}${remaining}${C.LIGHT_YELLOW} 秒... (${C.LIGHT_CYAN}R${C.LIGHT_YELLOW}: マップ・MOD再設定 / ${C.LIGHT_CYAN}Enter${C.LIGHT_YELLOW}: 今すぐ再起動)`
-        );
+        setServerStatusLine(buildCountdownText(remaining));
       };
 
       const finish = (action: PostMatchAction): void => {
@@ -182,9 +110,7 @@ export async function waitForPostMatchDecision(
       let done: boolean = false;
 
       const render = (): void => {
-        output.write(
-          `\r\x1b[K${C.LIGHT_YELLOW} * 自動再起動まで残り ${C.LIGHT_GREEN}${remaining}${C.LIGHT_YELLOW} 秒... (${C.LIGHT_CYAN}R${C.LIGHT_YELLOW}: マップ・MOD再設定 / ${C.LIGHT_CYAN}Enter${C.LIGHT_YELLOW}: 今すぐ再起動)${C.RESET}`
-        );
+        output.write(`\r\x1b[K${buildCountdownText(remaining)}${C.RESET}`);
       };
 
       const finish = (action: PostMatchAction): void => {
@@ -245,10 +171,4 @@ export async function waitForPostMatchDecision(
   );
 
   return decision;
-}
-
-export function padDisplayWidth(text: string, targetWidth: number): string {
-  const width: number = getDisplayWidth(text);
-  const pad: number = Math.max(0, targetWidth - width);
-  return `${text}${" ".repeat(pad)}`;
 }

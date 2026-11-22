@@ -77,9 +77,11 @@ var StaticFindObject = new NativeFunction(base.add(0x137AAA0), 'pointer', ['poin
 var UDH_GameInstance_GetInstance = new NativeFunction(base.add(0xD93240), 'pointer', ['pointer'], 'win64');
 var UDH_InventoryManager_SetStorageLimit = new NativeFunction(base.add(0xDE3DA0), 'void', ['pointer', 'int32'], 'win64');
 var ADH_PlayerState_GetOwningController = new NativeFunction(base.add(0xE39820), 'pointer', ['pointer'], 'win64');
-var FName_FName = new NativeFunction(base.add(0x1158F20), 'void', ['pointer', 'pointer', 'int8']);
-var FText_FromName = new NativeFunction(base.add(0x1096370), 'pointer', ['pointer', 'pointer']);
-var ADH_PlayerController_ReceiveThrallMessage = new NativeFunction(base.add(0xEE7810), 'void', ['pointer', 'pointer', 'pointer']);
+// Use const FString& overload (0x10964E0) + FText::~FText (0x75CB30) to avoid FNamePool pollution,
+// UAF from FString&& (0x10963B0), and TTextData heap leaks.
+var FText_FromString = new NativeFunction(base.add(0x10964E0), 'pointer', ['pointer', 'pointer'], 'win64');
+var FText_Dtor = new NativeFunction(base.add(0x75CB30), 'void', ['pointer'], 'win64');
+var ADH_PlayerController_ReceiveThrallMessage = new NativeFunction(base.add(0xEE7810), 'void', ['pointer', 'pointer', 'pointer'], 'win64');
 
 // ============================================================================
 // Per-Match Mutable State (automatically reset whenever GWorld changes)
@@ -264,17 +266,15 @@ function shuffleArray(array) {
     return array;
 }
 
-function newFName(Name) {
-    var fNameBuffer = Memory.alloc(8);
-    var buffer = Memory.alloc((Name.length + 4) * 2);
-    buffer.writeUtf16String("   " + Name);
-    FName_FName(fNameBuffer, buffer, 1);
-    return fNameBuffer;
-}
-
-function fNameToFText(FName) {
+function createFTextFromString(text) {
     var fTextBuffer = Memory.alloc(24);
-    FText_FromName(fTextBuffer, FName);
+    var capacityChars = text.length + 3;
+    var fStringBuffer = Memory.alloc(16 + capacityChars * 2);
+    fStringBuffer.writePointer(fStringBuffer.add(16));
+    fStringBuffer.add(8).writeU32(text.length + 1);
+    fStringBuffer.add(12).writeU32(capacityChars);
+    fStringBuffer.add(16).writeUtf16String(text);
+    FText_FromString(fTextBuffer, fStringBuffer);
     return fTextBuffer;
 }
 
@@ -283,9 +283,12 @@ function sendThrallMessage(PlayerController, Message) {
         return;
     }
     try {
-        var fNameMsg = newFName(Message);
-        var fTextMsg = fNameToFText(fNameMsg);
-        ADH_PlayerController_ReceiveThrallMessage(PlayerController, fTextMsg, ptr(0));
+        var fTextMsg = createFTextFromString(Message);
+        try {
+            ADH_PlayerController_ReceiveThrallMessage(PlayerController, fTextMsg, ptr(0));
+        } finally {
+            FText_Dtor(fTextMsg);
+        }
     } catch (e) {}
 }
 

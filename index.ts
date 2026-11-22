@@ -1,7 +1,6 @@
 import { existsSync } from "fs";
 import { dirname, join } from "path";
 import { runServerSetupCli, runWebConsoleConfigCli } from "./packages/cli";
-import { ensureServerWorkingDir, loadOrCreateConfig } from "./packages/config";
 import {
   APP_CONSOLE_TITLE,
   C,
@@ -10,12 +9,17 @@ import {
   DEFAULT_PUBLIC_IP_TIMEOUT_MS,
   LEGACY_GADGET_DLL_FILENAME,
 } from "./packages/constants";
-import { fetchPublicIp } from "./packages/network";
-import { runServerSupervisor } from "./packages/serverManager";
+import {
+  ensureServerWorkingDir,
+  fetchPublicIp,
+  formatSeconds,
+  loadOrCreateConfig,
+} from "./packages/core";
+import { APP_MESSAGES } from "./packages/messages";
+import { runServerSupervisor } from "./packages/server";
 import {
   enterTabbedMode,
   exitTabbedMode,
-  formatSeconds,
   isInteractiveTty,
   println,
   setupTerminal,
@@ -37,14 +41,12 @@ async function main(): Promise<void> {
 
   // Author & Antigravity branding banner
   println(
-    `${C.LIGHT_CYAN} * ソフト作者: ${C.LIGHT_WHITE}アサネオン  ${C.LIGHT_YELLOW}Build ${C.LIGHT_GREEN}With ${C.LIGHT_BLUE}Antigravity`
+    `${C.LIGHT_CYAN} * ${APP_MESSAGES.authorLabel} ${C.LIGHT_WHITE}${APP_MESSAGES.authorName}  ${C.LIGHT_YELLOW}${APP_MESSAGES.brandBuild} ${C.LIGHT_GREEN}${APP_MESSAGES.brandWith} ${C.LIGHT_BLUE}${APP_MESSAGES.brandAntigravity}`
   );
 
   // Ensure working directory contains the server binary (relative paths only)
   if (!ensureServerWorkingDir(DEFAULT_CONFIG.shippingExecutable)) {
-    println(
-      `${C.RED} * 本ソフトをサーバーのフォルダの下に入れた後で再起動してください!`
-    );
+    println(`${C.RED} * ${APP_MESSAGES.missingServerDirError}`);
     await waitForExitKey();
     process.exit(1);
   }
@@ -69,20 +71,20 @@ async function main(): Promise<void> {
       : { ...DEFAULT_CONFIG };
 
   if (ipResult.ip) {
-    println(`${C.LIGHT_CYAN} * パブリックIP: ${C.LIGHT_GREEN}${ipResult.ip}`);
+    println(
+      `${C.LIGHT_CYAN} * ${APP_MESSAGES.publicIpLabel} ${C.LIGHT_GREEN}${ipResult.ip}`
+    );
   } else {
     println(
-      `${C.RED} * パブリックIPの取得に失敗しました: ${ipResult.error ?? "unknown error"}`
+      `${C.RED} * ${APP_MESSAGES.publicIpFetchFailed(ipResult.error ?? "unknown error")}`
     );
   }
 
   if (!existsSync(config.shippingExecutable)) {
     println(
-      `${C.RED} * サーバー実行ファイルが見つかりません: ${config.shippingExecutable}`
+      `${C.RED} * ${APP_MESSAGES.missingShippingExecutable(config.shippingExecutable)}`
     );
-    println(
-      `${C.RED} * 本ソフトをサーバーのフォルダの下に入れた後で再起動してください!`
-    );
+    println(`${C.RED} * ${APP_MESSAGES.missingServerDirError}`);
     await waitForExitKey();
     process.exit(1);
   }
@@ -93,15 +95,22 @@ async function main(): Promise<void> {
   );
   if (existsSync(legacyFridaDll)) {
     println(
-      `${C.LIGHT_YELLOW} * 警告: 旧パッチ用の ${LEGACY_GADGET_DLL_FILENAME} (${legacyFridaDll}) が検出されました。`
+      `${C.LIGHT_YELLOW} * ${APP_MESSAGES.legacyFridaDllDetected(LEGACY_GADGET_DLL_FILENAME, legacyFridaDll)}`
     );
     println(
-      `${C.LIGHT_YELLOW} * 原生サーバーで安定動作させるため、未改造の ${config.shippingProcessName} を使用し frida.dll / frida.config / Patches を削除してください。`
+      `${C.LIGHT_YELLOW} * ${APP_MESSAGES.legacyFridaDllAdvice(config.shippingProcessName)}`
     );
   }
 
   println(
-    `${C.LIGHT_BLACK} * config.json: サーバーポート=${config.serverPorts[0]}/${config.serverPorts[1]}, Webコンソール=${config.webConsolePort}, パッチ連携=${config.consolePatchPort}, 監視間隔=${formatSeconds(config.checkIntervalMs)}, 再設定待機=${config.restartWaitSeconds}s, 注入方式=Frida直接起動注入(spawn)`
+    `${C.LIGHT_BLACK} * ${APP_MESSAGES.configSummary({
+      serverPort1: config.serverPorts[0],
+      serverPort2: config.serverPorts[1],
+      webConsolePort: config.webConsolePort,
+      consolePatchPort: config.consolePatchPort,
+      checkIntervalText: formatSeconds(config.checkIntervalMs),
+      restartWaitSeconds: config.restartWaitSeconds,
+    })}`
   );
   println();
 
@@ -120,7 +129,7 @@ async function main(): Promise<void> {
   } catch (err: unknown) {
     const msg: string = err instanceof Error ? err.message : String(err);
     println(
-      `${C.RED} * Webコンソールの起動に失敗しました (ポート ${webConfig.webConsolePort}): ${msg}`
+      `${C.RED} * ${APP_MESSAGES.webConsoleStartFailed(webConfig.webConsolePort, msg)}`
     );
     await waitForExitKey();
     process.exit(1);
@@ -131,9 +140,7 @@ async function main(): Promise<void> {
   const handleShutdown = (): void => {
     if (stopController.signal.aborted) return;
     exitTabbedMode();
-    println(
-      `${C.LIGHT_YELLOW} * 終了シグナルを受信しました。サーバーとWebコンソールを停止しています...`
-    );
+    println(`${C.LIGHT_YELLOW} * ${APP_MESSAGES.shutdownSignalReceived}`);
     stopController.abort();
     webConsole?.stop();
   };
@@ -162,27 +169,27 @@ async function main(): Promise<void> {
     const selectedModNames: string =
       plan.selectedOptionLabels.length > 0
         ? plan.selectedOptionLabels.join(", ")
-        : "なし";
+        : APP_MESSAGES.noneLabel;
 
     // Display launch summary (separate visual category)
     println();
+    println(`${C.LIGHT_CYAN} ${APP_MESSAGES.summaryHeader}`);
     println(
-      `${C.LIGHT_CYAN} ======================= 起動設定まとめ =======================`
+      `${C.LIGHT_WHITE} * ${APP_MESSAGES.summaryMapLabel} ${C.LIGHT_GREEN}${plan.mapLabel} (${plan.mapId})`
     );
     println(
-      `${C.LIGHT_WHITE} * マップ:         ${C.LIGHT_GREEN}${plan.mapLabel} (${plan.mapId})`
+      `${C.LIGHT_WHITE} * ${APP_MESSAGES.summaryServerPortLabel} ${C.LIGHT_GREEN}${plan.serverPorts[0]} <-> ${plan.serverPorts[1]}`
     );
     println(
-      `${C.LIGHT_WHITE} * サーバーポート: ${C.LIGHT_GREEN}${plan.serverPorts[0]} <-> ${plan.serverPorts[1]}`
+      `${C.LIGHT_WHITE} * ${APP_MESSAGES.summaryWebConsoleLabel} ${C.LIGHT_GREEN}${plan.webConsolePort} ${C.LIGHT_BLACK}${APP_MESSAGES.summaryInternalPatchPort(plan.consolePatchPort)}`
     );
     println(
-      `${C.LIGHT_WHITE} * Webコンソール:  ${C.LIGHT_GREEN}${plan.webConsolePort} ${C.LIGHT_BLACK}(内部パッチポート: ${plan.consolePatchPort})`
+      `${C.LIGHT_WHITE} * ${APP_MESSAGES.summaryDefaultModsLabel} ${C.CYAN}${defaultModNames}`
     );
-    println(`${C.LIGHT_WHITE} * 自動注入MOD:    ${C.CYAN}${defaultModNames}`);
-    println(`${C.LIGHT_WHITE} * 選択済みMOD:    ${C.CYAN}${selectedModNames}`);
     println(
-      `${C.LIGHT_CYAN} ==============================================================`
+      `${C.LIGHT_WHITE} * ${APP_MESSAGES.summarySelectedModsLabel} ${C.CYAN}${selectedModNames}`
     );
+    println(`${C.LIGHT_CYAN} ${APP_MESSAGES.summaryFooter}`);
 
     await runServerSupervisor({
       plan,
@@ -195,7 +202,7 @@ async function main(): Promise<void> {
     exitTabbedMode();
     webConsole.stop();
     closeLauncherJob();
-    println(`${C.LIGHT_GREEN} * 正常に終了しました。`);
+    println(`${C.LIGHT_GREEN} * ${APP_MESSAGES.exitedCleanly}`);
   }
 }
 
@@ -206,8 +213,9 @@ function handleFatalError(err: unknown): void {
   fatalHandling = true;
   exitTabbedMode();
   closeLauncherJob();
-  const msg: string = err instanceof Error ? (err.stack ?? err.message) : String(err);
-  println(`${C.RED} * 予期しないエラーが発生しました:\n${msg}`);
+  const msg: string =
+    err instanceof Error ? (err.stack ?? err.message) : String(err);
+  println(`${C.RED} * ${APP_MESSAGES.unexpectedErrorHeader}\n${msg}`);
   process.exit(1);
 }
 
@@ -218,11 +226,12 @@ main().catch(async (err: unknown): Promise<void> => {
   exitTabbedMode();
   closeLauncherJob();
   if (err instanceof Error && err.name === "AbortError") {
-    println(`${C.LIGHT_GREEN} * 正常に終了しました。`);
+    println(`${C.LIGHT_GREEN} * ${APP_MESSAGES.exitedCleanly}`);
     process.exit(0);
   }
-  const msg: string = err instanceof Error ? (err.stack ?? err.message) : String(err);
-  println(`${C.RED} * 予期しないエラーが発生しました:\n${msg}`);
+  const msg: string =
+    err instanceof Error ? (err.stack ?? err.message) : String(err);
+  println(`${C.RED} * ${APP_MESSAGES.unexpectedErrorHeader}\n${msg}`);
   await waitForExitKey();
   process.exit(1);
 });

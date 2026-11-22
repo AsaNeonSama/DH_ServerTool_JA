@@ -1,19 +1,18 @@
-import { runReconfigureMatchCli } from "./cli";
+import { runReconfigureMatchCli } from "../cli";
 import {
   C,
   DEFAULT_PATCH_SCRIPTS,
   DETACH_EXIT_GRACE_MS,
   STARTUP_RETRY_DELAY_MS,
   UDP_MISSING_STREAK_LIMIT,
-} from "./constants";
-import { spawnAndInjectServer } from "./injector";
-import { buildInjectionPlan } from "./mods";
+} from "../constants";
+import { formatSeconds } from "../core";
+import { APP_MESSAGES, SERVER_MESSAGES } from "../messages";
 import {
-  formatSeconds,
   println,
   resetServerTabRound,
   waitForPostMatchDecision,
-} from "./terminal";
+} from "../terminal";
 import type {
   ActiveInjectionSession,
   LaunchPlan,
@@ -21,12 +20,14 @@ import type {
   PostMatchAction,
   RunSupervisorOptions,
   UdpLookupResult,
-} from "./types";
+} from "../types";
 import {
   findUdpListenerPid,
   isProcessAlive,
   terminateProcessByPid,
-} from "./win32";
+} from "../win32";
+import { spawnAndInjectServer } from "./injector";
+import { buildInjectionPlan } from "./mods";
 
 async function sleepAbortable(ms: number, signal: AbortSignal): Promise<boolean> {
   if (signal.aborted) return false;
@@ -57,20 +58,22 @@ function printRoundConfigSummary(
   const selectedModNames: string =
     plan.selectedOptionLabels.length > 0
       ? plan.selectedOptionLabels.join(", ")
-      : "なし";
+      : APP_MESSAGES.noneLabel;
 
   println(`${C.LIGHT_CYAN} ${title}`);
   println(
-    `${C.LIGHT_WHITE} * マップ:         ${C.LIGHT_GREEN}${plan.mapLabel} (${plan.mapId})`
+    `${C.LIGHT_WHITE} * ${APP_MESSAGES.summaryMapLabel} ${C.LIGHT_GREEN}${plan.mapLabel} (${plan.mapId})`
   );
   println(
-    `${C.LIGHT_WHITE} * サーバーポート: ${C.LIGHT_GREEN}${plan.serverPorts[0]} <-> ${plan.serverPorts[1]} ${C.LIGHT_BLACK}(今回: ${currentPort})`
+    `${C.LIGHT_WHITE} * ${APP_MESSAGES.summaryServerPortLabel} ${C.LIGHT_GREEN}${plan.serverPorts[0]} <-> ${plan.serverPorts[1]} ${C.LIGHT_BLACK}${SERVER_MESSAGES.roundSummaryCurrentPort(currentPort)}`
   );
-  println(`${C.LIGHT_WHITE} * 自動注入MOD:    ${C.CYAN}${defaultModNames}`);
-  println(`${C.LIGHT_WHITE} * 選択済みMOD:    ${C.CYAN}${selectedModNames}`);
   println(
-    `${C.LIGHT_CYAN} ============================================================`
+    `${C.LIGHT_WHITE} * ${APP_MESSAGES.summaryDefaultModsLabel} ${C.CYAN}${defaultModNames}`
   );
+  println(
+    `${C.LIGHT_WHITE} * ${APP_MESSAGES.summarySelectedModsLabel} ${C.CYAN}${selectedModNames}`
+  );
+  println(`${C.LIGHT_CYAN} ${SERVER_MESSAGES.roundSummaryFooter}`);
 }
 
 export async function runServerSupervisor(
@@ -93,22 +96,22 @@ export async function runServerSupervisor(
     if (pendingRetryNotice !== null) {
       resetServerTabRound();
       println(
-        `${C.LIGHT_YELLOW} * 前回起動失敗のためポート切替再試行 (${pendingRetryNotice})`
+        `${C.LIGHT_YELLOW} * ${SERVER_MESSAGES.retryNotice(pendingRetryNotice)}`
       );
       printRoundConfigSummary(
         activePlan,
         currentPort,
-        "======================= 起動設定まとめ ======================="
+        SERVER_MESSAGES.roundSummaryRetryTitle
       );
       pendingRetryNotice = null;
     }
 
     println();
     println(
-      `${C.LIGHT_CYAN} ================= サーバー起動 (#${round} / ポート: ${currentPort}) =================`
+      `${C.LIGHT_CYAN} ${SERVER_MESSAGES.roundLaunchHeader(round, currentPort)}`
     );
     println(
-      `${C.LIGHT_WHITE} * マップ: ${C.LIGHT_GREEN}${activePlan.mapLabel} (${activePlan.mapId})  ${C.LIGHT_WHITE}ポート: ${C.LIGHT_GREEN}${currentPort}`
+      `${C.LIGHT_WHITE} * ${SERVER_MESSAGES.roundMapLabel} ${C.LIGHT_GREEN}${activePlan.mapLabel} (${activePlan.mapId})  ${C.LIGHT_WHITE}${SERVER_MESSAGES.roundPortLabel} ${C.LIGHT_GREEN}${currentPort}`
     );
 
     let activeSession: ActiveInjectionSession | null = null;
@@ -125,7 +128,7 @@ export async function runServerSupervisor(
           onDetached: (reason: string): void => {
             if (!signal.aborted) {
               println(
-                `${C.LIGHT_YELLOW} * Fridaセッション切断を検知しました (${reason})`
+                `${C.LIGHT_YELLOW} * ${SERVER_MESSAGES.fridaDetached(reason)}`
               );
             }
           },
@@ -136,11 +139,9 @@ export async function runServerSupervisor(
           break;
         }
         const msg: string = err instanceof Error ? err.message : String(err);
+        println(`${C.RED} * ${SERVER_MESSAGES.startupInjectError(msg)}`);
         println(
-          `${C.RED} * サーバー起動・注入エラー: ${msg}`
-        );
-        println(
-          `${C.RED} * ${formatSeconds(STARTUP_RETRY_DELAY_MS)}後にポートを切り替えて再試行します...`
+          `${C.RED} * ${SERVER_MESSAGES.startupRetryAfter(formatSeconds(STARTUP_RETRY_DELAY_MS))}`
         );
         pendingRetryNotice = msg;
         currentPort =
@@ -156,11 +157,9 @@ export async function runServerSupervisor(
       }
 
       println(
-        `${C.LIGHT_CYAN} * サーバー監視中 (${formatSeconds(config.checkIntervalMs)}間隔 / 終了時に自動ポート切替・再起動します)...`
+        `${C.LIGHT_CYAN} * ${SERVER_MESSAGES.monitoringServer(formatSeconds(config.checkIntervalMs))}`
       );
-      println(
-        `${C.LIGHT_BLACK} * 終了する場合は Ctrl+C を押してください`
-      );
+      println(`${C.LIGHT_BLACK} * ${SERVER_MESSAGES.exitHint}`);
 
       // Background watchdog loop (tracks UDP port bind lazily so early startup never triggers false restarts)
       let udpEverObserved: boolean = false;
@@ -183,7 +182,7 @@ export async function runServerSupervisor(
             if (!udpEverObserved) {
               udpEverObserved = true;
               println(
-                `${C.LIGHT_GREEN} * サーバー起動完了確認 (PID: ${shippingPid}, UDP:${currentPort} リッスン中)`
+                `${C.LIGHT_GREEN} * ${SERVER_MESSAGES.udpReadyConfirmed(shippingPid, currentPort)}`
               );
             }
             udpMissingStreak = 0;
@@ -191,7 +190,7 @@ export async function runServerSupervisor(
             udpMissingStreak += 1;
             if (udpMissingStreak >= UDP_MISSING_STREAK_LIMIT) {
               println(
-                `${C.LIGHT_YELLOW} * ポート ${currentPort} のリッスン停止を検知しました。サーバーを再起動します...`
+                `${C.LIGHT_YELLOW} * ${SERVER_MESSAGES.udpStoppedRestarting(currentPort)}`
               );
               terminateProcessByPid(shippingPid);
               break;
@@ -227,7 +226,7 @@ export async function runServerSupervisor(
 
     println();
     println(
-      `${C.LIGHT_YELLOW} * サーバーの終了を検知しました! 次回起動ポート: ${C.LIGHT_WHITE}${prevPort} -> ${C.LIGHT_GREEN}${currentPort}`
+      `${C.LIGHT_YELLOW} * ${SERVER_MESSAGES.serverExitDetectedPrefix} ${C.LIGHT_WHITE}${prevPort} -> ${C.LIGHT_GREEN}${currentPort}`
     );
 
     // Wait restartWaitSeconds (default 10s) so user can press R to change map/settings/mods
@@ -259,14 +258,14 @@ export async function runServerSupervisor(
       printRoundConfigSummary(
         activePlan,
         currentPort,
-        "======================= 更新後の設定 ======================="
+        SERVER_MESSAGES.roundSummaryUpdatedTitle
       );
     } else {
       resetServerTabRound();
       printRoundConfigSummary(
         activePlan,
         currentPort,
-        "================= 起動設定 (前回設定を継続) ================="
+        SERVER_MESSAGES.roundSummaryContinuedTitle
       );
     }
   }
