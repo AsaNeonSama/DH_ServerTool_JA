@@ -1,5 +1,8 @@
-node_modules/
-.build-cache/
-dist/
+/target/
+/dist/
+/.build-cache/
+/.dh_cache/
+patch_runtime.log
+config.json
 *.exe
 *.log

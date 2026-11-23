@@ -1,0 +1,353 @@
+pub mod cache;
+pub mod error;
+pub mod log_channel;
+pub mod oep_inject;
+pub mod prelude;
+
+use std::collections::HashMap;
+use std::future::Future;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Duration;
+
+use dh_win32::{spawn_suspended_console, JobObject, SpawnedProcess};
+use tokio::sync::oneshot;
+use tokio::time::{Interval, Sleep};
+
+pub use cache::{
+    default_cache_candidates, sweep_default_stale_run_dirs, sweep_stale_run_dirs, GadgetCache,
+    RoundTempDir, FRIDA_GADGET_SHA256, FRIDA_GADGET_VERSION,
+};
+pub use error::{InjectorError, Result};
+pub use log_channel::{start_log_server, InitHandshakeOutcome, LogServerHandle};
+pub use oep_inject::{InjectedStubInfo, OepStubInjector, ProcessInjector};
+pub use prelude::{
+    build_bundle_js, preprocess_mod_source, BundleBuildParams, WINDOWS_NATIVE_FUNCTION_PRELUDE,
+};
+
+/// Single MOD script entry to be aggregated into the per-round Gadget bundle.
+#[derive(Debug, Clone)]
+pub struct PatchMod {
+    pub id: String,
+    pub file_name: String,
+    pub label: String,
+    pub source: String,
+}
+
+/// Severity level for runtime JS logs emitted by injected MOD scripts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LogLevel {
+    Info,
+    Warn,
+    Error,
+}
+
+impl LogLevel {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Info => "INFO",
+            Self::Warn => "WARN",
+            Self::Error => "ERROR",
+        }
+    }
+}
+
+/// Real-time lifecycle and log events streamed from Frida Gadget over the loopback NDJSON channel.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InjectorEvent {
+    ModLoaded {
+        file_name: String,
+    },
+    Log {
+        level: LogLevel,
+        file_name: String,
+        message: String,
+    },
+    InitOk,
+    InitError {
+        file_name: String,
+        message: String,
+    },
+    ChannelClosed,
+}
+
+/// Callback invoked asynchronously whenever the Gadget bundle streams a status or log event.
+pub type EventCallback = Arc<dyn Fn(InjectorEvent) + Send + Sync>;
+
+/// Parameters for spawning a target executable in suspended state, attaching Frida Gadget
+/// at OEP, waiting for the `INIT_OK` handshake, and tracking the active session.
+#[derive(Clone)]
+pub struct InjectLaunchRequest {
+    pub exe_path: PathBuf,
+    pub args: Vec<String>,
+    pub cwd: Option<PathBuf>,
+    pub mods: Vec<PatchMod>,
+    pub tokens: HashMap<String, String>,
+    pub patch_log_path: PathBuf,
+    pub round: u64,
+    pub init_timeout: Duration,
+    pub cache_dir_override: Option<PathBuf>,
+    pub on_event: Option<EventCallback>,
+}
+
+impl InjectLaunchRequest {
+    /// Creates a request with standard defaults (`init_timeout = 30s`, default cache directory).
+    #[must_use]
+    pub fn new(exe_path: PathBuf, args: Vec<String>, mods: Vec<PatchMod>) -> Self {
+        Self {
+            exe_path,
+            args,
+            cwd: None,
+            mods,
+            tokens: HashMap::new(),
+            patch_log_path: PathBuf::from("./patch_runtime.log"),
+            round: 1,
+            init_timeout: Duration::from_secs(30),
+            cache_dir_override: None,
+            on_event: None,
+        }
+    }
+}
+
+/// Owns the spawned game server process, its kill-on-close Job Object, the loopback
+/// NDJSON log server, and the per-round temporary staging directory.
+///
+/// Dropping this session closes the Job Object (immediately terminating the child
+/// process if still running) and cleans up the per-round staging directory.
+#[derive(Debug)]
+pub struct ActiveInjectionSession {
+    pid: u32,
+    process: SpawnedProcess,
+    // Field order matters for Rust Drop: drop JobObject BEFORE RoundTempDir so Windows
+    // terminates the server and releases the file lock on gadget.dll before dir removal.
+    log_server: Option<LogServerHandle>,
+    job: Option<JobObject>,
+    round_dir: Option<RoundTempDir>,
+    stub_info: InjectedStubInfo,
+}
+
+impl ActiveInjectionSession {
+    #[must_use]
+    pub fn pid(&self) -> u32 {
+        self.pid
+    }
+
+    #[must_use]
+    pub fn is_alive(&self) -> bool {
+        self.process.is_alive()
+    }
+
+    #[must_use]
+    pub fn round_dir(&self) -> Option<&Path> {
+        self.round_dir.as_ref().map(RoundTempDir::dir)
+    }
+
+    #[must_use]
+    pub fn stub_info(&self) -> &InjectedStubInfo {
+        &self.stub_info
+    }
+
+    /// Reads the `HMODULE` returned by `LoadLibraryW(gadget.dll)` in the remote process, if available.
+    #[must_use]
+    pub fn loaded_module_handle(&self) -> Option<u64> {
+        OepStubInjector.read_loaded_module_handle(&self.process, &self.stub_info)
+    }
+
+    /// Force-terminates the target process immediately.
+    pub fn terminate(&self) -> Result<()> {
+        self.process.terminate(0)?;
+        Ok(())
+    }
+
+    /// Gracefully shuts down the log server, terminates the process if still alive,
+    /// releases the Job Object, and removes the per-round temporary directory.
+    pub async fn cleanup(mut self) {
+        if let Some(log_server) = self.log_server.take() {
+            log_server.shutdown().await;
+        }
+        if self.process.is_alive() {
+            let _ = self.process.terminate(0);
+            let _ = self.process.wait_exit(1000);
+        }
+        // Explicitly drop JobObject before cleaning the staging directory.
+        drop(self.job.take());
+        if let Some(mut dir) = self.round_dir.take() {
+            dir.cleanup();
+        }
+    }
+}
+
+/// Spawns the target process suspended, attaches Frida Gadget via [`OepStubInjector`],
+/// resumes the process, and waits up to `req.init_timeout` for `INIT_OK`.
+pub async fn spawn_and_inject(req: InjectLaunchRequest) -> Result<ActiveInjectionSession> {
+    let injector: OepStubInjector = OepStubInjector;
+    spawn_and_inject_with_cancel(&injector, req, std::future::pending()).await
+}
+
+/// Same as [`spawn_and_inject`], using a custom [`ProcessInjector`] implementation.
+pub async fn spawn_and_inject_with<I: ProcessInjector>(
+    injector: &I,
+    req: InjectLaunchRequest,
+) -> Result<ActiveInjectionSession> {
+    spawn_and_inject_with_cancel(injector, req, std::future::pending()).await
+}
+
+/// Same as [`spawn_and_inject_with`], additionally racing against a cancellation future
+/// (e.g., `cancel_token.cancelled()`). On cancellation, error, or timeout, the spawned
+/// process is immediately terminated and the per-round staging directory is cleaned up.
+pub async fn spawn_and_inject_with_cancel<I, F>(
+    injector: &I,
+    req: InjectLaunchRequest,
+    cancel: F,
+) -> Result<ActiveInjectionSession>
+where
+    I: ProcessInjector,
+    F: Future<Output = ()>,
+{
+    let cache: GadgetCache = GadgetCache::open(req.cache_dir_override.as_deref())?;
+    let (log_server, init_rx): (LogServerHandle, oneshot::Receiver<InitHandshakeOutcome>) =
+        start_log_server(req.on_event.clone()).await?;
+
+    let patch_log_abs: PathBuf = if req.patch_log_path.is_absolute() {
+        req.patch_log_path.clone()
+    } else if let Some(ref cwd) = req.cwd {
+        cwd.join(&req.patch_log_path)
+    } else {
+        std::env::current_dir()?.join(&req.patch_log_path)
+    };
+
+    let bundle_js: String = build_bundle_js(&BundleBuildParams {
+        mods: &req.mods,
+        tokens: &req.tokens,
+        log_port: log_server.port(),
+        session_nonce: log_server.session_nonce(),
+        patch_log_path: &patch_log_abs,
+    })?;
+
+    let mut round_dir: RoundTempDir = cache.prepare_round_dir(req.round, &bundle_js)?;
+
+    let job: JobObject = JobObject::new_kill_on_close()?;
+    let process: SpawnedProcess =
+        spawn_suspended_console(&req.exe_path, &req.args, req.cwd.as_deref())?;
+    let pid: u32 = process.pid();
+
+    if let Err(err) = job.assign_process(&process) {
+        let _ = process.terminate(1);
+        drop(job);
+        round_dir.cleanup();
+        log_server.shutdown().await;
+        return Err(err.into());
+    }
+
+    let stub_info: InjectedStubInfo =
+        match injector.inject_suspended(&process, round_dir.gadget_dll_path()) {
+            Ok(info) => info,
+            Err(err) => {
+                let _ = process.terminate(1);
+                drop(job);
+                round_dir.cleanup();
+                log_server.shutdown().await;
+                return Err(err);
+            }
+        };
+
+    if let Err(err) = process.resume() {
+        let _ = process.terminate(1);
+        drop(job);
+        round_dir.cleanup();
+        log_server.shutdown().await;
+        return Err(err.into());
+    }
+
+    let wait_result: Result<()> = wait_for_handshake(
+        injector,
+        &process,
+        &stub_info,
+        init_rx,
+        req.init_timeout,
+        cancel,
+    )
+    .await;
+
+    match wait_result {
+        Ok(()) => Ok(ActiveInjectionSession {
+            pid,
+            process,
+            log_server: Some(log_server),
+            job: Some(job),
+            round_dir: Some(round_dir),
+            stub_info,
+        }),
+        Err(err) => {
+            let _ = process.terminate(1);
+            let _ = process.wait_exit(1000);
+            drop(job);
+            round_dir.cleanup();
+            log_server.shutdown().await;
+            Err(err)
+        }
+    }
+}
+
+async fn wait_for_handshake<I, F>(
+    injector: &I,
+    process: &SpawnedProcess,
+    stub_info: &InjectedStubInfo,
+    mut init_rx: oneshot::Receiver<InitHandshakeOutcome>,
+    init_timeout: Duration,
+    cancel: F,
+) -> Result<()>
+where
+    I: ProcessInjector,
+    F: Future<Output = ()>,
+{
+    let deadline: Sleep = tokio::time::sleep(init_timeout);
+    tokio::pin!(deadline);
+    tokio::pin!(cancel);
+
+    let mut exit_poll: Interval = tokio::time::interval(Duration::from_millis(200));
+    exit_poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
+    loop {
+        tokio::select! {
+            () = &mut cancel => {
+                return Err(InjectorError::Cancelled);
+            }
+            () = &mut deadline => {
+                let module_handle: Option<u64> = injector.read_loaded_module_handle(process, stub_info);
+                let detail: String = match module_handle {
+                    Some(0) => "LoadLibraryW returned NULL or has not completed".to_string(),
+                    Some(h) => format!("frida-gadget loaded at {h:#x}, but INIT_OK was not received"),
+                    None => "unable to inspect remote bootstrap state".to_string(),
+                };
+                return Err(InjectorError::InitTimeout {
+                    timeout_secs: init_timeout.as_secs(),
+                    detail,
+                });
+            }
+            res = &mut init_rx => {
+                match res {
+                    Ok(InitHandshakeOutcome::Ok) => return Ok(()),
+                    Ok(InitHandshakeOutcome::Error { file_name, message }) => {
+                        return Err(InjectorError::ModInit { file_name, message });
+                    }
+                    Err(_) => {
+                        return Err(InjectorError::Inject(
+                            "loopback log server closed before INIT_OK".to_string(),
+                        ));
+                    }
+                }
+            }
+            _ = exit_poll.tick() => {
+                if !process.is_alive() {
+                    let exit_code: Option<u32> = process.wait_exit(0).ok().flatten();
+                    return Err(InjectorError::PrematureExit {
+                        pid: process.pid(),
+                        exit_code,
+                    });
+                }
+            }
+        }
+    }
+}
