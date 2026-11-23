@@ -133,8 +133,10 @@ fn embed_windows_resources(icon_path: &Path) -> Result<(), Box<dyn Error>> {
     res.set("LegalCopyright", "アサネオン / Build With Antigravity");
     res.set("OriginalFilename", "DH_ServerTool_JA.exe");
     res.set("InternalName", "DH_ServerTool_JA");
-    res.set("FileVersion", "2.0.0.0");
-    res.set("ProductVersion", "2.0.0.0");
+    let pkg_version: &str = env!("CARGO_PKG_VERSION");
+    let pe_version: String = format!("{pkg_version}.0");
+    res.set("FileVersion", &pe_version);
+    res.set("ProductVersion", &pe_version);
     res.compile()?;
     Ok(())
 }
