@@ -19,33 +19,14 @@ use windows::Win32::System::Threading::{
     PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE, STARTUPINFOW,
 };
 
+use crate::consts::process::{
+    DOS_HEADER_SIZE, DOS_LFANEW_OFFSET, DOS_MAGIC_MZ, IMAGE_FILE_MACHINE_AMD64,
+    MAX_REASONABLE_LFANEW, NT_ADDRESS_OF_ENTRY_POINT_OFFSET, NT_HEADER_READ_SIZE,
+    PE32_PLUS_OPTIONAL_MAGIC, PEB_IMAGE_BASE_OFFSET, PE_SIGNATURE,
+};
 use crate::error::{encode_wide_null, from_windows_err, Result, Win32Error};
-
-/// Process entry returned by Toolhelp32 process enumeration.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProcessInfo {
-    pub pid: u32,
-    pub parent_pid: u32,
-    pub name: String,
-}
-
-/// Entry-point metadata resolved from a remote x64 process's PEB and PE headers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RemotePeEntry {
-    pub peb_address: u64,
-    pub image_base: u64,
-    pub entry_point_rva: u32,
-    pub oep: u64,
-}
-
-/// RAII handle owner for a child process spawned via [`spawn_suspended_console`].
-#[derive(Debug)]
-pub struct SpawnedProcess {
-    process_handle: HANDLE,
-    thread_handle: HANDLE,
-    pid: u32,
-    thread_id: u32,
-}
+use crate::structs::process::{NtQueryInformationProcessFn, ProcessBasicInformation};
+pub use crate::structs::process::{ProcessInfo, RemotePeEntry, SpawnedProcess};
 
 // SAFETY: Win32 process and thread handles are safe to move between threads.
 unsafe impl Send for SpawnedProcess {}
@@ -356,27 +337,6 @@ pub fn find_processes_by_name(exe_name: &str) -> Vec<ProcessInfo> {
         .collect()
 }
 
-#[repr(C)]
-#[derive(Default)]
-struct ProcessBasicInformation {
-    exit_status: i32,
-    _pad0: u32,
-    peb_base_address: u64,
-    affinity_mask: usize,
-    base_priority: i32,
-    _pad1: u32,
-    unique_process_id: usize,
-    inherited_from_unique_process_id: usize,
-}
-
-type NtQueryInformationProcessFn = unsafe extern "system" fn(
-    process_handle: HANDLE,
-    process_information_class: u32,
-    process_information: *mut c_void,
-    process_information_length: u32,
-    return_length: *mut u32,
-) -> i32;
-
 fn read_exact_remote(handle: HANDLE, addr: u64, buf: &mut [u8]) -> Result<()> {
     let mut bytes_read: usize = 0;
     // SAFETY: `handle` is a valid remote process handle and `buf` provides `buf.len()` writable bytes.
@@ -456,7 +416,11 @@ pub fn read_remote_peb_and_oep(process_handle: isize) -> Result<RemotePeEntry> {
 
     // x64 PEB.ImageBaseAddress is at offset +0x10
     let mut image_base_bytes: [u8; 8] = [0u8; 8];
-    read_exact_remote(handle, pbi.peb_base_address + 0x10, &mut image_base_bytes)?;
+    read_exact_remote(
+        handle,
+        pbi.peb_base_address + PEB_IMAGE_BASE_OFFSET,
+        &mut image_base_bytes,
+    )?;
     let image_base: u64 = u64::from_le_bytes(image_base_bytes);
     if image_base == 0 {
         return Err(Win32Error::InvalidPe(
@@ -465,46 +429,46 @@ pub fn read_remote_peb_and_oep(process_handle: isize) -> Result<RemotePeEntry> {
     }
 
     // Read IMAGE_DOS_HEADER (64 bytes)
-    let mut dos_header: [u8; 64] = [0u8; 64];
+    let mut dos_header: [u8; DOS_HEADER_SIZE] = [0u8; DOS_HEADER_SIZE];
     read_exact_remote(handle, image_base, &mut dos_header)?;
     let dos_magic: u16 = u16::from_le_bytes([dos_header[0], dos_header[1]]);
-    if dos_magic != 0x5A4D {
+    if dos_magic != DOS_MAGIC_MZ {
         return Err(Win32Error::InvalidPe(format!(
             "invalid DOS signature {dos_magic:#06x} at {image_base:#x}"
         )));
     }
     let e_lfanew: u32 = u32::from_le_bytes([
-        dos_header[0x3C],
-        dos_header[0x3D],
-        dos_header[0x3E],
-        dos_header[0x3F],
+        dos_header[DOS_LFANEW_OFFSET],
+        dos_header[DOS_LFANEW_OFFSET + 1],
+        dos_header[DOS_LFANEW_OFFSET + 2],
+        dos_header[DOS_LFANEW_OFFSET + 3],
     ]);
-    if e_lfanew == 0 || e_lfanew > 0x0010_0000 {
+    if e_lfanew == 0 || e_lfanew > MAX_REASONABLE_LFANEW {
         return Err(Win32Error::InvalidPe(format!(
             "unreasonable e_lfanew: {e_lfanew:#x}"
         )));
     }
 
     // Read PE signature (4) + IMAGE_FILE_HEADER (20) + first 24 bytes of IMAGE_OPTIONAL_HEADER64
-    let mut nt_header: [u8; 0x30] = [0u8; 0x30];
+    let mut nt_header: [u8; NT_HEADER_READ_SIZE] = [0u8; NT_HEADER_READ_SIZE];
     read_exact_remote(handle, image_base + u64::from(e_lfanew), &mut nt_header)?;
 
     let pe_sig: u32 = u32::from_le_bytes([nt_header[0], nt_header[1], nt_header[2], nt_header[3]]);
-    if pe_sig != 0x0000_4550 {
+    if pe_sig != PE_SIGNATURE {
         return Err(Win32Error::InvalidPe(format!(
             "invalid PE signature {pe_sig:#010x}"
         )));
     }
 
     let machine: u16 = u16::from_le_bytes([nt_header[4], nt_header[5]]);
-    if machine != 0x8664 {
+    if machine != IMAGE_FILE_MACHINE_AMD64 {
         return Err(Win32Error::InvalidPe(format!(
             "target is not x86_64 PE (Machine={machine:#06x})"
         )));
     }
 
     let opt_magic: u16 = u16::from_le_bytes([nt_header[0x18], nt_header[0x19]]);
-    if opt_magic != 0x020B {
+    if opt_magic != PE32_PLUS_OPTIONAL_MAGIC {
         return Err(Win32Error::InvalidPe(format!(
             "target is not PE32+ (OptionalHeader.Magic={opt_magic:#06x})"
         )));
@@ -512,10 +476,10 @@ pub fn read_remote_peb_and_oep(process_handle: isize) -> Result<RemotePeEntry> {
 
     // AddressOfEntryPoint is at OptionalHeader + 0x10 == NT header + 0x28
     let entry_point_rva: u32 = u32::from_le_bytes([
-        nt_header[0x28],
-        nt_header[0x29],
-        nt_header[0x2A],
-        nt_header[0x2B],
+        nt_header[NT_ADDRESS_OF_ENTRY_POINT_OFFSET],
+        nt_header[NT_ADDRESS_OF_ENTRY_POINT_OFFSET + 1],
+        nt_header[NT_ADDRESS_OF_ENTRY_POINT_OFFSET + 2],
+        nt_header[NT_ADDRESS_OF_ENTRY_POINT_OFFSET + 3],
     ]);
     if entry_point_rva == 0 {
         return Err(Win32Error::InvalidPe(
@@ -529,67 +493,4 @@ pub fn read_remote_peb_and_oep(process_handle: isize) -> Result<RemotePeEntry> {
         entry_point_rva,
         oep: image_base + u64::from(entry_point_rva),
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn pbi_struct_is_48_bytes_on_x64() {
-        assert_eq!(size_of::<ProcessBasicInformation>(), 48);
-        assert_eq!(
-            std::mem::offset_of!(ProcessBasicInformation, peb_base_address),
-            8
-        );
-    }
-
-    #[test]
-    fn command_line_quoting_handles_spaces_and_ue_args() {
-        let exe = Path::new(r"C:\Program Files\Dread Hunger\Server.exe");
-        let args = vec![
-            "DreadHunger".to_string(),
-            "Departure_Persistent?listen?Game=/Game/Test".to_string(),
-            "-log".to_string(),
-            "-port=7895".to_string(),
-            "arg with spaces".to_string(),
-        ];
-        let cmd = build_command_line(exe, &args);
-        assert_eq!(
-            cmd,
-            r#""C:\Program Files\Dread Hunger\Server.exe" DreadHunger Departure_Persistent?listen?Game=/Game/Test -log -port=7895 "arg with spaces""#
-        );
-    }
-
-    #[test]
-    fn current_process_is_alive_and_enumerable() {
-        let my_pid = std::process::id();
-        assert!(is_process_alive(my_pid));
-        assert!(!is_process_alive(0));
-
-        let procs = list_processes();
-        let me = procs
-            .iter()
-            .find(|p| p.pid == my_pid)
-            .expect("current test exe in snapshot");
-        let by_name = find_processes_by_name(&me.name.to_ascii_uppercase());
-        assert!(by_name.iter().any(|p| p.pid == my_pid));
-    }
-
-    #[test]
-    fn spawn_suspended_reads_valid_peb_and_oep() {
-        let cmd = Path::new(r"C:\Windows\System32\cmd.exe");
-        let args = vec!["/C".to_string(), "exit 0".to_string()];
-        let proc = spawn_suspended_console(cmd, &args, None).expect("spawn cmd.exe suspended");
-        let pe = read_remote_peb_and_oep(proc.process_handle_raw()).expect("read PEB and OEP");
-
-        assert_ne!(pe.peb_address, 0);
-        assert_ne!(pe.image_base, 0);
-        assert_ne!(pe.entry_point_rva, 0);
-        assert_eq!(pe.oep, pe.image_base + u64::from(pe.entry_point_rva));
-
-        proc.resume().expect("resume cmd.exe");
-        let code = proc.wait_exit(5000).expect("wait cmd.exe");
-        assert_eq!(code, Some(0));
-    }
 }

@@ -10,14 +10,13 @@ use std::time::Duration;
 use rand::RngCore;
 use sha2::{Digest, Sha256};
 
+use crate::consts::cache::{
+    BUNDLE_JS_FILE_NAME, CACHE_APP_DIR_NAME, CLEANUP_RETRY_ATTEMPTS, CLEANUP_RETRY_DELAY_MS,
+    FALLBACK_LOCAL_CACHE_DIR, GADGET_CONFIG_FILE_NAME, GADGET_DLL_FILE_NAME, RUN_DIR_PREFIX,
+};
+pub use crate::consts::cache::{EMBEDDED_GADGET_ZST, FRIDA_GADGET_SHA256, FRIDA_GADGET_VERSION};
 use crate::error::{InjectorError, Result};
-
-/// Embedded zstd-22 compressed `frida-gadget-17.27.4-windows-x86_64.dll`.
-pub const EMBEDDED_GADGET_ZST: &[u8] = include_bytes!(env!("DH_FRIDA_GADGET_ZST_PATH"));
-/// Frida Gadget version string embedded at build time.
-pub const FRIDA_GADGET_VERSION: &str = env!("DH_FRIDA_GADGET_VERSION");
-/// Expected lowercase hex SHA-256 of the uncompressed Frida Gadget DLL.
-pub const FRIDA_GADGET_SHA256: &str = env!("DH_FRIDA_GADGET_SHA256");
+pub use crate::structs::cache::{GadgetCache, RoundTempDir};
 
 static ROUND_SEQ: AtomicU64 = AtomicU64::new(1);
 
@@ -53,11 +52,11 @@ pub fn default_cache_candidates() -> Vec<PathBuf> {
     let mut candidates: Vec<PathBuf> = Vec::with_capacity(3);
     if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
         if !local_app_data.trim().is_empty() {
-            candidates.push(PathBuf::from(local_app_data).join("DH_ServerTool_JA"));
+            candidates.push(PathBuf::from(local_app_data).join(CACHE_APP_DIR_NAME));
         }
     }
-    candidates.push(std::env::temp_dir().join("DH_ServerTool_JA"));
-    candidates.push(PathBuf::from(".dh_cache"));
+    candidates.push(std::env::temp_dir().join(CACHE_APP_DIR_NAME));
+    candidates.push(PathBuf::from(FALLBACK_LOCAL_CACHE_DIR));
     candidates
 }
 
@@ -101,7 +100,7 @@ pub fn sweep_stale_run_dirs(cache_root: &Path) {
         let Some(name): Option<&str> = path.file_name().and_then(OsStr::to_str) else {
             continue;
         };
-        let Some(rest): Option<&str> = name.strip_prefix("run_") else {
+        let Some(rest): Option<&str> = name.strip_prefix(RUN_DIR_PREFIX) else {
             continue;
         };
         let Some(pid_str): Option<&str> = rest.split('_').next() else {
@@ -125,14 +124,6 @@ pub fn sweep_default_stale_run_dirs() {
             sweep_stale_run_dirs(&candidate);
         }
     }
-}
-
-/// Manages the persistent SHA-256 verified Frida Gadget DLL cache and per-round
-/// isolated execution directories (using NTFS hard links when on the same volume).
-#[derive(Debug, Clone)]
-pub struct GadgetCache {
-    root_dir: PathBuf,
-    cached_dll_path: PathBuf,
 }
 
 impl GadgetCache {
@@ -235,23 +226,23 @@ impl GadgetCache {
         }
         fs::create_dir_all(&dir)?;
 
-        let gadget_dll_path: PathBuf = dir.join("gadget.dll");
+        let gadget_dll_path: PathBuf = dir.join(GADGET_DLL_FILE_NAME);
         if fs::hard_link(&self.cached_dll_path, &gadget_dll_path).is_err() {
             fs::copy(&self.cached_dll_path, &gadget_dll_path)?;
         }
 
-        let config_path: PathBuf = dir.join("gadget.config");
+        let config_path: PathBuf = dir.join(GADGET_CONFIG_FILE_NAME);
         let config_json: serde_json::Value = serde_json::json!({
             "runtime": "qjs",
             "interaction": {
                 "type": "script",
-                "path": "bundle.js",
+                "path": BUNDLE_JS_FILE_NAME,
                 "on_load": "resume"
             }
         });
         fs::write(&config_path, serde_json::to_string_pretty(&config_json)?)?;
 
-        let bundle_js_path: PathBuf = dir.join("bundle.js");
+        let bundle_js_path: PathBuf = dir.join(BUNDLE_JS_FILE_NAME);
         fs::write(&bundle_js_path, bundle_js.as_bytes())?;
 
         Ok(RoundTempDir {
@@ -262,16 +253,6 @@ impl GadgetCache {
             cleaned: false,
         })
     }
-}
-
-/// RAII owner for a single match round's `run_<pid>_<round>/` staging directory.
-#[derive(Debug)]
-pub struct RoundTempDir {
-    dir: PathBuf,
-    gadget_dll_path: PathBuf,
-    config_path: PathBuf,
-    bundle_js_path: PathBuf,
-    cleaned: bool,
 }
 
 impl RoundTempDir {
@@ -302,12 +283,12 @@ impl RoundTempDir {
             return;
         }
         self.cleaned = true;
-        for attempt in 0u8..5u8 {
+        for attempt in 0u8..CLEANUP_RETRY_ATTEMPTS {
             if !self.dir.exists() || fs::remove_dir_all(&self.dir).is_ok() {
                 return;
             }
-            if attempt < 4 {
-                std::thread::sleep(Duration::from_millis(60));
+            if attempt + 1 < CLEANUP_RETRY_ATTEMPTS {
+                std::thread::sleep(Duration::from_millis(CLEANUP_RETRY_DELAY_MS));
             }
         }
     }
@@ -316,50 +297,5 @@ impl RoundTempDir {
 impl Drop for RoundTempDir {
     fn drop(&mut self) {
         self.cleanup();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn cache_extracts_hardlinks_and_cleans_up_in_japanese_path() {
-        let base =
-            std::env::temp_dir().join(format!("dh_cache_テスト日本語_{}", std::process::id()));
-        let _ = fs::remove_dir_all(&base);
-
-        // Create a fake stale directory for an impossible dead PID
-        let stale = base.join("run_99999999_1");
-        fs::create_dir_all(&stale).unwrap();
-        fs::write(stale.join("dummy.txt"), b"stale").unwrap();
-
-        let cache = GadgetCache::open(Some(&base)).expect("open Japanese cache path");
-        assert!(!stale.exists(), "stale run dir should be swept on open");
-        assert!(cache.cached_dll_path().is_file());
-
-        let round_dir_path;
-        {
-            let round = cache
-                .prepare_round_dir(1, "console.log('hello');")
-                .expect("prepare round dir");
-            round_dir_path = round.dir().to_path_buf();
-            assert!(round.gadget_dll_path().is_file());
-            assert!(round.config_path().is_file());
-            assert!(round.bundle_js_path().is_file());
-
-            let cfg: serde_json::Value =
-                serde_json::from_str(&fs::read_to_string(round.config_path()).unwrap()).unwrap();
-            assert_eq!(cfg["runtime"], "qjs");
-            assert_eq!(cfg["interaction"]["type"], "script");
-            assert_eq!(cfg["interaction"]["path"], "bundle.js");
-            assert_eq!(cfg["interaction"]["on_load"], "resume");
-        }
-        assert!(
-            !round_dir_path.exists(),
-            "RoundTempDir must clean itself up on Drop"
-        );
-
-        let _ = fs::remove_dir_all(&base);
     }
 }

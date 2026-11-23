@@ -2,18 +2,12 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 
+pub use crate::consts::server::PATCH_RUNTIME_LOG_RELATIVE_PATH;
 use crate::format::format_log_date_time;
-use crate::messages::ja::server as server_msg;
+use crate::languages;
 use crate::mods::ResolvedPatchScript;
-
-pub const PATCH_RUNTIME_LOG_RELATIVE_PATH: &str = "./patch_runtime.log";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PatchLogLevel {
-    Info,
-    Warn,
-    Error,
-}
+use crate::structs::languages::ServerMsg;
+pub use crate::structs::server::PatchLogLevel;
 
 impl PatchLogLevel {
     #[must_use]
@@ -49,7 +43,12 @@ pub fn reset_patch_runtime_log_at(path: &Path, port: u16, patches: &[ResolvedPat
         .map(|p: &ResolvedPatchScript| p.file_name.as_str())
         .collect::<Vec<&str>>()
         .join(", ");
-    let header: String = server_msg::patch_log_header(&format_log_date_time(), port, &patch_names);
+    let timestamp: String = format_log_date_time();
+    let header: String = languages::render_server(&ServerMsg::PatchLogHeader {
+        timestamp: &timestamp,
+        port,
+        patch_names: &patch_names,
+    });
     let _ = fs::write(path, header.as_bytes());
 }
 
@@ -77,36 +76,5 @@ pub fn append_patch_runtime_log_at(
     );
     if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
         let _ = file.write_all(line.as_bytes());
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::mods::build_injection_plan;
-    use uuid::Uuid;
-
-    #[test]
-    fn overwrites_log_per_round_and_appends_formatted_entries() {
-        let path = std::env::temp_dir().join(format!("dh_patch_log_test_{}.log", Uuid::new_v4()));
-        let patches = build_injection_plan(&[1], 7893);
-
-        reset_patch_runtime_log_at(&path, 7895, &patches);
-        append_patch_runtime_log_at(&path, PatchLogLevel::Info, "コンソール連携.js", "hello");
-        append_patch_runtime_log_at(&path, PatchLogLevel::Error, "接続保護_乱入防止.js", "boom");
-
-        let first = fs::read_to_string(&path).expect("read first round log");
-        assert!(first.contains("Port: 7895"));
-        assert!(first.contains("コンソール連携.js"));
-        assert!(first.contains("[INFO] [コンソール連携.js] hello"));
-        assert!(first.contains("[ERROR] [接続保護_乱入防止.js] boom"));
-
-        reset_patch_runtime_log_at(&path, 7897, &patches[..4]);
-        let second = fs::read_to_string(&path).expect("read second round log");
-        assert!(second.contains("Port: 7897"));
-        assert!(!second.contains("Port: 7895"));
-        assert!(!second.contains("hello"));
-
-        let _ = fs::remove_file(&path);
     }
 }

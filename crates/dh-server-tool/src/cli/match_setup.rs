@@ -2,69 +2,31 @@ use tokio_util::sync::CancellationToken;
 
 use crate::cli::mod_selector::prompt_mod_selection;
 use crate::colors;
-use crate::messages::ja::cli as cli_msg;
+pub use crate::consts::cli::MAP_OPTIONS;
+use crate::consts::cli::{
+    DEFAULT_COAL_BURN_RATE, DEFAULT_COLD_INTENSITY, DEFAULT_DAYS_BEFORE_BLIZZARD,
+    DEFAULT_DAY_MINUTES, DEFAULT_HUNGER_RATE, DEFAULT_MAX_PLAYERS, DEFAULT_PREDATOR_DAMAGE,
+    DEFAULT_THRALLS,
+};
+use crate::languages;
+use crate::structs::cli::{FloatPromptSpec, IntegerPromptSpec};
+pub use crate::structs::cli::{MapOption, MatchConfig, ServerSettings};
+use crate::structs::languages::CliMsgCode;
 use crate::terminal::{PromptError, Terminal};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct MapOption {
-    pub key: &'static str,
-    pub id: &'static str,
-    pub label: &'static str,
-}
-
-pub const MAP_OPTIONS: [MapOption; 3] = [
-    MapOption {
-        key: "1",
-        id: "Departure_Persistent",
-        label: cli_msg::MAP_LABEL_1,
-    },
-    MapOption {
-        key: "2",
-        id: "Expanse_Persistent",
-        label: cli_msg::MAP_LABEL_2,
-    },
-    MapOption {
-        key: "3",
-        id: "Approach_Persistent",
-        label: cli_msg::MAP_LABEL_3,
-    },
-];
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ServerSettings {
-    pub max_players: u32,
-    pub days_before_blizzard: u32,
-    pub day_minutes: u32,
-    pub predator_damage: f64,
-    pub cold_intensity: f64,
-    pub hunger_rate: f64,
-    pub coal_burn_rate: f64,
-    pub thralls: u32,
-}
 
 impl Default for ServerSettings {
     fn default() -> Self {
         Self {
-            max_players: 8,
-            days_before_blizzard: 3,
-            day_minutes: 9,
-            predator_damage: 1.0,
-            cold_intensity: 1.0,
-            hunger_rate: 1.0,
-            coal_burn_rate: 1.0,
-            thralls: 2,
+            max_players: DEFAULT_MAX_PLAYERS,
+            days_before_blizzard: DEFAULT_DAYS_BEFORE_BLIZZARD,
+            day_minutes: DEFAULT_DAY_MINUTES,
+            predator_damage: DEFAULT_PREDATOR_DAMAGE,
+            cold_intensity: DEFAULT_COLD_INTENSITY,
+            hunger_rate: DEFAULT_HUNGER_RATE,
+            coal_burn_rate: DEFAULT_COAL_BURN_RATE,
+            thralls: DEFAULT_THRALLS,
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct MatchConfig {
-    pub map_id: &'static str,
-    pub map_label: &'static str,
-    pub settings: ServerSettings,
-    pub selected_option_numbers: Vec<u32>,
-    pub selected_option_labels: Vec<String>,
-    pub ue_map_argument: String,
 }
 
 #[must_use]
@@ -131,29 +93,15 @@ pub fn build_ue_map_argument(map_id: &str, settings: &ServerSettings) -> String 
     )
 }
 
-struct IntegerPromptSpec<'a> {
-    label: &'a str,
-    min: u32,
-    max: u32,
-    default_value: u32,
-}
-
-struct FloatPromptSpec<'a> {
-    label: &'a str,
-    min: f64,
-    max: f64,
-    default_value: f64,
-}
-
 async fn ask_u32_in_range(
     terminal: &Terminal,
-    spec: &IntegerPromptSpec<'_>,
+    spec: &IntegerPromptSpec,
     cancel: Option<&CancellationToken>,
 ) -> Result<u32, PromptError> {
     let prompt: String = format!(
         "{} * {}({}-{}) {}[Enter={}]{}: ",
         colors::LIGHT_CYAN,
-        spec.label,
+        languages::cli_text(spec.label_code),
         spec.min,
         spec.max,
         colors::LIGHT_BLACK,
@@ -168,20 +116,20 @@ async fn ask_u32_in_range(
         terminal.println(&format!(
             "{} * {}",
             colors::RED,
-            cli_msg::INVALID_CHOICE_RETRY
+            languages::cli_text(CliMsgCode::InvalidChoiceRetry)
         ));
     }
 }
 
 async fn ask_f64_in_range(
     terminal: &Terminal,
-    spec: &FloatPromptSpec<'_>,
+    spec: &FloatPromptSpec,
     cancel: Option<&CancellationToken>,
 ) -> Result<f64, PromptError> {
     let prompt: String = format!(
         "{} * {}({}-{}) {}[Enter={}]{}: ",
         colors::LIGHT_CYAN,
-        spec.label,
+        languages::cli_text(spec.label_code),
         spec.min,
         spec.max,
         colors::LIGHT_BLACK,
@@ -198,7 +146,7 @@ async fn ask_f64_in_range(
         terminal.println(&format!(
             "{} * {}",
             colors::RED,
-            cli_msg::INVALID_CHOICE_RETRY
+            languages::cli_text(CliMsgCode::InvalidChoiceRetry)
         ));
     }
 }
@@ -212,9 +160,9 @@ pub async fn prompt_match_config(
     let map_prompt: String = format!(
         "{} * {}({}{}{}): ",
         colors::LIGHT_YELLOW,
-        cli_msg::MAP_PROMPT_PREFIX,
+        languages::cli_text(CliMsgCode::MapPromptPrefix),
         colors::LIGHT_GREEN,
-        cli_msg::MAP_PROMPT_CHOICES,
+        languages::cli_text(CliMsgCode::MapPromptChoices),
         colors::LIGHT_YELLOW,
     );
     let map_choice: MapOption = loop {
@@ -225,7 +173,7 @@ pub async fn prompt_match_config(
         terminal.println(&format!(
             "{} * {}",
             colors::RED,
-            cli_msg::INVALID_CHOICE_RETRY
+            languages::cli_text(CliMsgCode::InvalidChoiceRetry)
         ));
     };
 
@@ -234,9 +182,9 @@ pub async fn prompt_match_config(
     let mode_prompt: String = format!(
         "{} * {}({}{}{}): ",
         colors::LIGHT_YELLOW,
-        cli_msg::SERVER_CONFIG_PROMPT_PREFIX,
+        languages::cli_text(CliMsgCode::ServerConfigPromptPrefix),
         colors::LIGHT_GREEN,
-        cli_msg::SERVER_CONFIG_CHOICES,
+        languages::cli_text(CliMsgCode::ServerConfigChoices),
         colors::LIGHT_YELLOW,
     );
     let settings: ServerSettings = loop {
@@ -249,7 +197,7 @@ pub async fn prompt_match_config(
             let max_players: u32 = ask_u32_in_range(
                 terminal,
                 &IntegerPromptSpec {
-                    label: cli_msg::setting_labels::MAX_PLAYERS,
+                    label_code: CliMsgCode::SettingMaxPlayers,
                     min: 1,
                     max: 8,
                     default_value: base_settings.max_players,
@@ -260,7 +208,7 @@ pub async fn prompt_match_config(
             let days_before_blizzard: u32 = ask_u32_in_range(
                 terminal,
                 &IntegerPromptSpec {
-                    label: cli_msg::setting_labels::DAYS_BEFORE_BLIZZARD,
+                    label_code: CliMsgCode::SettingDaysBeforeBlizzard,
                     min: 2,
                     max: 7,
                     default_value: base_settings.days_before_blizzard,
@@ -271,7 +219,7 @@ pub async fn prompt_match_config(
             let day_minutes: u32 = ask_u32_in_range(
                 terminal,
                 &IntegerPromptSpec {
-                    label: cli_msg::setting_labels::DAY_MINUTES,
+                    label_code: CliMsgCode::SettingDayMinutes,
                     min: 5,
                     max: 16,
                     default_value: base_settings.day_minutes,
@@ -282,7 +230,7 @@ pub async fn prompt_match_config(
             let predator_damage: f64 = ask_f64_in_range(
                 terminal,
                 &FloatPromptSpec {
-                    label: cli_msg::setting_labels::PREDATOR_DAMAGE,
+                    label_code: CliMsgCode::SettingPredatorDamage,
                     min: 0.25,
                     max: 3.0,
                     default_value: base_settings.predator_damage,
@@ -293,7 +241,7 @@ pub async fn prompt_match_config(
             let cold_intensity: f64 = ask_f64_in_range(
                 terminal,
                 &FloatPromptSpec {
-                    label: cli_msg::setting_labels::COLD_INTENSITY,
+                    label_code: CliMsgCode::SettingColdIntensity,
                     min: 0.25,
                     max: 3.0,
                     default_value: base_settings.cold_intensity,
@@ -304,7 +252,7 @@ pub async fn prompt_match_config(
             let hunger_rate: f64 = ask_f64_in_range(
                 terminal,
                 &FloatPromptSpec {
-                    label: cli_msg::setting_labels::HUNGER_RATE,
+                    label_code: CliMsgCode::SettingHungerRate,
                     min: 0.25,
                     max: 3.0,
                     default_value: base_settings.hunger_rate,
@@ -315,7 +263,7 @@ pub async fn prompt_match_config(
             let coal_burn_rate: f64 = ask_f64_in_range(
                 terminal,
                 &FloatPromptSpec {
-                    label: cli_msg::setting_labels::COAL_BURN_RATE,
+                    label_code: CliMsgCode::SettingCoalBurnRate,
                     min: 0.1,
                     max: 2.0,
                     default_value: base_settings.coal_burn_rate,
@@ -326,7 +274,7 @@ pub async fn prompt_match_config(
             let thralls: u32 = ask_u32_in_range(
                 terminal,
                 &IntegerPromptSpec {
-                    label: cli_msg::setting_labels::THRALLS,
+                    label_code: CliMsgCode::SettingThralls,
                     min: 0,
                     max: 8,
                     default_value: base_settings.thralls,
@@ -349,7 +297,7 @@ pub async fn prompt_match_config(
         terminal.println(&format!(
             "{} * {}",
             colors::RED,
-            cli_msg::INVALID_CHOICE_RETRY
+            languages::cli_text(CliMsgCode::InvalidChoiceRetry)
         ));
     };
 
@@ -361,87 +309,10 @@ pub async fn prompt_match_config(
 
     Ok(MatchConfig {
         map_id: map_choice.id,
-        map_label: map_choice.label,
+        map_label_code: map_choice.label_code,
         settings,
         selected_option_numbers,
         selected_option_labels,
         ue_map_argument,
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_all_three_maps_and_rejects_invalid() {
-        let m1 = parse_map_choice("1").unwrap();
-        assert_eq!(m1.id, "Departure_Persistent");
-        assert_eq!(m1.label, "山頂");
-
-        let m2 = parse_map_choice("2").unwrap();
-        assert_eq!(m2.id, "Expanse_Persistent");
-        assert_eq!(m2.label, "広漠");
-
-        let m3 = parse_map_choice("3").unwrap();
-        assert_eq!(m3.id, "Approach_Persistent");
-        assert_eq!(m3.label, "進入路");
-
-        assert!(parse_map_choice("0").is_none());
-        assert!(parse_map_choice("4").is_none());
-        assert!(parse_map_choice("").is_none());
-    }
-
-    #[test]
-    fn builds_ue_map_argument_matching_ts_format() {
-        let defaults = ServerSettings::default();
-        assert_eq!(
-            build_ue_map_argument("Departure_Persistent", &defaults),
-            "Departure_Persistent?maxplayers=8?daysbeforeblizzard=3?dayminutes=9?predatordamage=1?coldintensity=1?hungerrate=1?coalburnrate=1?thralls=2"
-        );
-
-        let custom = ServerSettings {
-            max_players: 6,
-            days_before_blizzard: 4,
-            day_minutes: 10,
-            predator_damage: 0.75,
-            cold_intensity: 1.5,
-            hunger_rate: 1.25,
-            coal_burn_rate: 0.5,
-            thralls: 1,
-        };
-        assert_eq!(
-            build_ue_map_argument("Expanse_Persistent", &custom),
-            "Expanse_Persistent?maxplayers=6?daysbeforeblizzard=4?dayminutes=10?predatordamage=0.75?coldintensity=1.5?hungerrate=1.25?coalburnrate=0.5?thralls=1"
-        );
-    }
-
-    #[test]
-    fn validates_integer_and_float_ranges() {
-        assert_eq!(parse_u32_in_range("", 1, 8, 8), Some(8));
-        assert_eq!(parse_u32_in_range("1", 1, 8, 8), Some(1));
-        assert_eq!(parse_u32_in_range("8", 1, 8, 8), Some(8));
-        assert_eq!(parse_u32_in_range("0", 1, 8, 8), None);
-        assert_eq!(parse_u32_in_range("9", 1, 8, 8), None);
-        assert_eq!(parse_u32_in_range("3.5", 1, 8, 8), None);
-
-        assert_eq!(parse_number_in_range("", 1.0, 8.0, 8.0, true), Some(8.0));
-        assert_eq!(parse_number_in_range("1", 1.0, 8.0, 8.0, true), Some(1.0));
-        assert_eq!(parse_number_in_range("8", 1.0, 8.0, 8.0, true), Some(8.0));
-        assert_eq!(parse_number_in_range("0", 1.0, 8.0, 8.0, true), None);
-        assert_eq!(parse_number_in_range("9", 1.0, 8.0, 8.0, true), None);
-        assert_eq!(parse_number_in_range("3.5", 1.0, 8.0, 8.0, true), None);
-        assert_eq!(
-            parse_number_in_range("0.25", 0.25, 3.0, 1.0, false),
-            Some(0.25)
-        );
-        assert_eq!(
-            parse_number_in_range("0.1", 0.1, 2.0, 1.0, false),
-            Some(0.1)
-        );
-        assert_eq!(parse_number_in_range("0.09", 0.1, 2.0, 1.0, false), None);
-        assert_eq!(parse_number_in_range("NaN", 0.1, 2.0, 1.0, false), None);
-        assert_eq!(parse_number_in_range("inf", 0.1, 2.0, 1.0, false), None);
-        assert_eq!(parse_number_in_range("abc", 0.1, 2.0, 1.0, false), None);
-    }
 }

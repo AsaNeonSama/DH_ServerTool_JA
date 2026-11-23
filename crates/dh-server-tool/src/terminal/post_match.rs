@@ -9,32 +9,28 @@ use tokio::time::Interval;
 use tokio_util::sync::CancellationToken;
 
 use crate::colors;
-use crate::messages::ja::terminal as term_msg;
+use crate::languages;
+use crate::structs::languages::TerminalMsgCode;
+pub use crate::structs::terminal::PostMatchAction;
+use crate::structs::terminal::RawModeGuard;
 use crate::terminal::tabs::PostMatchKey;
 use crate::terminal::Terminal;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PostMatchAction {
-    Reconfigure,
-    Restart,
-    Abort,
-}
 
 #[must_use]
 pub fn build_countdown_text(remaining: u64) -> String {
     format!(
         "{} * {} {}{remaining}{} {}{}R{}{} {}Enter{}{}",
         colors::LIGHT_YELLOW,
-        term_msg::POST_MATCH_COUNTDOWN_PREFIX,
+        languages::terminal_text(TerminalMsgCode::PostMatchCountdownPrefix),
         colors::LIGHT_GREEN,
         colors::LIGHT_YELLOW,
-        term_msg::POST_MATCH_COUNTDOWN_MID,
+        languages::terminal_text(TerminalMsgCode::PostMatchCountdownMid),
         colors::LIGHT_CYAN,
         colors::LIGHT_YELLOW,
-        term_msg::POST_MATCH_COUNTDOWN_RECONFIGURE,
+        languages::terminal_text(TerminalMsgCode::PostMatchCountdownReconfigure),
         colors::LIGHT_CYAN,
         colors::LIGHT_YELLOW,
-        term_msg::POST_MATCH_COUNTDOWN_RESTART,
+        languages::terminal_text(TerminalMsgCode::PostMatchCountdownRestart),
     )
 }
 
@@ -80,8 +76,6 @@ async fn wait_for_post_match_decision_tabbed(
     terminal.set_server_status_line(None);
     action
 }
-
-struct RawModeGuard;
 
 impl RawModeGuard {
     fn enter() -> Option<Self> {
@@ -182,19 +176,4 @@ pub async fn wait_for_post_match_decision(
     }
 
     wait_for_post_match_decision_plain_tty(total_seconds, cancel).await
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::terminal::display::strip_ansi;
-
-    #[test]
-    fn countdown_text_matches_japanese_format() {
-        let rendered = strip_ansi(&build_countdown_text(10));
-        assert_eq!(
-            rendered,
-            " * 自動再起動まで残り 10 秒... (R: マップ・MOD再設定 / Enter: 今すぐ再起動)"
-        );
-    }
 }

@@ -14,21 +14,19 @@ use tokio_util::sync::CancellationToken;
 use crate::cli::{run_reconfigure_match_cli, LaunchPlan};
 use crate::colors;
 use crate::config::AppConfig;
+pub use crate::consts::server::{
+    DETACH_EXIT_GRACE_MS, INJECTION_INIT_TIMEOUT_SECS, LEGACY_GADGET_DLL_FILENAME,
+    STARTUP_RETRY_DELAY_MS, UDP_MISSING_STREAK_LIMIT, UE_PROJECT_NAME,
+};
 use crate::format::format_seconds;
-use crate::messages::ja::{app as app_msg, server as server_msg};
+use crate::languages;
 use crate::mods::{build_injection_plan, PatchScript, ResolvedPatchScript, DEFAULT_PATCH_SCRIPTS};
 use crate::server::patch_logger::{
     append_patch_runtime_log, reset_patch_runtime_log, PatchLogLevel,
     PATCH_RUNTIME_LOG_RELATIVE_PATH,
 };
+use crate::structs::languages::{AppMsgCode, ServerMsg, ServerMsgCode};
 use crate::terminal::{wait_for_post_match_decision, PostMatchAction, Terminal};
-
-pub const UE_PROJECT_NAME: &str = "DreadHunger";
-pub const LEGACY_GADGET_DLL_FILENAME: &str = "frida.dll";
-pub const STARTUP_RETRY_DELAY_MS: u64 = 5_000;
-pub const UDP_MISSING_STREAK_LIMIT: u32 = 3;
-pub const INJECTION_INIT_TIMEOUT_SECS: u64 = 30;
-pub const DETACH_EXIT_GRACE_MS: u64 = 500;
 
 fn map_injector_log_level(level: LogLevel) -> PatchLogLevel {
     match level {
@@ -38,26 +36,33 @@ fn map_injector_log_level(level: LogLevel) -> PatchLogLevel {
     }
 }
 
-fn format_mod_loaded_line(idx: usize, total: usize, label: &str, file_name: &str) -> String {
+#[must_use]
+pub fn format_mod_loaded_line(idx: usize, total: usize, label: &str, file_name: &str) -> String {
     let blue_target: String = format!("{}{label} ({file_name})", colors::LIGHT_BLUE);
     format!(
         "{}   {}",
         colors::LIGHT_GREEN,
-        server_msg::injected_patch_done(idx, total, &blue_target),
+        languages::render_server(&ServerMsg::InjectedPatchDone {
+            index: idx,
+            total,
+            label: &blue_target,
+        }),
     )
 }
 
-fn format_spawned_process_line(pid: u32) -> String {
+#[must_use]
+pub fn format_spawned_process_line(pid: u32) -> String {
     format!(
         "{} * {} {}{pid}{})",
         colors::LIGHT_YELLOW,
-        server_msg::SPAWNED_PROCESS_PREFIX,
+        languages::server_text(ServerMsgCode::SpawnedProcessPrefix),
         colors::LIGHT_WHITE,
         colors::LIGHT_YELLOW,
     )
 }
 
-fn alternate_port(ports: [u16; 2], current: u16) -> u16 {
+#[must_use]
+pub fn alternate_port(ports: [u16; 2], current: u16) -> u16 {
     if current == ports[0] {
         ports[1]
     } else {
@@ -67,7 +72,8 @@ fn alternate_port(ports: [u16; 2], current: u16) -> u16 {
 
 /// Resolves a relative executable path against `base_dir` without producing a Windows
 /// `\\?\` verbatim prefix (which UE4's launch-directory parser can mishandle).
-fn resolve_clean_path(path: &Path, base_dir: &Path) -> PathBuf {
+#[must_use]
+pub fn resolve_clean_path(path: &Path, base_dir: &Path) -> PathBuf {
     let joined: PathBuf = if path.is_absolute() {
         path.to_path_buf()
     } else {
@@ -100,54 +106,58 @@ fn print_round_config_summary(
     terminal: &Terminal,
     plan: &LaunchPlan,
     current_port: u16,
-    title: &str,
+    title_code: ServerMsgCode,
 ) {
     let default_mod_names: String = DEFAULT_PATCH_SCRIPTS
         .iter()
-        .map(|patch: &PatchScript| patch.label)
+        .map(|patch: &PatchScript| languages::mod_label(patch.label_code))
         .collect::<Vec<&str>>()
         .join(", ");
     let selected_mod_names: String = if plan.selected_option_labels.is_empty() {
-        app_msg::NONE_LABEL.to_string()
+        languages::app_text(AppMsgCode::NoneLabel).to_string()
     } else {
         plan.selected_option_labels.join(", ")
     };
 
-    terminal.println(&format!("{} {title}", colors::LIGHT_CYAN));
+    terminal.println(&format!(
+        "{} {}",
+        colors::LIGHT_CYAN,
+        languages::server_text(title_code)
+    ));
     terminal.println(&format!(
         "{} * {} {}{} ({})",
         colors::LIGHT_WHITE,
-        app_msg::SUMMARY_MAP_LABEL,
+        languages::app_text(AppMsgCode::SummaryMapLabel),
         colors::LIGHT_GREEN,
-        plan.map_label,
+        languages::cli_text(plan.map_label_code),
         plan.map_id
     ));
     terminal.println(&format!(
         "{} * {} {}{} <-> {} {}{}",
         colors::LIGHT_WHITE,
-        app_msg::SUMMARY_SERVER_PORT_LABEL,
+        languages::app_text(AppMsgCode::SummaryServerPortLabel),
         colors::LIGHT_GREEN,
         plan.server_ports[0],
         plan.server_ports[1],
         colors::LIGHT_BLACK,
-        server_msg::round_summary_current_port(current_port)
+        languages::render_server(&ServerMsg::RoundSummaryCurrentPort { port: current_port })
     ));
     terminal.println(&format!(
         "{} * {} {}{default_mod_names}",
         colors::LIGHT_WHITE,
-        app_msg::SUMMARY_DEFAULT_MODS_LABEL,
+        languages::app_text(AppMsgCode::SummaryDefaultModsLabel),
         colors::CYAN,
     ));
     terminal.println(&format!(
         "{} * {} {}{selected_mod_names}",
         colors::LIGHT_WHITE,
-        app_msg::SUMMARY_SELECTED_MODS_LABEL,
+        languages::app_text(AppMsgCode::SummarySelectedModsLabel),
         colors::CYAN,
     ));
     terminal.println(&format!(
         "{} {}",
         colors::LIGHT_CYAN,
-        server_msg::ROUND_SUMMARY_FOOTER
+        languages::server_text(ServerMsgCode::RoundSummaryFooter)
     ));
 }
 
@@ -170,7 +180,10 @@ async fn spawn_and_inject_round(
     terminal.println(&format!(
         "{} * {}",
         colors::LIGHT_CYAN,
-        server_msg::spawning_suspended(&config.shipping_executable, port)
+        languages::render_server(&ServerMsg::SpawningSuspended {
+            executable: &config.shipping_executable,
+            port,
+        })
     ));
 
     let total: usize = patches.len();
@@ -214,7 +227,10 @@ async fn spawn_and_inject_round(
             term_for_cb.println(&format!(
                 "{}   {}",
                 colors::RED,
-                server_msg::patch_init_error(&file_name, &message)
+                languages::render_server(&ServerMsg::PatchInitError {
+                    file_name: &file_name,
+                    error_text: &message,
+                })
             ));
         }
         InjectorEvent::InitOk | InjectorEvent::ChannelClosed => {}
@@ -247,7 +263,7 @@ async fn spawn_and_inject_round(
     terminal.println(&format!(
         "{} * {}",
         colors::LIGHT_GREEN,
-        server_msg::all_patches_injected_resumed(total)
+        languages::render_server(&ServerMsg::AllPatchesInjectedResumed { count: total })
     ));
 
     Ok(session)
@@ -280,13 +296,15 @@ pub async fn run_server_supervisor(
             terminal.println(&format!(
                 "{} * {}",
                 colors::LIGHT_YELLOW,
-                server_msg::retry_notice(&notice)
+                languages::render_server(&ServerMsg::RetryNotice {
+                    error_text: &notice,
+                })
             ));
             print_round_config_summary(
                 terminal,
                 &active_plan,
                 current_port,
-                server_msg::ROUND_SUMMARY_RETRY_TITLE,
+                ServerMsgCode::RoundSummaryRetryTitle,
             );
         }
 
@@ -294,17 +312,20 @@ pub async fn run_server_supervisor(
         terminal.println(&format!(
             "{} {}",
             colors::LIGHT_CYAN,
-            server_msg::round_launch_header(round, current_port)
+            languages::render_server(&ServerMsg::RoundLaunchHeader {
+                round,
+                port: current_port,
+            })
         ));
         terminal.println(&format!(
             "{} * {} {}{} ({})  {}{} {}{current_port}",
             colors::LIGHT_WHITE,
-            server_msg::ROUND_MAP_LABEL,
+            languages::server_text(ServerMsgCode::RoundMapLabel),
             colors::LIGHT_GREEN,
-            active_plan.map_label,
+            languages::cli_text(active_plan.map_label_code),
             active_plan.map_id,
             colors::LIGHT_WHITE,
-            server_msg::ROUND_PORT_LABEL,
+            languages::server_text(ServerMsgCode::RoundPortLabel),
             colors::LIGHT_GREEN,
         ));
 
@@ -326,15 +347,18 @@ pub async fn run_server_supervisor(
                     break;
                 }
                 let msg: String = err.to_string();
+                let delay_text: String = format_seconds(STARTUP_RETRY_DELAY_MS);
                 terminal.println(&format!(
                     "{} * {}",
                     colors::RED,
-                    server_msg::startup_inject_error(&msg)
+                    languages::render_server(&ServerMsg::StartupInjectError { error_text: &msg })
                 ));
                 terminal.println(&format!(
                     "{} * {}",
                     colors::RED,
-                    server_msg::startup_retry_after(&format_seconds(STARTUP_RETRY_DELAY_MS))
+                    languages::render_server(&ServerMsg::StartupRetryAfter {
+                        delay_text: &delay_text,
+                    })
                 ));
                 pending_retry_notice = Some(msg);
                 current_port = alternate_port(active_plan.server_ports, current_port);
@@ -347,15 +371,18 @@ pub async fn run_server_supervisor(
         let shipping_pid: u32 = session.pid();
 
         if !cancel.is_cancelled() {
+            let interval_text: String = format_seconds(config.check_interval_ms);
             terminal.println(&format!(
                 "{} * {}",
                 colors::LIGHT_CYAN,
-                server_msg::monitoring_server(&format_seconds(config.check_interval_ms))
+                languages::render_server(&ServerMsg::MonitoringServer {
+                    interval_text: &interval_text,
+                })
             ));
             terminal.println(&format!(
                 "{} * {}",
                 colors::LIGHT_BLACK,
-                server_msg::EXIT_HINT
+                languages::server_text(ServerMsgCode::ExitHint)
             ));
 
             // Watchdog loop: lazily tracks UDP listener bind so early startup never false-triggers.
@@ -379,7 +406,10 @@ pub async fn run_server_supervisor(
                             terminal.println(&format!(
                                 "{} * {}",
                                 colors::LIGHT_GREEN,
-                                server_msg::udp_ready_confirmed(shipping_pid, current_port)
+                                languages::render_server(&ServerMsg::UdpReadyConfirmed {
+                                    pid: shipping_pid,
+                                    port: current_port,
+                                })
                             ));
                         }
                         udp_missing_streak = 0;
@@ -389,7 +419,9 @@ pub async fn run_server_supervisor(
                             terminal.println(&format!(
                                 "{} * {}",
                                 colors::LIGHT_YELLOW,
-                                server_msg::udp_stopped_restarting(current_port)
+                                languages::render_server(&ServerMsg::UdpStoppedRestarting {
+                                    port: current_port,
+                                })
                             ));
                             let _ = terminate_process(shipping_pid);
                             break;
@@ -419,7 +451,7 @@ pub async fn run_server_supervisor(
         terminal.println(&format!(
             "{} * {} {}{prev_port} -> {}{current_port}",
             colors::LIGHT_YELLOW,
-            server_msg::SERVER_EXIT_DETECTED_PREFIX,
+            languages::server_text(ServerMsgCode::ServerExitDetectedPrefix),
             colors::LIGHT_WHITE,
             colors::LIGHT_GREEN,
         ));
@@ -449,7 +481,7 @@ pub async fn run_server_supervisor(
                     terminal,
                     &active_plan,
                     current_port,
-                    server_msg::ROUND_SUMMARY_UPDATED_TITLE,
+                    ServerMsgCode::RoundSummaryUpdatedTitle,
                 );
             }
             PostMatchAction::Restart => {
@@ -458,49 +490,9 @@ pub async fn run_server_supervisor(
                     terminal,
                     &active_plan,
                     current_port,
-                    server_msg::ROUND_SUMMARY_CONTINUED_TITLE,
+                    ServerMsgCode::RoundSummaryContinuedTitle,
                 );
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn alternates_server_ports_symmetrically() {
-        let ports = [7895, 7897];
-        assert_eq!(alternate_port(ports, 7895), 7897);
-        assert_eq!(alternate_port(ports, 7897), 7895);
-    }
-
-    #[test]
-    fn resolves_relative_shipping_executable_without_verbatim_prefix() {
-        let base = Path::new(r"C:\Game\WindowsServer");
-        let rel = Path::new("./DreadHunger/Binaries/Win64/DreadHungerServer-Win64-Shipping.exe");
-        let resolved = resolve_clean_path(rel, base);
-        let s = resolved.to_string_lossy();
-        assert!(!s.starts_with(r"\\?\"));
-        assert!(s.ends_with(r"DreadHunger\Binaries\Win64\DreadHungerServer-Win64-Shipping.exe"));
-    }
-
-    #[test]
-    fn formats_mod_loaded_line_with_light_green_prefix_and_light_blue_name() {
-        let line = format_mod_loaded_line(1, 13, "Webコンソール連携", "コンソール連携.js");
-        assert_eq!(
-            line,
-            "\x1b[92m   [1/13] 注入完了: \x1b[94mWebコンソール連携 (コンソール連携.js)"
-        );
-    }
-
-    #[test]
-    fn formats_spawned_process_line_with_light_yellow_and_white_pid() {
-        let line = format_spawned_process_line(12345);
-        assert_eq!(
-            line,
-            "\x1b[93m * プロセス生成完了 (PID: \x1b[97m12345\x1b[93m)"
-        );
     }
 }

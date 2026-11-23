@@ -1374,7 +1374,7 @@
             </div>
             <div class="console-title-group">
               <span class="console-kicker">SYS://DH-WEB-CONSOLE</span>
-              <h1 class="console-title">DH サーバー管理コンソール</h1>
+              <h1 class="console-title" data-i18n="headerTitle"></h1>
             </div>
           </div>
           <div class="console-badges">
@@ -1386,7 +1386,7 @@
         <main class="console-body">
           <div class="section-bar">
             <div class="section-tag-wrap">
-              <div class="section-tag">操作メニューを選択</div>
+              <div class="section-tag" data-i18n="menuSectionTitle"></div>
             </div>
             <div class="section-accent-line" aria-hidden="true"></div>
           </div>
@@ -1394,47 +1394,47 @@
           <div id="op">
             <div class="op-tile">
               <input type="radio" id="console" name="options" value="console_command">
-              <label for="console"><span class="op-face"><span>コンソール命令</span><i class="op-diamond" aria-hidden="true"></i></span></label>
+              <label for="console"><span class="op-face"><span data-i18n="ops:console_command"></span><i class="op-diamond" aria-hidden="true"></i></span></label>
             </div>
             <div class="op-tile">
               <input type="radio" id="status" name="options" value="set_human">
-              <label for="status"><span class="op-face"><span>ステータス設定</span><i class="op-diamond" aria-hidden="true"></i></span></label>
+              <label for="status"><span class="op-face"><span data-i18n="ops:set_human"></span><i class="op-diamond" aria-hidden="true"></i></span></label>
             </div>
             <div class="op-tile">
               <input type="radio" id="items" name="options" value="add_item">
-              <label for="items"><span class="op-face"><span>アイテム追加</span><i class="op-diamond" aria-hidden="true"></i></span></label>
+              <label for="items"><span class="op-face"><span data-i18n="ops:add_item"></span><i class="op-diamond" aria-hidden="true"></i></span></label>
             </div>
             <div class="op-tile">
               <input type="radio" id="inventories" name="options" value="set_storage">
-              <label for="inventories"><span class="op-face"><span>ストレージ設定</span><i class="op-diamond" aria-hidden="true"></i></span></label>
+              <label for="inventories"><span class="op-face"><span data-i18n="ops:set_storage"></span><i class="op-diamond" aria-hidden="true"></i></span></label>
             </div>
             <div class="op-tile">
               <input type="radio" id="chat" name="options" value="send_thrall_msg">
-              <label for="chat"><span class="op-face"><span>チャット</span><i class="op-diamond" aria-hidden="true"></i></span></label>
+              <label for="chat"><span class="op-face"><span data-i18n="ops:send_thrall_msg"></span><i class="op-diamond" aria-hidden="true"></i></span></label>
             </div>
             <div class="op-tile">
               <input type="radio" id="kick" name="options" value="kick_player">
-              <label for="kick"><span class="op-face"><span>キック</span><i class="op-diamond" aria-hidden="true"></i></span></label>
+              <label for="kick"><span class="op-face"><span data-i18n="ops:kick_player"></span><i class="op-diamond" aria-hidden="true"></i></span></label>
             </div>
           </div>
 
           <div class="idle-hint">
-            <span>▲ 上のボタンから操作項目を選択してください</span>
+            <span data-i18n="idleHint"></span>
           </div>
 
           <div id="form">
             <div class="form-border">
               <form id="baseForm" style="display:none;">
-                <label for="playerName" id="nameList">プレーヤーネーム: </label>
+                <label for="playerName" id="nameList" data-i18n="labels:playerName"></label>
                 <select id="playerName" name="playerName" required>
-                  <option value="Captain">船長</option>
-                  <option value="Chaplain">牧師</option>
-                  <option value="Cook">料理人</option>
-                  <option value="Doctor">医者</option>
-                  <option value="Engineer">エンジニア</option>
-                  <option value="Hunter">猟師</option>
-                  <option value="Marine">海兵</option>
-                  <option value="Navigator">航海士</option>
+                  <option value="Captain" data-i18n="roles:Captain"></option>
+                  <option value="Chaplain" data-i18n="roles:Chaplain"></option>
+                  <option value="Cook" data-i18n="roles:Cook"></option>
+                  <option value="Doctor" data-i18n="roles:Doctor"></option>
+                  <option value="Engineer" data-i18n="roles:Engineer"></option>
+                  <option value="Hunter" data-i18n="roles:Hunter"></option>
+                  <option value="Marine" data-i18n="roles:Marine"></option>
+                  <option value="Navigator" data-i18n="roles:Navigator"></option>
                 </select>
               </form>
             </div>
@@ -1442,14 +1442,14 @@
 
           <div class="btn-wrap">
             <div class="btn-border">
-              <button id="btn" style="display:none">コンソールへ送信</button>
+              <button id="btn" style="display:none" data-i18n="submitIdle"></button>
               <span class="btn-dots" aria-hidden="true"><i></i><i></i><i></i></span>
             </div>
           </div>
         </main>
 
         <footer class="console-footer">
-          <span>アサネオン // <span class="footer-brand"><span class="fb-y">BUILD</span> <span class="fb-g">WITH</span> <span class="fb-b">ANTIGRAVITY</span></span></span>
+          <span><span data-i18n="footerAuthor"></span> // <span class="footer-brand"><span class="fb-y">BUILD</span> <span class="fb-g">WITH</span> <span class="fb-b">ANTIGRAVITY</span></span></span>
           <span class="footer-dots" aria-hidden="true">
             <i class="dot dot-b"></i>
             <i class="dot dot-g"></i>
@@ -1478,6 +1478,48 @@
       </div>
     </div>
   </div>
+  <script data-dh-i18n>
+    (function () {
+      "use strict";
+      /*__DH_LANG_INLINE__*/
+      var lang = window.__dhLang || {};
+
+      function tUi(section, key) {
+        var ui = lang.ui || {};
+        if (key === undefined) {
+          return typeof ui[section] === "string" ? ui[section] : section;
+        }
+        var group = ui[section];
+        if (group && typeof group === "object" && Object.prototype.hasOwnProperty.call(group, key)) {
+          return group[key];
+        }
+        return key;
+      }
+
+      function tApi(code) {
+        var apiMap = lang.api || {};
+        if (typeof code === "string" && Object.prototype.hasOwnProperty.call(apiMap, code)) {
+          return apiMap[code];
+        }
+        return apiMap.API_UNKNOWN_ERROR || String(code || "API_UNKNOWN_ERROR");
+      }
+
+      window.__dhI18n = { tUi: tUi, tApi: tApi };
+      document.title = tUi("pageTitle");
+
+      var nodes = document.querySelectorAll("[data-i18n]");
+      for (var i = 0; i < nodes.length; i++) {
+        var spec = nodes[i].getAttribute("data-i18n");
+        if (!spec) continue;
+        var sep = spec.indexOf(":");
+        if (sep === -1) {
+          nodes[i].textContent = tUi(spec);
+        } else {
+          nodes[i].textContent = tUi(spec.slice(0, sep), spec.slice(sep + 1));
+        }
+      }
+    })();
+  </script>
   <script data-dh-e2e>
     /*__DH_CIPHER_INLINE__*/
     (function () {
@@ -1577,6 +1619,7 @@
     })();
   </script>
   <script>
+      const { tUi, tApi } = window.__dhI18n;
       let currentOption;
       let fetchUrl;
       const baseUrl = "dh-console";
@@ -1620,31 +1663,31 @@
       // console命令类型表
       const consoleCommandTypeList = [
         {
-          textContent: "召喚",
+          textContent: tUi("consoleCommandTypes", "summon"),
           value: "summon",
         },
         {
-          textContent: "傀儡設置",
+          textContent: tUi("consoleCommandTypes", "isThrall"),
           value: "isThrall",
         },
         {
-          textContent: "スペールチャージ",
+          textContent: tUi("consoleCommandTypes", "spellCharge"),
           value: "spellCharge",
         },
         {
-          textContent: "暴風雪設定",
+          textContent: tUi("consoleCommandTypes", "blizzardIntensity"),
           value: "blizzardIntensity",
         },
         {
-          textContent: "ゲーム加速",
+          textContent: tUi("consoleCommandTypes", "slomo"),
           value: "slomo",
         },
         {
-          textContent: "無敵設置",
+          textContent: tUi("consoleCommandTypes", "god"),
           value: "god",
         },
         {
-          textContent: "ゲーム終了",
+          textContent: tUi("consoleCommandTypes", "endMatch"),
           value: "endMatch",
         }
       ];
@@ -1652,291 +1695,291 @@
         "summon": "summon",
         "isThrall": "setisthrall",
         "spellCharge": "setspellcharge",
-        "blizzardIntensity": "SetBlizzardIntensity",
+        "blizzardIntensity": "setblizzardintensity",
         "slomo": "slomo",
         "god": "god",
-        "endMatch": "EndMatch",
+        "endMatch": "endmatch",
       };
       // 召唤表
       const summonList = [
         {
-          textContent: "ネズミ",
+          textContent: tUi("summons", "BP_Prey_Rat_C"),
           value: "BP_Prey_Rat_C",
         },
         {
-          textContent: "ウサギ",
+          textContent: tUi("summons", "BP_Prey_Rabbit_C"),
           value: "BP_Prey_Rabbit_C",
         },
         {
-          textContent: "アザラシ",
+          textContent: tUi("summons", "BP_Prey_Seal_C"),
           value: "BP_Prey_Seal_C",
         },
         {
-          textContent: "狼",
+          textContent: tUi("summons", "BP_Predator_Wolf_C"),
           value: "BP_Predator_Wolf_C",
         },
         {
-          textContent: "熊",
+          textContent: tUi("summons", "BP_Predator_Bear_C"),
           value: "BP_Predator_Bear_C",
         },
         {
-          textContent: "人喰い人種",
+          textContent: tUi("summons", "CANNIBAL_RANDOM"),
           value: ["BP_Cannibal_C", "BP_Cannibal_Crawler_C", "BP_Cannibal_Shambler_C"][Math.floor(Math.random()*3)],
         },
         {
-          textContent: "海兵",
+          textContent: tUi("summons", "BP_HumanCharacter_C"),
           value: "BP_HumanCharacter_C",
         },
         {
-          textContent: "トーテム",
+          textContent: tUi("summons", "BP_Totem_C"),
           value: "BP_Totem_C",
         },
         {
-          textContent: "爆裂魔法",
+          textContent: tUi("summons", "BP_ExplosionActor_C"),
           value: "BP_ExplosionActor_C",
         },
         {
-          textContent: "大爆裂魔法・チャージ 120 %",
+          textContent: tUi("summons", "BP_Explosion_Nitro_C"),
           value: "BP_Explosion_Nitro_C",
         }
       ];
       // 技能充能表
       const spellChargeList = [
         {
-          textContent: "レベル１",
+          textContent: tUi("spellCharges", "0.37"),
           value: "0.37",
         },
         {
-          textContent: "レベル２",
+          textContent: tUi("spellCharges", "0.65"),
           value: "0.65",
         },
         {
-          textContent: "レベル３",
+          textContent: tUi("spellCharges", "1.00"),
           value: "1.00",
         }
       ];
       // 暴风雪强度表
       const blizzardIntensityList = [
         {
-          textContent: "軽い暴風雪",
+          textContent: tUi("blizzardIntensities", "0.15"),
           value: "0.15",
         },
         {
-          textContent: "中程の暴風雪",
+          textContent: tUi("blizzardIntensities", "0.35"),
           value: "0.35",
         },
         {
-          textContent: "重い暴風雪",
+          textContent: tUi("blizzardIntensities", "0.67"),
           value: "0.67",
         },
         {
-          textContent: "冬将軍の召喚",
+          textContent: tUi("blizzardIntensities", "1.00"),
           value: "1.00",
         },
         {
-          textContent: "暴風雪終了",
+          textContent: tUi("blizzardIntensities", "0.00"),
           value: "0.00",
         },
       ];
       // 加速值设置表
       const slomoAddList = [
         {
-          textContent: "二倍加速",
+          textContent: tUi("slomos", "2"),
           value: "2",
         },
         {
-          textContent: "五倍加速",
+          textContent: tUi("slomos", "5"),
           value: "5",
         },
         {
-          textContent: "十倍加速",
+          textContent: tUi("slomos", "10"),
           value: "10",
         },
         {
-          textContent: "メイド・イン・ヘブン",
+          textContent: tUi("slomos", "50"),
           value: "50",
         },
         {
-          textContent: "元に戻す",
+          textContent: tUi("slomos", "1"),
           value: "1",
         }
       ];
       // 物品表
       const inventoryList = [
         {
-          textContent: "拳銃",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Flintlock/BP_Flintlock_Inventory.BP_Flintlock_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Flintlock/BP_Flintlock_Inventory.BP_Flintlock_Inventory_C",
         },
         {
-          textContent: "マスケット",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Musket/BP_Musket_Inventory.BP_Musket_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Musket/BP_Musket_Inventory.BP_Musket_Inventory_C",
         },
         {
-          textContent: "弓",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Bow/BP_Bow_Inventory.BP_Bow_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Bow/BP_Bow_Inventory.BP_Bow_Inventory_C",
         },
         {
-          textContent: "拳銃パーツ",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Flint/BP_GunParts_Inventory.BP_GunParts_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Flint/BP_GunParts_Inventory.BP_GunParts_Inventory_C",
         },
         {
-          textContent: "銃弾",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Flintlock/BP_Flintlock_Ammo_Inventory.BP_Flintlock_Ammo_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Flintlock/BP_Flintlock_Ammo_Inventory.BP_Flintlock_Ammo_Inventory_C",
         },
         {
-          textContent: "弓矢",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Bow/BP_Arrows_Inventory.BP_Arrows_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Bow/BP_Arrows_Inventory.BP_Arrows_Inventory_C",
         },
         {
-          textContent: "サーベル",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Sword/BP_Sword_Inventory.BP_Sword_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Sword/BP_Sword_Inventory.BP_Sword_Inventory_C",
         },
         {
-          textContent: "木の斧",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/WoodAxe/BP_WoodAxe_Inventory.BP_WoodAxe_Inventory_C"),
           value: "/Game/Blueprints/Inventory/WoodAxe/BP_WoodAxe_Inventory.BP_WoodAxe_Inventory_C",
         },
         {
-          textContent: "ピッケル",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/IceAxe/BP_IceAxe_Inventory.BP_IceAxe_Inventory_C"),
           value: "/Game/Blueprints/Inventory/IceAxe/BP_IceAxe_Inventory.BP_IceAxe_Inventory_C",
         },
         {
-          textContent: "包丁",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Cleaver/BP_Cleaver_Inventory.BP_Cleaver_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Cleaver/BP_Cleaver_Inventory.BP_Cleaver_Inventory_C",
         },
         {
-          textContent: "シャベル",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Shovel/BP_Shovel_Inventory.BP_Shovel_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Shovel/BP_Shovel_Inventory.BP_Shovel_Inventory_C",
         },
         {
-          textContent: "木",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Stick/BP_Stick_Inventory.BP_Stick_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Stick/BP_Stick_Inventory.BP_Stick_Inventory_C",
         },
         {
-          textContent: "石",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Rock/BP_Rock_Inventory.BP_Rock_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Rock/BP_Rock_Inventory.BP_Rock_Inventory_C",
         },
         {
-          textContent: "スクラップ",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Metals/BP_IronIngot_Inventory.BP_IronIngot_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Metals/BP_IronIngot_Inventory.BP_IronIngot_Inventory_C",
         },
         {
-          textContent: "釘",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Metals/BP_Nails_Inventory.BP_Nails_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Metals/BP_Nails_Inventory.BP_Nails_Inventory_C",
         },
         {
-          textContent: "鉛",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Metals/BP_LeadIngot_Inventory.BP_LeadIngot_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Metals/BP_LeadIngot_Inventory.BP_LeadIngot_Inventory_C",
         },
         {
-          textContent: "石炭",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Coal/BP_Coal_Inventory.BP_Coal_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Coal/BP_Coal_Inventory.BP_Coal_Inventory_C",
         },
         {
-          textContent: "火薬",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Flintlock/BP_Gunpowder_Inventory.BP_Gunpowder_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Flintlock/BP_Gunpowder_Inventory.BP_Gunpowder_Inventory_C",
         },
         {
-          textContent: "腱",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/AnimalParts/BP_Sinew_Inventory.BP_Sinew_Inventory_C"),
           value: "/Game/Blueprints/Inventory/AnimalParts/BP_Sinew_Inventory.BP_Sinew_Inventory_C",
         },
         {
-          textContent: "毛皮",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/AnimalParts/BP_WolfPelt_Inventory.BP_WolfPelt_Inventory_C"),
           value: "/Game/Blueprints/Inventory/AnimalParts/BP_WolfPelt_Inventory.BP_WolfPelt_Inventory_C",
         },
         {
-          textContent: "ドライハーブ",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Tea/BP_Herbs_Inventory.BP_Herbs_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Tea/BP_Herbs_Inventory.BP_Herbs_Inventory_C",
         },
         {
-          textContent: "注射器",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Syringe/BP_Syringe_Inventory.BP_Syringe_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Syringe/BP_Syringe_Inventory.BP_Syringe_Inventory_C",
         },
         {
-          textContent: "解毒剤",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Poison/BP_Antidote_Inventory.BP_Antidote_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Poison/BP_Antidote_Inventory.BP_Antidote_Inventory_C",
         },
         {
-          textContent: "アヘンチンキ",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Syringe/BP_Inventory_Laudanum.BP_Inventory_Laudanum_C"),
           value: "/Game/Blueprints/Inventory/Syringe/BP_Inventory_Laudanum.BP_Inventory_Laudanum_C",
         },
         {
-          textContent: "動物肉",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Meat/BP_AnimalMeat_Inventory.BP_AnimalMeat_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Meat/BP_AnimalMeat_Inventory.BP_AnimalMeat_Inventory_C",
         },
         {
-          textContent: "焼肉",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Meat/BP_CookedMeat_Inventory.BP_CookedMeat_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Meat/BP_CookedMeat_Inventory.BP_CookedMeat_Inventory_C",
         },
         {
-          textContent: "人肉",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Meat/BP_HumanMeat_Inventory.BP_HumanMeat_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Meat/BP_HumanMeat_Inventory.BP_HumanMeat_Inventory_C",
         },
         {
-          textContent: "骨の棒",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Meat/BP_BoneClub_Inventory.BP_BoneClub_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Meat/BP_BoneClub_Inventory.BP_BoneClub_Inventory_C",
         },
         {
-          textContent: "脂",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/AnimalParts/BP_Blubber_Inventory.BP_Blubber_Inventory_C"),
           value: "/Game/Blueprints/Inventory/AnimalParts/BP_Blubber_Inventory.BP_Blubber_Inventory_C",
         },
         {
-          textContent: "シチュー",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Meat/BP_Stew_Inventory.BP_Stew_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Meat/BP_Stew_Inventory.BP_Stew_Inventory_C",
         },
         {
-          textContent: "お茶",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Tea/BP_Tea_Inventory.BP_Tea_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Tea/BP_Tea_Inventory.BP_Tea_Inventory_C",
         },
         {
-          textContent: "砥石",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Metals/BP_Whetstone_Inventory.BP_Whetstone_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Metals/BP_Whetstone_Inventory.BP_Whetstone_Inventory_C",
         },
         {
-          textContent: "熊罠",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/BearTrap/BP_BearTrap_Inventory.BP_BearTrap_Inventory_C"),
           value: "/Game/Blueprints/Inventory/BearTrap/BP_BearTrap_Inventory.BP_BearTrap_Inventory_C",
         },
         {
-          textContent: "望遠鏡",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Spyglass/BP_Spyglass_Inventory.BP_Spyglass_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Spyglass/BP_Spyglass_Inventory.BP_Spyglass_Inventory_C",
         },
         {
-          textContent: "ランタン",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Lantern/BP_Lantern_Inventory.BP_Lantern_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Lantern/BP_Lantern_Inventory.BP_Lantern_Inventory_C",
         },
         {
-          textContent: "石炭樽",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Powderkeg/BP_CoalBarrel_Inventory.BP_CoalBarrel_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Powderkeg/BP_CoalBarrel_Inventory.BP_CoalBarrel_Inventory_C",
         },
         {
-          textContent: "火薬樽",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Powderkeg/BP_Powderkeg_Inventory.BP_Powderkeg_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Powderkeg/BP_Powderkeg_Inventory.BP_Powderkeg_Inventory_C",
         },
         {
-          textContent: "毒薬",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Poison/BP_Poison_Inventory.BP_Poison_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Poison/BP_Poison_Inventory.BP_Poison_Inventory_C",
         },
         {
-          textContent: "ニトログリセリン",
+          textContent: tUi("items", "/Game/Blueprints/Environment/Nitro/BP_Nitro_Inventory.BP_Nitro_Inventory_C"),
           value: "/Game/Blueprints/Environment/Nitro/BP_Nitro_Inventory.BP_Nitro_Inventory_C",
         },
         {
-          textContent: "骨の鍵",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/LockPick/BP_SkeletonKey_Inventory.BP_SkeletonKey_Inventory_C"),
           value: "/Game/Blueprints/Inventory/LockPick/BP_SkeletonKey_Inventory.BP_SkeletonKey_Inventory_C",
         },
         {
-          textContent: "船長室の鍵",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/LockPick/BP_CaptainsKey_Inventory.BP_CaptainsKey_Inventory_C"),
           value: "/Game/Blueprints/Inventory/LockPick/BP_CaptainsKey_Inventory.BP_CaptainsKey_Inventory_C",
         },
         {
-          textContent: "武器庫の暗号",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Armory/BP_Code_Inventory.BP_Code_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Armory/BP_Code_Inventory.BP_Code_Inventory_C",
         },
         {
-          textContent: "任務の巻物",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Quest/BP_Quest_Inventory.BP_Quest_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Quest/BP_Quest_Inventory.BP_Quest_Inventory_C",
         },
         {
-          textContent: "骨の短剣",
+          textContent: tUi("items", "/Game/Blueprints/Inventory/Totem/BP_BoneDagger_Inventory.BP_BoneDagger_Inventory_C"),
           value: "/Game/Blueprints/Inventory/Totem/BP_BoneDagger_Inventory.BP_BoneDagger_Inventory_C",
         }
       ];
@@ -1967,55 +2010,55 @@
       // 玩家状态表
       const playerStatusList = [
         {
-          textContent: "幽体状態",
+          textContent: tUi("statuses", "bSpiritWalking"),
           value: "bSpiritWalking",
         },
         {
-          textContent: "中毒状態",
+          textContent: tUi("statuses", "bPoisoned"),
           value: "bPoisoned",
         },
         {
-          textContent: "HP値",
+          textContent: tUi("statuses", "CurrentHealth"),
           value: "CurrentHealth",
         },
         {
-          textContent: "最大スタミナ",
+          textContent: tUi("statuses", "MaximumStamina"),
           value: "MaximumStamina",
         },
         {
-          textContent: "最小スタミナ",
+          textContent: tUi("statuses", "MinStamina"),
           value: "MaximumStamina",
         },
         {
-          textContent: "最大HP値",
+          textContent: tUi("statuses", "MaximumHealth"),
           value: "MaximumHealth",
         },
         {
-          textContent: "最小HP値",
+          textContent: tUi("statuses", "MinHealth"),
           value: "MinHealth",
         },
         {
-          textContent: "温暖値回復速率",
+          textContent: tUi("statuses", "WarmthRegenRate"),
           value: "WarmthRegenRate",
         },
         {
-          textContent: "食糧度回復速率",
+          textContent: tUi("statuses", "HungerRegenRate"),
           value: "HungerRegenRate",
         },
         {
-          textContent: "HP値回復速率",
+          textContent: tUi("statuses", "HealthBoostRegenRate"),
           value: "HealthBoostRegenRate",
         },
         {
-          textContent: "温暖値持続回復時間",
+          textContent: tUi("statuses", "WarmthBoostRemaining"),
           value: "WarmthBoostRemaining",
         },
         {
-          textContent: "食糧度持続回復時間",
+          textContent: tUi("statuses", "HungerBoostRemaining"),
           value: "HungerBoostRemaining",
         },
         {
-          textContent: "HP値持続回復時間",
+          textContent: tUi("statuses", "HealthBoostRemaining"),
           value: "HealthBoostRemaining",
         }
       ];
@@ -2027,29 +2070,29 @@
       // 背包设置表
       const storageSetList = [
         {
-          textContent: "バックパックの量",
+          textContent: tUi("storages", "10"),
           value: "10",
         },
         {
-          textContent: "バックパックの量の二倍",
+          textContent: tUi("storages", "20"),
           value: "20",
         },
         {
-          textContent: "バックパックの量の三倍",
+          textContent: tUi("storages", "30"),
           value: "30",
         }
       ];
 
       // 按钮内容
       const btnTextContent = {
-        pending: "送信中．．．",
-        beforeClick: "コンソールへ送信",
+        pending: tUi("submitPending"),
+        beforeClick: tUi("submitIdle"),
       };
 
       // console 命令表单管理
       const baseForm = document.getElementById("baseForm");
       // 本地错误提示
-      const errorMessage = "ネットワークエーラ, もう一度試してください";
+      const errorMessage = tApi("API_NETWORK_TIMEOUT");
       // 发信按钮监听方法
       const btn = document.getElementById("btn");
       async function btnDisplaySwitch() {
@@ -2169,10 +2212,11 @@
         }
 
         if (responseBody !== undefined) {
+          const toastMessage = tApi(responseBody.code);
           if (responseBody.status !== 200) {
-            showMessage(responseBody.msg, "error");
+            showMessage(toastMessage, "error");
           } else {
-            showMessage(responseBody.msg, "success");
+            showMessage(toastMessage, "success");
           }
           setTimeout (btnDisplaySwitch, 175);
         }
@@ -2189,7 +2233,7 @@
         const consoleCommandLabel = document.createElement('label');
         consoleCommandLabel.htmlFor = "consoleOrder";
         consoleCommandLabel.id = "consoleOrderLabel";
-        consoleCommandLabel.textContent = "命令タイプ: ";
+        consoleCommandLabel.textContent = tUi("labels", "consoleOrder");
 
         const consoleCommandSelect = document.createElement('select');
         consoleCommandSelect.name = "consoleOrder";
@@ -2210,7 +2254,7 @@
         const summonLabel = document.createElement('label');
         summonLabel.htmlFor = "summon";
         summonLabel.id = "summonLabel";
-        summonLabel.textContent = "召喚対象: ";
+        summonLabel.textContent = tUi("labels", "summon");
 
         const summonSelect = document.createElement('select');
         summonSelect.name = "summon";
@@ -2231,18 +2275,18 @@
         const isThrallLabel = document.createElement("label");
         isThrallLabel.htmlFor = "isThrall";
         isThrallLabel.id = "isThrallLabel";
-        isThrallLabel.textContent = "身分: ";
+        isThrallLabel.textContent = tUi("labels", "isThrall");
 
         const isThrallSelect = document.createElement("select");
         isThrallSelect.name = "isThrall";
         isThrallSelect.id = "isThrall";
         isThrallSelect.required = true;
         const thrallOptionY = document.createElement("option");
-        thrallOptionY.textContent = "傀儡";
+        thrallOptionY.textContent = tUi("toggles", "thrall");
         thrallOptionY.value = "1";
 
         const thrallOptionN = document.createElement("option");
-        thrallOptionN.textContent = "船員 (傀儡解除)";
+        thrallOptionN.textContent = tUi("toggles", "crew");
         thrallOptionN.value = "0";
 
         isThrallSelect.appendChild(thrallOptionY);
@@ -2256,7 +2300,7 @@
         const spellChargeLabel = document.createElement("label");
         spellChargeLabel.htmlFor = "spellCharge";
         spellChargeLabel.id = "spellChargeLabel";
-        spellChargeLabel.textContent = "スペールチャージ: ";
+        spellChargeLabel.textContent = tUi("labels", "spellCharge");
 
         const spellChargeSelect = document.createElement("select");
         spellChargeSelect.name = "spellCharge";
@@ -2276,7 +2320,7 @@
         const blizzardIntensityLabel = document.createElement("Label");
         blizzardIntensityLabel.htmlFor = "blizzardIntensity";
         blizzardIntensityLabel.id = "blizzardIntensityLabel";
-        blizzardIntensityLabel.textContent = "暴風雪強度: ";
+        blizzardIntensityLabel.textContent = tUi("labels", "blizzardIntensity");
 
         const blizzardIntensitySelect = document.createElement("select");
         blizzardIntensitySelect.name = "blizzardIntensity";
@@ -2297,7 +2341,7 @@
         const slomoLabel = document.createElement("label");
         slomoLabel.htmlFor = "slomo";
         slomoLabel.id = "slomoLabel";
-        slomoLabel.textContent = "加速値設定";
+        slomoLabel.textContent = tUi("labels", "slomo");
 
         const slomoSelect = document.createElement("select");
         slomoSelect.name = "slomo";
@@ -2317,17 +2361,17 @@
         const godLabel = document.createElement("label");
         godLabel.htmlFor = "god";
         godLabel.id = "godLabel";
-        godLabel.textContent = "無敵スイッチ: ";
+        godLabel.textContent = tUi("labels", "god");
 
         const godSelect = document.createElement("select");
         godSelect.name = "god";
         godSelect.id = "god";
         godSelect.required = true;
         const godOptionY = document.createElement("option");
-        godOptionY.textContent = "オン";
+        godOptionY.textContent = tUi("toggles", "on");
         godOptionY.value = "1";
         const godOptionN = document.createElement("option");
-        godOptionN.textContent = "オフ";
+        godOptionN.textContent = tUi("toggles", "off");
         godOptionN.value = "0";
 
         godSelect.appendChild(godOptionY);
@@ -2339,14 +2383,14 @@
         const endMatchLabel = document.createElement("label");
         endMatchLabel.htmlFor = "endMatch";
         endMatchLabel.id = "endMatchLabel";
-        endMatchLabel.textContent = "終了スイッチ: ";
+        endMatchLabel.textContent = tUi("labels", "endMatch");
 
         const endMatchSelect = document.createElement("select");
         endMatchSelect.name = "endMatch";
         endMatchSelect.id = "endMatch";
         endMatchSelect.required = true;
         const endMatchOptionY = document.createElement("option");
-        endMatchOptionY.textContent = "オン";
+        endMatchOptionY.textContent = tUi("toggles", "on");
         endMatchOptionY.value = "1";
 
         endMatchSelect.appendChild(endMatchOptionY);
@@ -2359,7 +2403,7 @@
         const statusOrderLabel = document.createElement("label");
         statusOrderLabel.htmlFor = "statusOrder";
         statusOrderLabel.id = "statusOrderLabel";
-        statusOrderLabel.textContent = "設定タイプ: ";
+        statusOrderLabel.textContent = tUi("labels", "statusOrder");
 
         const statusOrderSelect = document.createElement("select");
         statusOrderSelect.name = "statusOrder";
@@ -2375,17 +2419,17 @@
         const statusOrderOptionLabel = document.createElement('label');
         statusOrderOptionLabel.htmlFor = "statusOrderOption";
         statusOrderOptionLabel.id = "statusOrderOptionLabel";
-        statusOrderOptionLabel.textContent = "設定スイッチ: ";
+        statusOrderOptionLabel.textContent = tUi("labels", "statusSwitch");
 
         const statusOrderOptionSelect = document.createElement("select");
         statusOrderOptionSelect.name = "statusOrderOption";
         statusOrderOptionSelect.id = "statusOrderOption";
         statusOrderOptionSelect.required = true;
         const statusOrderOptionOptionY = document.createElement("option");
-        statusOrderOptionOptionY.textContent = "オン";
+        statusOrderOptionOptionY.textContent = tUi("toggles", "on");
         statusOrderOptionOptionY.value = "1";
         const statusOrderOptionOptionN = document.createElement("option");
-        statusOrderOptionOptionN.textContent = "オフ";
+        statusOrderOptionOptionN.textContent = tUi("toggles", "off");
         statusOrderOptionOptionN.value = "0";
         statusOrderOptionSelect.appendChild(statusOrderOptionOptionY);
         statusOrderOptionSelect.appendChild(statusOrderOptionOptionN);
@@ -2401,7 +2445,7 @@
           baseForm.removeChild(document.getElementById("statusOrderOption"));
 
           const statusOrderOptionLabel = document.getElementById("statusOrderOptionLabel");
-          statusOrderOptionLabel.textContent = "数値設定: ";
+          statusOrderOptionLabel.textContent = tUi("labels", "statusNumber");
 
           const statusOrderOptionInput = document.createElement("input");
           statusOrderOptionInput.id = "statusOrderOption";
@@ -2414,17 +2458,17 @@
           baseForm.removeChild(document.getElementById("statusOrderOption"));
 
           const statusOrderOptionLabel = document.getElementById("statusOrderOptionLabel");
-          statusOrderOptionLabel.textContent = "設定スイッチ: ";
+          statusOrderOptionLabel.textContent = tUi("labels", "statusSwitch");
 
           const statusOrderOptionSelect = document.createElement("select");
           statusOrderOptionSelect.name = "statusOrderOption";
           statusOrderOptionSelect.id = "statusOrderOption";
           statusOrderOptionSelect.required = true;
           const statusOrderOptionOptionY = document.createElement("option");
-          statusOrderOptionOptionY.textContent = "オン";
+          statusOrderOptionOptionY.textContent = tUi("toggles", "on");
           statusOrderOptionOptionY.value = "1";
           const statusOrderOptionOptionN = document.createElement("option");
-          statusOrderOptionOptionN.textContent = "オフ";
+          statusOrderOptionOptionN.textContent = tUi("toggles", "off");
           statusOrderOptionOptionN.value = "0";
           statusOrderOptionSelect.appendChild(statusOrderOptionOptionY);
           statusOrderOptionSelect.appendChild(statusOrderOptionOptionN);
@@ -2438,7 +2482,7 @@
         const addItemLabel = document.createElement("label");
         addItemLabel.htmlFor = "itemOrder";
         addItemLabel.id = "itemOrderLabel";
-        addItemLabel.textContent = "アイテム追加: ";
+        addItemLabel.textContent = tUi("labels", "itemOrder");
 
         const addItemSelect = document.createElement("select");
         addItemSelect.name = "itemOrder";
@@ -2454,7 +2498,7 @@
         const itemNumLabel = document.createElement("label");
         itemNumLabel.htmlFor = "itemNum";
         itemNumLabel.id = "itemNumLabel";
-        itemNumLabel.textContent = "追加数: ";
+        itemNumLabel.textContent = tUi("labels", "itemNum");
         const itemNumSelect = document.createElement("select");
         itemNumSelect.name = "itemNum";
         itemNumSelect.id = "itemNum";
@@ -2477,7 +2521,7 @@
         const inventoryOrderLabel = document.createElement("label");
         inventoryOrderLabel.htmlFor = "inventoryOrder";
         inventoryOrderLabel.id = "inventoryOrderLabel";
-        inventoryOrderLabel.textContent = "ストレージ設定: ";
+        inventoryOrderLabel.textContent = tUi("labels", "inventoryOrder");
 
         const inventoryOrderSelect = document.createElement("select");
         inventoryOrderSelect.name = "inventoryOrder";
@@ -2499,7 +2543,7 @@
         const chatBroadcastLabel = document.createElement("label");
         chatBroadcastLabel.htmlFor = "chatBroadcast";
         chatBroadcastLabel.id = "chatBroadcastLabel";
-        chatBroadcastLabel.textContent = "ブロードキャスト: ";
+        chatBroadcastLabel.textContent = tUi("labels", "chatBroadcast");
 
         const chatBroadcastSelect = document.createElement("select");
         chatBroadcastSelect.name = "chatBroadcast";
@@ -2507,10 +2551,10 @@
         chatBroadcastSelect.required = true;
 
         const chatBroadcastOptionY = document.createElement("option");
-        chatBroadcastOptionY.textContent = "オン";
+        chatBroadcastOptionY.textContent = tUi("toggles", "on");
         chatBroadcastOptionY.value = "1";
         const chatBroadcastOptionN = document.createElement("option");
-        chatBroadcastOptionN.textContent = "オフ";
+        chatBroadcastOptionN.textContent = tUi("toggles", "off");
         chatBroadcastOptionN.value = "0";
 
         chatBroadcastSelect.appendChild(chatBroadcastOptionY);
@@ -2519,7 +2563,7 @@
         const chatLabel = document.createElement("label");
         chatLabel.htmlFor = "chatOrder";
         chatLabel.id = "chatOrderLabel";
-        chatLabel.textContent = "チャット: ";
+        chatLabel.textContent = tUi("labels", "chatOrder");
 
         const chatInput = document.createElement("input");
         chatInput.type = "text";
@@ -2692,7 +2736,7 @@
       const portalClose = document.createElement("button");
       portalClose.type = "button";
       portalClose.className = "nb-portal-close";
-      portalClose.setAttribute("aria-label", "閉じる");
+      portalClose.setAttribute("aria-label", window.__dhI18n.tUi("portalCloseAria"));
       portalClose.textContent = "×";
 
       portalHeader.appendChild(portalTitle);
@@ -2721,7 +2765,7 @@
             return lbl.textContent.replace(/[:：\s]+$/g, "").trim();
           }
         }
-        return "項目を選択";
+        return window.__dhI18n.tUi("portalFallbackTitle");
       }
 
       function getSelectedText(select) {

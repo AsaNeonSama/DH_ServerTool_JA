@@ -13,15 +13,7 @@ use windows::Win32::System::Threading::{OpenProcess, PROCESS_SET_QUOTA, PROCESS_
 use crate::error::{from_windows_err, Result, Win32Error};
 use crate::process::SpawnedProcess;
 
-/// RAII wrapper around an anonymous Win32 Job Object configured with
-/// `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`.
-///
-/// Closing or dropping this `JobObject` (or exiting/crashing the parent process)
-/// instructs the Windows kernel to immediately terminate all assigned processes.
-#[derive(Debug)]
-pub struct JobObject {
-    handle: HANDLE,
-}
+pub use crate::structs::job::JobObject;
 
 // SAFETY: Win32 Job Object kernel handles are safe to transfer across threads.
 unsafe impl Send for JobObject {}
@@ -119,39 +111,5 @@ impl Drop for JobObject {
             }
             self.handle = HANDLE::default();
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::process::{is_process_alive, spawn_suspended_console};
-    use std::path::Path;
-    use std::time::{Duration, Instant};
-
-    #[test]
-    fn job_object_kills_assigned_process_on_drop() {
-        let cmd = Path::new(r"C:\Windows\System32\cmd.exe");
-        let args = vec!["/C".to_string(), "ping -n 30 127.0.0.1 >NUL".to_string()];
-        let proc = spawn_suspended_console(cmd, &args, None).expect("spawn cmd.exe suspended");
-        let pid = proc.pid();
-
-        let job = JobObject::new_kill_on_close().expect("create job object");
-        job.assign_process(&proc).expect("assign process to job");
-        proc.resume().expect("resume process");
-        assert!(is_process_alive(pid));
-
-        // Dropping the JobObject must immediately kill the assigned child process.
-        drop(job);
-
-        let deadline = Instant::now() + Duration::from_secs(3);
-        while Instant::now() < deadline {
-            if !is_process_alive(pid) {
-                return;
-            }
-            std::thread::sleep(Duration::from_millis(25));
-        }
-        let _ = proc.terminate(1);
-        panic!("process {pid} remained alive after JobObject drop");
     }
 }

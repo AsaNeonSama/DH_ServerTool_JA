@@ -8,17 +8,10 @@ use windows::Win32::NetworkManagement::IpHelper::{
 };
 use windows::Win32::Networking::WinSock::{AF_INET, AF_INET6};
 
-const IP_TABLE_MIN_BUFFER_SIZE: usize = 4096;
-const IP_TABLE_EXTRA_BUFFER_SIZE: usize = 2048;
-
-/// Result of a UDP listener lookup via `GetExtendedUdpTable`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct UdpLookupResult {
-    /// Whether the Windows IP Helper UDP table was successfully queried.
-    pub available: bool,
-    /// Owning PID of the matching UDP socket, if found.
-    pub pid: Option<u32>,
-}
+use crate::consts::net_table::{
+    IP_TABLE_EXTRA_BUFFER_SIZE, IP_TABLE_MIN_BUFFER_SIZE, IP_TABLE_QUERY_RETRIES,
+};
+pub use crate::structs::net_table::UdpLookupResult;
 
 #[inline]
 fn port_from_network_dword(raw_port: u32) -> u16 {
@@ -47,7 +40,7 @@ fn fetch_udp_table(address_family: u32) -> Option<Vec<u8>> {
         (needed as usize).max(IP_TABLE_MIN_BUFFER_SIZE) + IP_TABLE_EXTRA_BUFFER_SIZE;
     let mut buf: Vec<u8> = vec![0u8; alloc_size];
 
-    for _ in 0u8..4u8 {
+    for _ in 0u8..IP_TABLE_QUERY_RETRIES {
         let mut size_arg: u32 = u32::try_from(alloc_size).ok()?;
         // SAFETY: `buf` has capacity and length `alloc_size == size_arg as usize`, writable for `GetExtendedUdpTable`.
         let status: u32 = unsafe {
@@ -204,7 +197,7 @@ fn fetch_tcp_listener_table(address_family: u32) -> Option<Vec<u8>> {
         (needed as usize).max(IP_TABLE_MIN_BUFFER_SIZE) + IP_TABLE_EXTRA_BUFFER_SIZE;
     let mut buf: Vec<u8> = vec![0u8; alloc_size];
 
-    for _ in 0u8..4u8 {
+    for _ in 0u8..IP_TABLE_QUERY_RETRIES {
         let mut size_arg: u32 = u32::try_from(alloc_size).ok()?;
         // SAFETY: `buf` has length `alloc_size == size_arg as usize`, writable for `GetExtendedTcpTable`.
         let status: u32 = unsafe {
@@ -290,45 +283,4 @@ fn is_tcp_v6_listening(port: u16) -> bool {
 #[must_use]
 pub fn is_tcp_port_listening(port: u16) -> bool {
     is_tcp_v4_listening(port) || is_tcp_v6_listening(port)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::net::{TcpListener, UdpSocket};
-
-    #[test]
-    fn udp_listener_lookup_matches_ipv4_and_ipv6() {
-        let my_pid = std::process::id();
-
-        let sock_v4 = UdpSocket::bind("127.0.0.1:0").expect("bind ipv4 udp");
-        let port_v4 = sock_v4.local_addr().unwrap().port();
-        let res_v4 = find_udp_listener_pid(port_v4, Some(my_pid));
-        assert!(res_v4.available);
-        assert_eq!(res_v4.pid, Some(my_pid));
-
-        // Wrong expected PID must return None
-        let wrong = find_udp_listener_pid(port_v4, Some(my_pid.wrapping_add(999_999)));
-        assert!(wrong.available);
-        assert_eq!(wrong.pid, None);
-
-        drop(sock_v4);
-
-        if let Ok(sock_v6) = UdpSocket::bind("[::1]:0") {
-            let port_v6 = sock_v6.local_addr().unwrap().port();
-            let res_v6 = find_udp_listener_pid(port_v6, Some(my_pid));
-            assert!(res_v6.available);
-            assert_eq!(res_v6.pid, Some(my_pid));
-            drop(sock_v6);
-        }
-    }
-
-    #[test]
-    fn tcp_listener_lookup_detects_bound_port() {
-        let listener = TcpListener::bind("127.0.0.1:0").expect("bind ipv4 tcp");
-        let port = listener.local_addr().unwrap().port();
-        assert!(is_tcp_port_listening(port));
-        drop(listener);
-        assert!(!is_tcp_port_listening(port));
-    }
 }

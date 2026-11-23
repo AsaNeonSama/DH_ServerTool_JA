@@ -9,35 +9,25 @@ use axum::http::header::{
 };
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::{Map, Value};
 
-use crate::colors;
+use crate::consts::web_console::{paths, status_code};
+pub use crate::consts::web_console::{
+    COOKIE_MAX_AGE_SECONDS, COOKIE_NAME, MAX_ENCRYPTED_BODY_BYTES,
+};
 use crate::crypto::{
     random_b64url_bytes, timing_safe_str_eq, AesGcmSessionCipher, AUTH_CHALLENGE_BYTES,
     AUTH_CHALLENGE_TTL_MS, AUTH_VERIFY_PATH, COOKIE_AAD, MAX_PENDING_CHALLENGES,
 };
-use crate::messages::ja::web_console::{api, log_categories, log_details};
+use crate::structs::languages::{ApiCode, WebLogEvent};
+pub use crate::structs::web_console::{ApiResultPayload, DecryptedPostRequest, WebConsoleAuth};
 use crate::web_console::assets::build_auth_bootstrap_html;
-use crate::web_console::logger::{emit_web_log, normalize_client_ip, WebLogSink};
-use crate::web_console::routes::status_code;
-
-pub const COOKIE_NAME: &str = "dh_console_auth";
-pub const COOKIE_MAX_AGE_SECONDS: u64 = 315_360_000;
-pub const MAX_ENCRYPTED_BODY_BYTES: usize = 65_536;
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ApiResultPayload {
-    pub status: u16,
-    pub msg: String,
-}
+use crate::web_console::logger::{emit_web_log_event, normalize_client_ip, WebLogSink};
 
 #[must_use]
-pub fn api_result(status: u16, msg: impl Into<String>) -> ApiResultPayload {
-    ApiResultPayload {
-        status,
-        msg: msg.into(),
-    }
+pub fn api_result(status: u16, code: ApiCode) -> ApiResultPayload {
+    ApiResultPayload { status, code }
 }
 
 #[must_use]
@@ -50,7 +40,7 @@ pub fn redirect_to(location: &'static str) -> Response {
 
 #[must_use]
 pub fn redirect_to_un_auth() -> Response {
-    redirect_to("/dh-console/un-auth")
+    redirect_to(paths::UN_AUTH)
 }
 
 fn decode_hex_nibble(b: u8) -> Option<u8> {
@@ -145,21 +135,6 @@ pub fn parse_json_object_string(text: &str) -> Option<Map<String, Value>> {
         Value::Object(map) => Some(map),
         _ => None,
     }
-}
-
-pub enum DecryptedPostRequest {
-    Ready {
-        data: Map<String, Value>,
-        client_ip: String,
-    },
-    EarlyResponse(Response),
-}
-
-pub struct WebConsoleAuth {
-    auth_id: String,
-    cipher: AesGcmSessionCipher,
-    log_sink: WebLogSink,
-    pending_challenges: Mutex<VecDeque<(String, Instant)>>,
 }
 
 impl WebConsoleAuth {
@@ -295,11 +270,11 @@ impl WebConsoleAuth {
         let Some(raw_ciphertext): Option<String> =
             read_bounded_request_text(headers, body, MAX_ENCRYPTED_BODY_BYTES).await
         else {
-            emit_web_log(
+            emit_web_log_event(
                 &self.log_sink,
-                log_categories::AUTH,
-                colors::RED,
-                &log_details::login_failed_invalid_body(&client_ip),
+                &WebLogEvent::AuthLoginFailedInvalidBody {
+                    client_ip: &client_ip,
+                },
             );
             return StatusCode::BAD_REQUEST.into_response();
         };
@@ -307,11 +282,11 @@ impl WebConsoleAuth {
         let req_aad: String = format!("REQ:{AUTH_VERIFY_PATH}");
         let Some(decrypted): Option<String> = self.cipher.decrypt(&raw_ciphertext, Some(&req_aad))
         else {
-            emit_web_log(
+            emit_web_log_event(
                 &self.log_sink,
-                log_categories::AUTH,
-                colors::RED,
-                &log_details::login_failed_psk_mismatch(&client_ip),
+                &WebLogEvent::AuthLoginFailedPskMismatch {
+                    client_ip: &client_ip,
+                },
             );
             return StatusCode::UNAUTHORIZED.into_response();
         };
@@ -326,21 +301,21 @@ impl WebConsoleAuth {
         let Some(challenge): Option<String> =
             challenge_opt.filter(|c: &String| self.consume_challenge(c))
         else {
-            emit_web_log(
+            emit_web_log_event(
                 &self.log_sink,
-                log_categories::AUTH,
-                colors::LIGHT_YELLOW,
-                &log_details::login_failed_challenge_invalid(&client_ip),
+                &WebLogEvent::AuthLoginFailedChallengeInvalid {
+                    client_ip: &client_ip,
+                },
             );
             return StatusCode::UNAUTHORIZED.into_response();
         };
 
         let encrypted_cookie: String = self.cipher.encrypt(&self.auth_id, Some(COOKIE_AAD));
-        emit_web_log(
+        emit_web_log_event(
             &self.log_sink,
-            log_categories::AUTH,
-            colors::LIGHT_GREEN,
-            &log_details::login_succeeded(&client_ip),
+            &WebLogEvent::AuthLoginSucceeded {
+                client_ip: &client_ip,
+            },
         );
 
         let cookie_header: String = format!(
@@ -362,11 +337,12 @@ impl WebConsoleAuth {
     ) -> DecryptedPostRequest {
         let client_ip: String = resolve_client_ip(headers, peer);
         if !self.is_authenticated(headers) {
-            emit_web_log(
+            emit_web_log_event(
                 &self.log_sink,
-                log_categories::AUTH,
-                colors::RED,
-                &log_details::unauthenticated_rejected(&client_ip, pathname),
+                &WebLogEvent::AuthUnauthenticatedRejected {
+                    client_ip: &client_ip,
+                    pathname,
+                },
             );
             return DecryptedPostRequest::EarlyResponse(StatusCode::UNAUTHORIZED.into_response());
         }
@@ -374,11 +350,12 @@ impl WebConsoleAuth {
         let Some(raw_ciphertext): Option<String> =
             read_bounded_request_text(headers, body, MAX_ENCRYPTED_BODY_BYTES).await
         else {
-            emit_web_log(
+            emit_web_log_event(
                 &self.log_sink,
-                log_categories::ERROR,
-                colors::RED,
-                &log_details::invalid_request_body(&client_ip, pathname),
+                &WebLogEvent::AuthInvalidRequestBody {
+                    client_ip: &client_ip,
+                    pathname,
+                },
             );
             return DecryptedPostRequest::EarlyResponse(StatusCode::BAD_REQUEST.into_response());
         };
@@ -386,24 +363,26 @@ impl WebConsoleAuth {
         let req_aad: String = format!("REQ:{pathname}");
         let Some(decrypted): Option<String> = self.cipher.decrypt(&raw_ciphertext, Some(&req_aad))
         else {
-            emit_web_log(
+            emit_web_log_event(
                 &self.log_sink,
-                log_categories::AUTH,
-                colors::RED,
-                &log_details::decrypt_failed(&client_ip, pathname),
+                &WebLogEvent::AuthDecryptFailed {
+                    client_ip: &client_ip,
+                    pathname,
+                },
             );
             return DecryptedPostRequest::EarlyResponse(StatusCode::UNAUTHORIZED.into_response());
         };
 
         let Some(data): Option<Map<String, Value>> = parse_json_object_string(&decrypted) else {
-            emit_web_log(
+            emit_web_log_event(
                 &self.log_sink,
-                log_categories::ERROR,
-                colors::LIGHT_YELLOW,
-                &log_details::invalid_json_params(&client_ip, pathname),
+                &WebLogEvent::AuthInvalidJsonParams {
+                    client_ip: &client_ip,
+                    pathname,
+                },
             );
             let err_payload: ApiResultPayload =
-                api_result(status_code::BAD_REQUEST, api::NETWORK_PARAM_ERROR);
+                api_result(status_code::BAD_REQUEST, ApiCode::NetworkParamError);
             return DecryptedPostRequest::EarlyResponse(
                 self.encrypted_api_response(pathname, &err_payload),
             );

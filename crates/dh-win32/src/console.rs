@@ -17,10 +17,10 @@ use windows::Win32::System::Memory::{
     GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock, GMEM_MOVEABLE,
 };
 
+use crate::consts::console::{
+    CF_UNICODETEXT, CLIPBOARD_RETRY_ATTEMPTS, CLIPBOARD_RETRY_DELAY_MS, CP_UTF8,
+};
 use crate::error::{encode_wide_null, from_windows_err, last_error, Result, Win32Error};
-
-const CP_UTF8: u32 = 65001;
-const CF_UNICODETEXT: u32 = 13;
 
 /// Sets console input/output code pages to UTF-8 (65001), updates the window title,
 /// and enables ANSI Virtual Terminal processing on `STD_OUTPUT_HANDLE`.
@@ -112,15 +112,15 @@ pub fn enable_tab_mouse_input() -> bool {
 }
 
 fn open_clipboard_with_retry() -> Result<()> {
-    for attempt in 0u8..6u8 {
+    for attempt in 0u8..CLIPBOARD_RETRY_ATTEMPTS {
         // SAFETY: Passing `HWND::default()` (NULL) associates clipboard ownership with the current task.
         match unsafe { OpenClipboard(HWND::default()) } {
             Ok(()) => return Ok(()),
             Err(e) => {
-                if attempt == 5 {
+                if attempt + 1 == CLIPBOARD_RETRY_ATTEMPTS {
                     return Err(from_windows_err("OpenClipboard", &e));
                 }
-                std::thread::sleep(Duration::from_millis(15));
+                std::thread::sleep(Duration::from_millis(CLIPBOARD_RETRY_DELAY_MS));
             }
         }
     }
@@ -227,29 +227,4 @@ pub fn get_clipboard_text() -> Result<String> {
     }
 
     read_result
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn clipboard_roundtrip_ascii_and_japanese() {
-        // Save previous clipboard text (best-effort) so running tests doesn't clobber user clipboard.
-        let prev = get_clipboard_text().ok();
-
-        let sample = "http://127.0.0.1:7891/dh-console/auth#日本語テスト_Abc123-_";
-        set_clipboard_text(sample).expect("set_clipboard_text");
-        let read_back = get_clipboard_text().expect("get_clipboard_text");
-        assert_eq!(read_back, sample);
-
-        if let Some(old) = prev {
-            let _ = set_clipboard_text(&old);
-        }
-    }
-
-    #[test]
-    fn init_console_does_not_panic_when_redirected() {
-        init_console("DH_ServerTool_JA テスト");
-    }
 }

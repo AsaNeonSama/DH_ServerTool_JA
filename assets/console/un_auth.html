@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>未認証 // DH-Web-Console</title>
+    <title>DH-Web-Console</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="shortcut icon" href="/favicon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -226,13 +226,30 @@
           <div class="hazard"></div>
           <div class="content">
             <div class="icon-badge"><img src="/favicon.ico" alt=""></div>
-            <div><span class="tag">ACCESS DENIED // 401</span></div>
-            <h1>未認証なユーザーです</h1>
-            <p>あなたはこのウェブサイトへアクセスする権限がありません。<br>サーバーツールに表示された認証URLからアクセスしてください。</p>
+            <div><span class="tag" data-i18n-unauth="tag"></span></div>
+            <h1 data-i18n-unauth="heading"></h1>
+            <p><span data-i18n-unauth="bodyLine1"></span><br><span data-i18n-unauth="bodyLine2"></span></p>
           </div>
           <div class="footer-strip"></div>
         </div>
       </div>
     </div>
+    <script data-dh-i18n>
+      (function () {
+        "use strict";
+        /*__DH_LANG_INLINE__*/
+        var unAuth = (window.__dhLang && window.__dhLang.unAuth) || {};
+        if (typeof unAuth.title === "string") {
+          document.title = unAuth.title;
+        }
+        var nodes = document.querySelectorAll("[data-i18n-unauth]");
+        for (var i = 0; i < nodes.length; i++) {
+          var key = nodes[i].getAttribute("data-i18n-unauth");
+          if (key && typeof unAuth[key] === "string") {
+            nodes[i].textContent = unAuth[key];
+          }
+        }
+      })();
+    </script>
 </body>
 </html>

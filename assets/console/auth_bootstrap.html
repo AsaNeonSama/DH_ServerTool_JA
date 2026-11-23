@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="no-referrer">
+  <title>DH-Web-Console</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <style>
+    :root {
+      --ink: #0b0b10;
+      --paper: #f6f4ea;
+      --cyan: #00e5ff;
+      --yellow: #ffe600;
+      --pink: #ff2a85;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: var(--paper);
+      background-image:
+        linear-gradient(to right, rgba(11, 11, 16, 0.055) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(11, 11, 16, 0.055) 1px, transparent 1px);
+      background-size: 26px 26px;
+    }
+    .dots {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+    .dots i {
+      display: block;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 2.5px solid var(--ink);
+      animation: dotBounce 0.9s ease-in-out infinite;
+    }
+    .dots i:nth-child(1) {
+      background-color: var(--cyan);
+      animation-delay: 0s;
+    }
+    .dots i:nth-child(2) {
+      background-color: var(--yellow);
+      animation-delay: 0.16s;
+    }
+    .dots i:nth-child(3) {
+      background-color: var(--pink);
+      animation-delay: 0.32s;
+    }
+    @keyframes dotBounce {
+      0%, 80%, 100% {
+        transform: translateY(0) scale(0.8);
+        opacity: 0.55;
+      }
+      40% {
+        transform: translateY(-8px) scale(1.22);
+        opacity: 1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="dots" role="status" aria-label="Loading"><i></i><i></i><i></i></div>
+  <script>
+/*__DH_CIPHER_INLINE__*/
+(async function () {
+  "use strict";
+  var STORAGE_KEY = "dh_console_psk";
+  var CHALLENGE = /*__DH_AUTH_CHALLENGE__*/"";
+  var VERIFY_PATH = /*__DH_VERIFY_PATH__*/"";
+  var UN_AUTH_PATH = /*__DH_UN_AUTH_PATH__*/"";
+  var HOME_PAGE_PATH = /*__DH_HOME_PAGE_PATH__*/"";
+
+  function fail() {
+    try { sessionStorage.removeItem(STORAGE_KEY); } catch (_) {}
+    try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+    window.location.replace(UN_AUTH_PATH);
+  }
+
+  var psk = window.location.hash && window.location.hash.length > 1
+    ? window.location.hash.slice(1).trim()
+    : "";
+  try {
+    window.history.replaceState(null, "", window.location.pathname);
+  } catch (_) {}
+
+  if (!window.__dhCipher || !window.__dhCipher.isValidPsk(psk)) {
+    fail();
+    return;
+  }
+
+  try {
+    var cipherReq = window.__dhCipher.encrypt(
+      JSON.stringify({ challenge: CHALLENGE }),
+      psk,
+      "REQ:" + VERIFY_PATH
+    );
+    var res = await window.fetch(VERIFY_PATH, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+      body: cipherReq
+    });
+    if (!res.ok) {
+      fail();
+      return;
+    }
+    var cipherRes = (await res.text()).trim();
+    var plainRes = window.__dhCipher.decrypt(cipherRes, psk, "RES:" + VERIFY_PATH);
+    if (plainRes === null) {
+      fail();
+      return;
+    }
+    var parsed = JSON.parse(plainRes);
+    if (!parsed || parsed.ok !== true || parsed.challenge !== CHALLENGE) {
+      fail();
+      return;
+    }
+    try { sessionStorage.setItem(STORAGE_KEY, psk); } catch (_) {}
+    try { localStorage.setItem(STORAGE_KEY, psk); } catch (_) {}
+    window.location.replace(HOME_PAGE_PATH);
+  } catch (_) {
+    fail();
+  }
+})();
+  </script>
+</body>
+</html>

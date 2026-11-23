@@ -1,0 +1,10 @@
+pub const PEB_IMAGE_BASE_OFFSET: u64 = 0x10;
+pub const DOS_HEADER_SIZE: usize = 64;
+pub const DOS_MAGIC_MZ: u16 = 0x5A4D;
+pub const DOS_LFANEW_OFFSET: usize = 0x3C;
+pub const MAX_REASONABLE_LFANEW: u32 = 0x0010_0000;
+pub const NT_HEADER_READ_SIZE: usize = 0x30;
+pub const PE_SIGNATURE: u32 = 0x0000_4550;
+pub const IMAGE_FILE_MACHINE_AMD64: u16 = 0x8664;
+pub const PE32_PLUS_OPTIONAL_MAGIC: u16 = 0x020B;
+pub const NT_ADDRESS_OF_ENTRY_POINT_OFFSET: usize = 0x28;

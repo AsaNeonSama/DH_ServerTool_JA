@@ -19,75 +19,15 @@ use windows::Win32::System::Memory::{
     PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE, PAGE_PROTECTION_FLAGS, PAGE_READWRITE,
 };
 
+pub use crate::consts::oep_inject::{MAX_GADGET_PATH_UTF16_LEN, OEP_PATCH_LEN};
+use crate::consts::oep_inject::{
+    OEP_PATCH_LEN_U32, OFFSET_DLL_PATH_UTF16_I32, OFFSET_LOADED_MODULE_HANDLE,
+    OFFSET_LOADED_MODULE_HANDLE_I32, OFFSET_LOAD_LIBRARY_W_I32, OFFSET_OEP_I32,
+    OFFSET_OLD_PROTECT_I32, OFFSET_ORIGINAL_OEP_BYTES_I32, OFFSET_TMP_PROTECT_I32,
+    OFFSET_VIRTUAL_PROTECT_I32, REMOTE_PAGE_SIZE,
+};
 use crate::error::{InjectorError, Result};
-
-/// Size of the x64 absolute indirect jump (`FF 25 00 00 00 00 <u64 target>`) patched at OEP.
-pub const OEP_PATCH_LEN: usize = 14;
-const OEP_PATCH_LEN_U32: u32 = 14;
-
-/// Remote allocation size for each of the separated Data (`RW`) and Code (`RX`) pages.
-const REMOTE_PAGE_SIZE: usize = 4096;
-
-/// Maximum UTF-16 code units (including NUL terminator) allowed for `gadget_dll_path`
-/// inside the remote stub data page.
-pub const MAX_GADGET_PATH_UTF16_LEN: usize = 1024;
-
-/// Remote data page layout (`PAGE_READWRITE`) read and updated by the OEP bootstrap stub.
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct RemoteStubData {
-    pub oep: u64,
-    pub load_library_w: u64,
-    pub virtual_protect: u64,
-    pub loaded_module_handle: u64,
-    pub old_protect: u32,
-    pub tmp_protect: u32,
-    pub original_oep_bytes: [u8; 16],
-    pub _reserved: u64,
-    pub dll_path_utf16: [u16; MAX_GADGET_PATH_UTF16_LEN],
-}
-
-const OFFSET_OEP: usize = std::mem::offset_of!(RemoteStubData, oep);
-const OFFSET_LOAD_LIBRARY_W: usize = std::mem::offset_of!(RemoteStubData, load_library_w);
-const OFFSET_VIRTUAL_PROTECT: usize = std::mem::offset_of!(RemoteStubData, virtual_protect);
-const OFFSET_LOADED_MODULE_HANDLE: usize =
-    std::mem::offset_of!(RemoteStubData, loaded_module_handle);
-const OFFSET_OLD_PROTECT: usize = std::mem::offset_of!(RemoteStubData, old_protect);
-const OFFSET_TMP_PROTECT: usize = std::mem::offset_of!(RemoteStubData, tmp_protect);
-const OFFSET_ORIGINAL_OEP_BYTES: usize = std::mem::offset_of!(RemoteStubData, original_oep_bytes);
-const OFFSET_DLL_PATH_UTF16: usize = std::mem::offset_of!(RemoteStubData, dll_path_utf16);
-
-const OFFSET_OEP_I32: i32 = 0x00;
-const OFFSET_LOAD_LIBRARY_W_I32: i32 = 0x08;
-const OFFSET_VIRTUAL_PROTECT_I32: i32 = 0x10;
-const OFFSET_LOADED_MODULE_HANDLE_I32: i32 = 0x18;
-const OFFSET_OLD_PROTECT_I32: i32 = 0x20;
-const OFFSET_TMP_PROTECT_I32: i32 = 0x24;
-const OFFSET_ORIGINAL_OEP_BYTES_I32: i32 = 0x28;
-const OFFSET_DLL_PATH_UTF16_I32: i32 = 0x40;
-
-const _: () = assert!(OEP_PATCH_LEN == 14);
-const _: () = assert!(OFFSET_OEP == 0x00);
-const _: () = assert!(OFFSET_LOAD_LIBRARY_W == 0x08);
-const _: () = assert!(OFFSET_VIRTUAL_PROTECT == 0x10);
-const _: () = assert!(OFFSET_LOADED_MODULE_HANDLE == 0x18);
-const _: () = assert!(OFFSET_OLD_PROTECT == 0x20);
-const _: () = assert!(OFFSET_TMP_PROTECT == 0x24);
-const _: () = assert!(OFFSET_ORIGINAL_OEP_BYTES == 0x28);
-const _: () = assert!(OFFSET_DLL_PATH_UTF16 == 0x40);
-const _: () = assert!(size_of::<RemoteStubData>() == 0x40 + MAX_GADGET_PATH_UTF16_LEN * 2);
-const _: () = assert!(size_of::<RemoteStubData>() <= REMOTE_PAGE_SIZE);
-
-/// Metadata describing the remote OEP bootstrap pages installed into a suspended process.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct InjectedStubInfo {
-    pub pe_entry: RemotePeEntry,
-    pub oep: u64,
-    pub data_page_addr: u64,
-    pub code_page_addr: u64,
-    pub loaded_module_handle_addr: u64,
-    pub original_oep_bytes: [u8; OEP_PATCH_LEN],
-}
+pub use crate::structs::oep_inject::{InjectedStubInfo, OepStubInjector, RemoteStubData};
 
 /// Strategy trait for attaching Frida Gadget into a suspended x64 target process before `ResumeThread`.
 pub trait ProcessInjector {
@@ -108,15 +48,6 @@ pub trait ProcessInjector {
     ) -> Option<u64>;
 }
 
-/// Default pure-Rust OEP bootstrap stub injector:
-/// - Reads remote PEB + PE32+ headers to locate `OEP` and backs up its first 14 bytes.
-/// - Allocates separate `PAGE_READWRITE` data and `PAGE_EXECUTE_READ` code pages (no persistent `RWX`).
-/// - Patches `OEP` with a 14-byte indirect jump to the stub, which calls `LoadLibraryW(gadget_dll_path)`
-///   after Loader Lock release, records the returned `HMODULE`, restores the original 14 OEP bytes and
-///   page protection, and jumps seamlessly back to `OEP`.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct OepStubInjector;
-
 fn asm_res<T>(res: std::result::Result<T, iced_x86::IcedError>) -> Result<T> {
     res.map_err(|err: iced_x86::IcedError| {
         InjectorError::Inject(format!("failed to assemble x64 OEP stub: {err}"))
@@ -124,7 +55,8 @@ fn asm_res<T>(res: std::result::Result<T, iced_x86::IcedError>) -> Result<T> {
 }
 
 /// Encodes a 14-byte x64 absolute indirect jump: `FF 25 00 00 00 00 <u64 target>`.
-pub(crate) fn encode_abs_jmp_14(target: u64) -> [u8; OEP_PATCH_LEN] {
+#[must_use]
+pub fn encode_abs_jmp_14(target: u64) -> [u8; OEP_PATCH_LEN] {
     let mut bytes: [u8; OEP_PATCH_LEN] = [0u8; OEP_PATCH_LEN];
     bytes[0] = 0xFF;
     bytes[1] = 0x25;
@@ -135,7 +67,7 @@ pub(crate) fn encode_abs_jmp_14(target: u64) -> [u8; OEP_PATCH_LEN] {
 
 /// Builds the remote `RemoteStubData` payload, validating that `gadget_dll_path` fits in
 /// `MAX_GADGET_PATH_UTF16_LEN` UTF-16 code units (including NUL terminator).
-pub(crate) fn build_stub_data(
+pub fn build_stub_data(
     oep: u64,
     load_library_w: u64,
     virtual_protect: u64,
@@ -184,7 +116,7 @@ pub(crate) fn build_stub_data(
 ///   original 14 bytes at `oep`, and calls `VirtualProtect(oep, 14, data->old_protect, &data->tmp_protect)`.
 /// - Restores all saved registers and the original stack pointer, then transfers control to `oep`
 ///   via a register-free 14-byte `jmp qword ptr [rip+0]` (`FF 25 00 00 00 00 <oep>`).
-pub(crate) fn assemble_oep_stub(data_page_addr: u64, oep_addr: u64) -> Result<Vec<u8>> {
+pub fn assemble_oep_stub(data_page_addr: u64, oep_addr: u64) -> Result<Vec<u8>> {
     let mut a: CodeAssembler = asm_res(CodeAssembler::new(64))?;
 
     // Prologue: establish frame pointer so dynamic stack alignment restores exact entry RSP.
@@ -260,7 +192,7 @@ pub(crate) fn assemble_oep_stub(data_page_addr: u64, oep_addr: u64) -> Result<Ve
     Ok(code)
 }
 
-fn resolve_kernel32_apis() -> Result<(u64, u64)> {
+pub fn resolve_kernel32_apis() -> Result<(u64, u64)> {
     // SAFETY: `kernel32.dll` is loaded in every Win32 process; `w!("kernel32.dll")` is a static NUL-terminated wide string.
     let kernel32: HMODULE =
         unsafe { GetModuleHandleW(w!("kernel32.dll")) }.map_err(|e: windows::core::Error| {
@@ -509,150 +441,5 @@ impl ProcessInjector for OepStubInjector {
         let mut buf: [u8; 8] = [0u8; 8];
         read_remote_exact(handle, info.loaded_module_handle_addr, &mut buf).ok()?;
         Some(u64::from_le_bytes(buf))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::path::PathBuf;
-
-    const OFFSET_LOAD_LIBRARY_W_U8: u8 = 0x08;
-    const OFFSET_VIRTUAL_PROTECT_U8: u8 = 0x10;
-
-    #[test]
-    fn data_block_layout_offsets_are_aligned_and_fit_in_one_page() {
-        assert_eq!(OFFSET_OEP, 0x00);
-        assert_eq!(OFFSET_LOAD_LIBRARY_W, 0x08);
-        assert_eq!(OFFSET_VIRTUAL_PROTECT, 0x10);
-        assert_eq!(OFFSET_LOADED_MODULE_HANDLE, 0x18);
-        assert_eq!(OFFSET_OLD_PROTECT, 0x20);
-        assert_eq!(OFFSET_TMP_PROTECT, 0x24);
-        assert_eq!(OFFSET_ORIGINAL_OEP_BYTES, 0x28);
-        assert_eq!(OFFSET_DLL_PATH_UTF16, 0x40);
-        assert_eq!(size_of::<RemoteStubData>(), 0x840);
-        assert!(size_of::<RemoteStubData>() <= REMOTE_PAGE_SIZE);
-    }
-
-    #[test]
-    fn abs_jmp_14_encoding_matches_ff_25_zero_disp_plus_target_le() {
-        let target: u64 = 0x0000_7FF7_1234_5678;
-        let encoded = encode_abs_jmp_14(target);
-        assert_eq!(encoded.len(), OEP_PATCH_LEN);
-        assert_eq!(&encoded[0..6], &[0xFF, 0x25, 0x00, 0x00, 0x00, 0x00]);
-        assert_eq!(
-            u64::from_le_bytes(encoded[6..14].try_into().unwrap()),
-            target
-        );
-    }
-
-    #[test]
-    fn stub_data_encodes_japanese_utf16_path_and_rejects_overlong_paths() {
-        let orig = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
-        let jp_path =
-            Path::new(r"C:\Users\山田太郎\AppData\Local\DH_ServerTool_JA\run_1_1\gadget.dll");
-        let data = build_stub_data(0x0001_4000_1000, 0x7FF8_0001, 0x7FF8_0002, orig, jp_path)
-            .expect("Japanese UTF-16 path fits in stub data");
-
-        assert_eq!(data.oep, 0x0001_4000_1000);
-        assert_eq!(data.load_library_w, 0x7FF8_0001);
-        assert_eq!(data.virtual_protect, 0x7FF8_0002);
-        assert_eq!(data.loaded_module_handle, 0);
-        assert_eq!(&data.original_oep_bytes[..14], &orig);
-        assert_eq!(&data.original_oep_bytes[14..16], &[0, 0]);
-
-        let nul_pos = data
-            .dll_path_utf16
-            .iter()
-            .position(|&c| c == 0)
-            .expect("NUL terminator");
-        let decoded = String::from_utf16(&data.dll_path_utf16[..nul_pos]).unwrap();
-        assert_eq!(decoded, jp_path.to_string_lossy());
-
-        // Exact max boundary (1023 chars + NUL == 1024) succeeds; 1024 chars + NUL == 1025 fails.
-        let exact_ok = PathBuf::from("a".repeat(MAX_GADGET_PATH_UTF16_LEN - 1));
-        assert!(build_stub_data(1, 2, 3, orig, &exact_ok).is_ok());
-
-        let too_long = PathBuf::from("a".repeat(MAX_GADGET_PATH_UTF16_LEN));
-        let err = build_stub_data(1, 2, 3, orig, &too_long).unwrap_err();
-        assert!(matches!(
-            err,
-            InjectorError::PathTooLong {
-                len: 1025,
-                max: MAX_GADGET_PATH_UTF16_LEN,
-                ..
-            }
-        ));
-    }
-
-    #[test]
-    fn assembled_x64_stub_obeys_abi_embeds_addresses_and_ends_with_oep_jmp() {
-        let data_addr: u64 = 0x0000_0210_CAFE_0000;
-        let oep_addr: u64 = 0x0000_7FF6_DEAD_BEEF;
-        let code = assemble_oep_stub(data_addr, oep_addr).expect("assemble x64 OEP stub");
-
-        // Compact single-page machine code
-        assert!(
-            code.len() >= 80 && code.len() <= 256,
-            "unexpected stub size: {}",
-            code.len()
-        );
-
-        // Prologue starts with: push rbp (55); mov rbp, rsp (48 89 E5); push rax (50)
-        assert_eq!(&code[0..5], &[0x55, 0x48, 0x89, 0xE5, 0x50]);
-
-        // Contains `mov rbx, imm64` (48 BB <data_addr LE>)
-        let mut mov_rbx = [0u8; 10];
-        mov_rbx[0] = 0x48;
-        mov_rbx[1] = 0xBB;
-        mov_rbx[2..10].copy_from_slice(&data_addr.to_le_bytes());
-        assert!(
-            code.windows(mov_rbx.len()).any(|w| w == mov_rbx),
-            "stub must embed mov rbx, data_page_addr"
-        );
-
-        // Contains `and rsp, -16` (48 83 E4 F0) and `sub rsp, 0x20` (48 83 EC 20)
-        assert!(
-            code.windows(4).any(|w| w == [0x48, 0x83, 0xE4, 0xF0]),
-            "stub must align RSP to 16 bytes"
-        );
-        assert!(
-            code.windows(4).any(|w| w == [0x48, 0x83, 0xEC, 0x20]),
-            "stub must allocate 32-byte Win64 shadow space"
-        );
-
-        // Contains `lea rsp, [rbp - 0x40]` (48 8D 65 C0)
-        assert!(
-            code.windows(4).any(|w| w == [0x48, 0x8D, 0x65, 0xC0]),
-            "stub must restore RSP from rbp - 0x40 before popping registers"
-        );
-
-        // Contains indirect calls `call qword ptr [rbx + 0x08]` (FF 53 08) and `call qword ptr [rbx + 0x10]` (FF 53 10)
-        assert!(
-            code.windows(3)
-                .any(|w| w == [0xFF, 0x53, OFFSET_LOAD_LIBRARY_W_U8]),
-            "stub must call LoadLibraryW via [rbx + 0x08]"
-        );
-        let vp_calls = code
-            .windows(3)
-            .filter(|w| *w == [0xFF, 0x53, OFFSET_VIRTUAL_PROTECT_U8])
-            .count();
-        assert_eq!(
-            vp_calls, 2,
-            "stub must call VirtualProtect twice via [rbx + 0x10]"
-        );
-
-        // Ends with `pop rbp` (0x5D) immediately followed by 14-byte jump to OEP
-        let jmp_start = code.len() - OEP_PATCH_LEN;
-        assert_eq!(code[jmp_start - 1], 0x5D, "epilogue must end with pop rbp");
-        assert_eq!(&code[jmp_start..], &encode_abs_jmp_14(oep_addr));
-    }
-
-    #[test]
-    fn resolve_kernel32_apis_returns_valid_non_null_addresses() {
-        let (llw, vp) = resolve_kernel32_apis().expect("resolve kernel32 APIs");
-        assert_ne!(llw, 0);
-        assert_ne!(vp, 0);
-        assert_ne!(llw, vp);
     }
 }

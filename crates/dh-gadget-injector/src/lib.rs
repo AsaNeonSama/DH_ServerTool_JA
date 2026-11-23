@@ -1,46 +1,35 @@
 pub mod cache;
+pub mod consts;
 pub mod error;
 pub mod log_channel;
 pub mod oep_inject;
 pub mod prelude;
+pub mod structs;
 
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::time::Duration;
 
 use dh_win32::{spawn_suspended_console, JobObject, SpawnedProcess};
 use tokio::sync::oneshot;
 use tokio::time::{Interval, Sleep};
 
-pub use cache::{
-    default_cache_candidates, sweep_default_stale_run_dirs, sweep_stale_run_dirs, GadgetCache,
-    RoundTempDir, FRIDA_GADGET_SHA256, FRIDA_GADGET_VERSION,
-};
-pub use error::{InjectorError, Result};
-pub use log_channel::{start_log_server, InitHandshakeOutcome, LogServerHandle};
-pub use oep_inject::{InjectedStubInfo, OepStubInjector, ProcessInjector};
-pub use prelude::{
-    build_bundle_js, preprocess_mod_source, BundleBuildParams, WINDOWS_NATIVE_FUNCTION_PRELUDE,
+pub use cache::{default_cache_candidates, sweep_default_stale_run_dirs, sweep_stale_run_dirs};
+pub use consts::cache::{FRIDA_GADGET_SHA256, FRIDA_GADGET_VERSION};
+pub use consts::prelude::WINDOWS_NATIVE_FUNCTION_PRELUDE;
+pub use log_channel::start_log_server;
+pub use oep_inject::ProcessInjector;
+pub use prelude::{build_bundle_js, preprocess_mod_source};
+pub use structs::{
+    ActiveInjectionSession, BundleBuildParams, EventCallback, GadgetCache, InitHandshakeOutcome,
+    InjectLaunchRequest, InjectedStubInfo, InjectorError, InjectorEvent, LogLevel, LogServerHandle,
+    OepStubInjector, PatchMod, Result, RoundTempDir,
 };
 
-/// Single MOD script entry to be aggregated into the per-round Gadget bundle.
-#[derive(Debug, Clone)]
-pub struct PatchMod {
-    pub id: String,
-    pub file_name: String,
-    pub label: String,
-    pub source: String,
-}
-
-/// Severity level for runtime JS logs emitted by injected MOD scripts.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LogLevel {
-    Info,
-    Warn,
-    Error,
-}
+use crate::consts::log_channel::{
+    DEFAULT_INIT_TIMEOUT_SECS, DEFAULT_PATCH_LOG_PATH, EXIT_POLL_INTERVAL_MS,
+};
 
 impl LogLevel {
     #[must_use]
@@ -53,44 +42,6 @@ impl LogLevel {
     }
 }
 
-/// Real-time lifecycle and log events streamed from Frida Gadget over the loopback NDJSON channel.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum InjectorEvent {
-    ModLoaded {
-        file_name: String,
-    },
-    Log {
-        level: LogLevel,
-        file_name: String,
-        message: String,
-    },
-    InitOk,
-    InitError {
-        file_name: String,
-        message: String,
-    },
-    ChannelClosed,
-}
-
-/// Callback invoked asynchronously whenever the Gadget bundle streams a status or log event.
-pub type EventCallback = Arc<dyn Fn(InjectorEvent) + Send + Sync>;
-
-/// Parameters for spawning a target executable in suspended state, attaching Frida Gadget
-/// at OEP, waiting for the `INIT_OK` handshake, and tracking the active session.
-#[derive(Clone)]
-pub struct InjectLaunchRequest {
-    pub exe_path: PathBuf,
-    pub args: Vec<String>,
-    pub cwd: Option<PathBuf>,
-    pub mods: Vec<PatchMod>,
-    pub tokens: HashMap<String, String>,
-    pub patch_log_path: PathBuf,
-    pub round: u64,
-    pub init_timeout: Duration,
-    pub cache_dir_override: Option<PathBuf>,
-    pub on_event: Option<EventCallback>,
-}
-
 impl InjectLaunchRequest {
     /// Creates a request with standard defaults (`init_timeout = 30s`, default cache directory).
     #[must_use]
@@ -101,30 +52,13 @@ impl InjectLaunchRequest {
             cwd: None,
             mods,
             tokens: HashMap::new(),
-            patch_log_path: PathBuf::from("./patch_runtime.log"),
+            patch_log_path: PathBuf::from(DEFAULT_PATCH_LOG_PATH),
             round: 1,
-            init_timeout: Duration::from_secs(30),
+            init_timeout: Duration::from_secs(DEFAULT_INIT_TIMEOUT_SECS),
             cache_dir_override: None,
             on_event: None,
         }
     }
-}
-
-/// Owns the spawned game server process, its kill-on-close Job Object, the loopback
-/// NDJSON log server, and the per-round temporary staging directory.
-///
-/// Dropping this session closes the Job Object (immediately terminating the child
-/// process if still running) and cleans up the per-round staging directory.
-#[derive(Debug)]
-pub struct ActiveInjectionSession {
-    pid: u32,
-    process: SpawnedProcess,
-    // Field order matters for Rust Drop: drop JobObject BEFORE RoundTempDir so Windows
-    // terminates the server and releases the file lock on gadget.dll before dir removal.
-    log_server: Option<LogServerHandle>,
-    job: Option<JobObject>,
-    round_dir: Option<RoundTempDir>,
-    stub_info: InjectedStubInfo,
 }
 
 impl ActiveInjectionSession {
@@ -306,7 +240,8 @@ where
     tokio::pin!(deadline);
     tokio::pin!(cancel);
 
-    let mut exit_poll: Interval = tokio::time::interval(Duration::from_millis(200));
+    let mut exit_poll: Interval =
+        tokio::time::interval(Duration::from_millis(EXIT_POLL_INTERVAL_MS));
     exit_poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
     loop {

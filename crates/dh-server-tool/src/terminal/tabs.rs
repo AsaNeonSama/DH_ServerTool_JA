@@ -14,32 +14,28 @@ use crossterm::terminal::{
     LeaveAlternateScreen,
 };
 use futures_util::StreamExt;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 
 use crate::colors;
-use crate::format::format_local_time;
-use crate::messages::ja::terminal as term_msg;
+use crate::consts::terminal::COPY_FEEDBACK_TTL;
+use crate::languages;
+use crate::structs::languages::{TerminalMsg, TerminalMsgCode, WebLogEvent};
+use crate::structs::terminal::{ActivePrompt, PanicHookFn, TabModeGuard, TuiState};
+pub use crate::structs::terminal::{PostMatchKey, PromptError, TuiCommand};
 use crate::terminal::tab_renderer::{
     render_frame_buffer, CopyFeedbackState, FrameRenderInput, HitRegion, RenderedFrame,
     TerminalTabId, MAX_SERVER_TAB_LINES, MAX_WEB_LOG_LINES,
 };
+use crate::web_console::logger::render_web_log_event;
 use crate::web_console::WebConsoleDisplayInfo;
-
-const COPY_FEEDBACK_TTL: Duration = Duration::from_secs(4);
 
 static TUI_ACTIVE: AtomicBool = AtomicBool::new(false);
 static HAS_SAVED_INPUT_MODE: AtomicBool = AtomicBool::new(false);
 static SAVED_INPUT_MODE: AtomicU32 = AtomicU32::new(0);
 static PANIC_HOOK_ONCE: Once = Once::new();
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PromptError {
-    Aborted,
-    Io(String),
-}
 
 impl std::fmt::Display for PromptError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -51,29 +47,6 @@ impl std::fmt::Display for PromptError {
 }
 
 impl std::error::Error for PromptError {}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PostMatchKey {
-    Reconfigure,
-    Restart,
-}
-
-pub enum TuiCommand {
-    AppendWebLog(String),
-    AppendServerLog(String),
-    ResetServerRound,
-    SetStatusLine(Option<String>),
-    StartPrompt {
-        prompt_text: String,
-        reply: oneshot::Sender<Result<String, PromptError>>,
-    },
-    CancelPrompt,
-    SetPostMatchChannel(Option<mpsc::UnboundedSender<PostMatchKey>>),
-    SwitchTab(TerminalTabId),
-    Exit(oneshot::Sender<()>),
-}
-
-type PanicHookFn = Box<dyn Fn(&PanicHookInfo<'_>) + Sync + Send + 'static>;
 
 /// Installs a process-wide panic hook that unconditionally exits Alternate Screen,
 /// disables mouse capture/raw mode, and restores the original Win32 console mode
@@ -111,10 +84,6 @@ pub fn is_tui_active() -> bool {
     TUI_ACTIVE.load(Ordering::SeqCst)
 }
 
-/// RAII guard that owns Alternate Screen + Raw Mode + Mouse Capture and guarantees
-/// restoration on normal exit, cancellation, or unwind/panic.
-struct TabModeGuard;
-
 impl TabModeGuard {
     fn enter() -> io::Result<Self> {
         install_panic_hook();
@@ -145,30 +114,6 @@ impl Drop for TabModeGuard {
     fn drop(&mut self) {
         restore_terminal_emergency();
     }
-}
-
-struct ActivePrompt {
-    prompt_text: String,
-    input_buffer: String,
-    reply: oneshot::Sender<Result<String, PromptError>>,
-}
-
-struct TuiState {
-    active_tab: TerminalTabId,
-    web_console_info: WebConsoleDisplayInfo,
-    server_lines: Vec<String>,
-    server_scroll_offset: usize,
-    web_log_lines: Vec<String>,
-    web_log_scroll_offset: usize,
-    status_line: Option<String>,
-    active_prompt: Option<ActivePrompt>,
-    post_match_tx: Option<mpsc::UnboundedSender<PostMatchKey>>,
-    copy_feedback: Option<CopyFeedbackState>,
-    copy_feedback_deadline: Option<Instant>,
-    tab1_hit: Option<HitRegion>,
-    tab2_hit: Option<HitRegion>,
-    public_btn_hit: Option<HitRegion>,
-    local_btn_hit: Option<HitRegion>,
 }
 
 impl TuiState {
@@ -334,52 +279,30 @@ impl TuiState {
     }
 
     fn trigger_copy_url(&mut self, is_public: bool) {
-        let (target_url, label): (String, &str) = if is_public {
-            (
-                self.web_console_info.public_url.clone(),
-                term_msg::PUBLIC_URL_SHORT_LABEL,
-            )
+        let target_url: String = if is_public {
+            self.web_console_info.public_url.clone()
         } else {
-            (
-                self.web_console_info.local_url.clone(),
-                term_msg::LOCAL_URL_SHORT_LABEL,
-            )
+            self.web_console_info.local_url.clone()
         };
 
         let ok: bool = dh_win32::console::set_clipboard_text(&target_url).is_ok();
-        let now_str: String = format_local_time();
-
-        if ok {
-            self.copy_feedback = Some(CopyFeedbackState {
-                text: term_msg::copy_success_feedback(label),
-                is_error: false,
-            });
-            self.copy_feedback_deadline = Some(Instant::now() + COPY_FEEDBACK_TTL);
-            let log_line: String = format!(
-                " {}[{now_str}] {}[{}] {}{}",
-                colors::LIGHT_BLACK,
-                colors::CYAN,
-                term_msg::COPY_LOG_CATEGORY,
-                colors::LIGHT_WHITE,
-                term_msg::copy_log_success(label)
-            );
-            self.append_web_log(&log_line);
+        let feedback_text: String = if ok {
+            languages::render_terminal(&TerminalMsg::CopySuccessFeedback { is_public })
         } else {
-            self.copy_feedback = Some(CopyFeedbackState {
-                text: term_msg::COPY_FAILURE_FEEDBACK.to_string(),
-                is_error: true,
-            });
-            self.copy_feedback_deadline = Some(Instant::now() + COPY_FEEDBACK_TTL);
-            let log_line: String = format!(
-                " {}[{now_str}] {}[{}] {}{}",
-                colors::LIGHT_BLACK,
-                colors::RED,
-                term_msg::COPY_LOG_CATEGORY,
-                colors::LIGHT_WHITE,
-                term_msg::copy_log_failure(label)
-            );
-            self.append_web_log(&log_line);
-        }
+            languages::terminal_text(TerminalMsgCode::CopyFailureFeedback).to_string()
+        };
+
+        self.copy_feedback = Some(CopyFeedbackState {
+            text: feedback_text,
+            is_error: !ok,
+        });
+        self.copy_feedback_deadline = Some(Instant::now() + COPY_FEEDBACK_TTL);
+
+        let log_line: String = render_web_log_event(&WebLogEvent::UrlCopied {
+            is_public,
+            success: ok,
+        });
+        self.append_web_log(&log_line);
     }
 
     fn abort_active_prompt(&mut self) {

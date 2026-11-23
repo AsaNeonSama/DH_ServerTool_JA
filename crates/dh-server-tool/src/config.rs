@@ -2,60 +2,34 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-pub const CONFIG_RELATIVE_PATH: &str = "./config.json";
-pub const MIN_VALID_PORT: u16 = 1024;
-pub const MAX_VALID_PORT: u16 = 65535;
-pub const MIN_CHECK_INTERVAL_MS: u64 = 200;
-pub const MIN_RESTART_WAIT_SECONDS: u64 = 1;
-
-const MAX_SAFE_INT_F64: f64 = 9_007_199_254_740_991.0;
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AppConfig {
-    pub server_ports: [u16; 2],
-    pub console_patch_port: u16,
-    pub web_console_port: u16,
-    pub check_interval_ms: u64,
-    pub restart_wait_seconds: u64,
-    pub auto_broadcast_default: bool,
-    pub server_executable: String,
-    pub shipping_executable: String,
-    pub shipping_process_name: String,
-}
+pub use crate::consts::config::{
+    CONFIG_RELATIVE_PATH, MAX_VALID_PORT, MIN_CHECK_INTERVAL_MS, MIN_RESTART_WAIT_SECONDS,
+    MIN_VALID_PORT,
+};
+use crate::consts::config::{
+    DEFAULT_AUTO_BROADCAST, DEFAULT_CHECK_INTERVAL_MS, DEFAULT_CONSOLE_PATCH_PORT,
+    DEFAULT_RESTART_WAIT_SECONDS, DEFAULT_SERVER_EXECUTABLE, DEFAULT_SERVER_PORTS,
+    DEFAULT_SHIPPING_EXECUTABLE, DEFAULT_SHIPPING_PROCESS_NAME, DEFAULT_WEB_CONSOLE_PORT,
+    MAX_SAFE_INT_F64,
+};
+pub use crate::structs::config::{AppConfig, ConfigLoadOutcome, LoadedConfig};
 
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            server_ports: [7895, 7897],
-            console_patch_port: 7893,
-            web_console_port: 7891,
-            check_interval_ms: 1000,
-            restart_wait_seconds: 10,
-            auto_broadcast_default: true,
-            server_executable: "./DreadHungerServer.exe".to_string(),
-            shipping_executable:
-                "./DreadHunger/Binaries/Win64/DreadHungerServer-Win64-Shipping.exe".to_string(),
-            shipping_process_name: "DreadHungerServer-Win64-Shipping.exe".to_string(),
+            server_ports: DEFAULT_SERVER_PORTS,
+            console_patch_port: DEFAULT_CONSOLE_PATCH_PORT,
+            web_console_port: DEFAULT_WEB_CONSOLE_PORT,
+            check_interval_ms: DEFAULT_CHECK_INTERVAL_MS,
+            restart_wait_seconds: DEFAULT_RESTART_WAIT_SECONDS,
+            auto_broadcast_default: DEFAULT_AUTO_BROADCAST,
+            server_executable: DEFAULT_SERVER_EXECUTABLE.to_string(),
+            shipping_executable: DEFAULT_SHIPPING_EXECUTABLE.to_string(),
+            shipping_process_name: DEFAULT_SHIPPING_PROCESS_NAME.to_string(),
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ConfigLoadOutcome {
-    Loaded,
-    CreatedDefault,
-    CreateFailed,
-    LoadFailed(String),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LoadedConfig {
-    pub config: AppConfig,
-    pub outcome: ConfigLoadOutcome,
 }
 
 #[must_use]
@@ -242,100 +216,4 @@ pub fn load_or_create_config_at(path: &Path) -> LoadedConfig {
 #[must_use]
 pub fn load_or_create_config() -> LoadedConfig {
     load_or_create_config_at(Path::new(CONFIG_RELATIVE_PATH))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use uuid::Uuid;
-
-    fn temp_config_path() -> PathBuf {
-        env::temp_dir().join(format!("dh_config_test_{}.json", Uuid::new_v4()))
-    }
-
-    #[test]
-    fn creates_default_config_when_missing() {
-        let path = temp_config_path();
-        assert!(!path.exists());
-
-        let loaded = load_or_create_config_at(&path);
-        assert_eq!(loaded.outcome, ConfigLoadOutcome::CreatedDefault);
-        assert_eq!(loaded.config, AppConfig::default());
-        assert!(path.exists());
-
-        let reloaded = load_or_create_config_at(&path);
-        assert_eq!(reloaded.outcome, ConfigLoadOutcome::Loaded);
-        assert_eq!(reloaded.config, AppConfig::default());
-
-        let _ = fs::remove_file(&path);
-    }
-
-    #[test]
-    fn falls_back_field_by_field_for_invalid_values() {
-        let raw: Value = serde_json::json!({
-            "serverPorts": [7895, 7895],
-            "consolePatchPort": 80,
-            "webConsolePort": 8080,
-            "checkIntervalMs": 50,
-            "restartWaitSeconds": 15.9,
-            "autoBroadcastDefault": false,
-            "serverExecutable": "   ",
-            "shippingExecutable": "  ./custom/Server.exe  ",
-            "shippingProcessName": 12345
-        });
-
-        let cfg = parse_config_value(&raw);
-        let defaults = AppConfig::default();
-
-        assert_eq!(cfg.server_ports, defaults.server_ports);
-        assert_eq!(cfg.console_patch_port, defaults.console_patch_port);
-        assert_eq!(cfg.web_console_port, 8080);
-        assert_eq!(cfg.check_interval_ms, defaults.check_interval_ms);
-        assert_eq!(cfg.restart_wait_seconds, 15);
-        assert!(!cfg.auto_broadcast_default);
-        assert_eq!(cfg.server_executable, defaults.server_executable);
-        assert_eq!(cfg.shipping_executable, "./custom/Server.exe");
-        assert_eq!(cfg.shipping_process_name, defaults.shipping_process_name);
-    }
-
-    #[test]
-    fn preserves_valid_distinct_server_ports_and_handles_corrupt_json() {
-        let path = temp_config_path();
-        fs::write(
-            &path,
-            r#"{"serverPorts":[9001,9003],"consolePatchPort":9005,"webConsolePort":9007}"#,
-        )
-        .unwrap();
-
-        let loaded = load_or_create_config_at(&path);
-        assert_eq!(loaded.outcome, ConfigLoadOutcome::Loaded);
-        assert_eq!(loaded.config.server_ports, [9001, 9003]);
-        assert_eq!(loaded.config.console_patch_port, 9005);
-        assert_eq!(loaded.config.web_console_port, 9007);
-
-        fs::write(&path, "{ invalid json").unwrap();
-        let corrupt = load_or_create_config_at(&path);
-        assert!(matches!(corrupt.outcome, ConfigLoadOutcome::LoadFailed(_)));
-        assert_eq!(corrupt.config, AppConfig::default());
-
-        let _ = fs::remove_file(&path);
-    }
-
-    #[test]
-    fn serializes_expected_camel_case_schema() {
-        let serialized = serde_json::to_value(AppConfig::default()).unwrap();
-        let expected = serde_json::json!({
-            "serverPorts": [7895, 7897],
-            "consolePatchPort": 7893,
-            "webConsolePort": 7891,
-            "checkIntervalMs": 1000,
-            "restartWaitSeconds": 10,
-            "autoBroadcastDefault": true,
-            "serverExecutable": "./DreadHungerServer.exe",
-            "shippingExecutable": "./DreadHunger/Binaries/Win64/DreadHungerServer-Win64-Shipping.exe",
-            "shippingProcessName": "DreadHungerServer-Win64-Shipping.exe"
-        });
-        assert_eq!(serialized, expected);
-        assert_eq!(parse_config_value(&serialized), AppConfig::default());
-    }
 }

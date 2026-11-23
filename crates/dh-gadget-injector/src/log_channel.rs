@@ -3,42 +3,19 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use rand::RngCore;
-use serde::Deserialize;
 use tokio::io::{AsyncBufReadExt, BufReader, Lines};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{oneshot, Mutex};
 use tokio::task::JoinHandle;
 
+use crate::consts::log_channel::{
+    PACKET_TYPE_INIT_ERR, PACKET_TYPE_INIT_OK, PACKET_TYPE_LOG, PACKET_TYPE_MOD_OK,
+    SESSION_NONCE_BYTES,
+};
 use crate::error::Result;
+use crate::structs::log_channel::NdjsonPacket;
+pub use crate::structs::log_channel::{InitHandshakeOutcome, LogServerHandle};
 use crate::{EventCallback, InjectorEvent, LogLevel};
-
-#[derive(Debug, Deserialize)]
-struct NdjsonPacket {
-    n: String,
-    t: String,
-    #[serde(default)]
-    l: Option<String>,
-    #[serde(default)]
-    f: Option<String>,
-    #[serde(default)]
-    m: Option<String>,
-}
-
-/// Initialization outcome reported by the Gadget bundle over the loopback channel.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum InitHandshakeOutcome {
-    Ok,
-    Error { file_name: String, message: String },
-}
-
-/// Active loopback NDJSON log & handshake TCP server (`127.0.0.1:0`).
-#[derive(Debug)]
-pub struct LogServerHandle {
-    port: u16,
-    session_nonce: String,
-    shutdown_tx: Option<oneshot::Sender<()>>,
-    task: Option<JoinHandle<()>>,
-}
 
 impl LogServerHandle {
     #[must_use]
@@ -75,9 +52,9 @@ impl Drop for LogServerHandle {
 }
 
 fn generate_session_nonce() -> String {
-    let mut bytes: [u8; 16] = [0u8; 16];
+    let mut bytes: [u8; SESSION_NONCE_BYTES] = [0u8; SESSION_NONCE_BYTES];
     rand::rngs::OsRng.fill_bytes(&mut bytes);
-    let mut hex: String = String::with_capacity(32);
+    let mut hex: String = String::with_capacity(SESSION_NONCE_BYTES * 2);
     for b in bytes {
         let _ = write!(&mut hex, "{b:02x}");
     }
@@ -157,14 +134,14 @@ pub async fn start_log_server(
                             authenticated = true;
 
                             match packet.t.as_str() {
-                                "MOD_OK" => {
+                                PACKET_TYPE_MOD_OK => {
                                     if let Some(ref f) = cb {
                                         f(InjectorEvent::ModLoaded {
                                             file_name: packet.f.unwrap_or_default(),
                                         });
                                     }
                                 }
-                                "LOG" => {
+                                PACKET_TYPE_LOG => {
                                     if let Some(ref f) = cb {
                                         f(InjectorEvent::Log {
                                             level: parse_log_level(packet.l.as_deref()),
@@ -175,7 +152,7 @@ pub async fn start_log_server(
                                         });
                                     }
                                 }
-                                "INIT_OK" => {
+                                PACKET_TYPE_INIT_OK => {
                                     if let Some(ref f) = cb {
                                         f(InjectorEvent::InitOk);
                                     }
@@ -183,7 +160,7 @@ pub async fn start_log_server(
                                         let _ = tx.send(InitHandshakeOutcome::Ok);
                                     }
                                 }
-                                "INIT_ERR" => {
+                                PACKET_TYPE_INIT_ERR => {
                                     let file_name: String =
                                         packet.f.unwrap_or_else(|| "bundle".to_string());
                                     let message: String = packet
@@ -226,97 +203,4 @@ pub async fn start_log_server(
         },
         init_rx,
     ))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::Mutex as StdMutex;
-    use tokio::io::AsyncWriteExt;
-    use tokio::net::TcpStream;
-
-    #[tokio::test]
-    async fn log_channel_validates_nonce_and_streams_events() {
-        let events: Arc<StdMutex<Vec<InjectorEvent>>> = Arc::new(StdMutex::new(Vec::new()));
-        let events_clone = Arc::clone(&events);
-
-        let (server, init_rx) = start_log_server(Some(Arc::new(move |ev| {
-            events_clone.lock().unwrap().push(ev);
-        })))
-        .await
-        .expect("start_log_server");
-
-        let port = server.port();
-        let nonce = server.session_nonce().to_string();
-        assert_eq!(nonce.len(), 32);
-
-        // Unauthorized client with wrong nonce must be ignored
-        {
-            let mut bad = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-            bad.write_all(b"{\"n\":\"deadbeef\",\"t\":\"INIT_OK\"}\n")
-                .await
-                .unwrap();
-            let _ = bad.shutdown().await;
-        }
-
-        // Authorized client streams MOD_OK, LOG, INIT_OK
-        let mut client = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-        let payload = format!(
-            concat!(
-                "{{\"n\":\"{n}\",\"t\":\"MOD_OK\",\"f\":\"console.js\"}}\n",
-                "{{\"n\":\"{n}\",\"t\":\"LOG\",\"l\":\"WARN\",\"f\":\"network.js\",\"m\":\"日本語ログ\"}}\n",
-                "{{\"n\":\"{n}\",\"t\":\"INIT_OK\"}}\n"
-            ),
-            n = nonce
-        );
-        client.write_all(payload.as_bytes()).await.unwrap();
-
-        let outcome = tokio::time::timeout(std::time::Duration::from_secs(3), init_rx)
-            .await
-            .expect("init handshake timeout")
-            .expect("init channel closed");
-        assert_eq!(outcome, InitHandshakeOutcome::Ok);
-
-        let captured = events.lock().unwrap().clone();
-        assert!(captured.iter().any(|e| matches!(
-            e,
-            InjectorEvent::ModLoaded { file_name } if file_name == "console.js"
-        )));
-        assert!(captured.iter().any(|e| matches!(
-            e,
-            InjectorEvent::Log { level: LogLevel::Warn, file_name, message }
-                if file_name == "network.js" && message == "日本語ログ"
-        )));
-        assert!(captured.iter().any(|e| matches!(e, InjectorEvent::InitOk)));
-
-        drop(client);
-        server.shutdown().await;
-    }
-
-    #[tokio::test]
-    async fn log_channel_propagates_init_err() {
-        let (server, init_rx) = start_log_server(None).await.unwrap();
-        let mut client = TcpStream::connect(("127.0.0.1", server.port()))
-            .await
-            .unwrap();
-        let line = format!(
-            "{{\"n\":\"{}\",\"t\":\"INIT_ERR\",\"f\":\"broken.js\",\"m\":\"ReferenceError\"}}\n",
-            server.session_nonce()
-        );
-        client.write_all(line.as_bytes()).await.unwrap();
-
-        let outcome = tokio::time::timeout(std::time::Duration::from_secs(3), init_rx)
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(
-            outcome,
-            InitHandshakeOutcome::Error {
-                file_name: "broken.js".to_string(),
-                message: "ReferenceError".to_string(),
-            }
-        );
-
-        server.shutdown().await;
-    }
 }

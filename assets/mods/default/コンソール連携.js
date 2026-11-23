@@ -265,13 +265,12 @@ function resolveBlueprintClass(blueprintPath) {
     return resolvedClass;
 }
 
-function preloadSummonBlueprint(commandText) {
-    if (!commandText || commandText.toLowerCase().indexOf('summon ') !== 0) {
+function preloadSummonBlueprint(cmdName, cmdArg) {
+    if (cmdName !== 'summon' || !cmdArg) {
         return;
     }
-    var shortClassName = commandText.slice(7).trim();
-    if (SUMMON_BLUEPRINT_PATHS.hasOwnProperty(shortClassName)) {
-        resolveBlueprintClass(SUMMON_BLUEPRINT_PATHS[shortClassName]);
+    if (SUMMON_BLUEPRINT_PATHS.hasOwnProperty(cmdArg)) {
+        resolveBlueprintClass(SUMMON_BLUEPRINT_PATHS[cmdArg]);
     }
 }
 
@@ -605,18 +604,20 @@ function executeQueuedPayload(gameStatePtr, payload) {
         }
         var firstSpaceIdx = trimmedCommand.indexOf(' ');
         var cmdName = (firstSpaceIdx === -1 ? trimmedCommand : trimmedCommand.slice(0, firstSpaceIdx)).toLowerCase();
+        var cmdArg = firstSpaceIdx === -1 ? '' : trimmedCommand.slice(firstSpaceIdx + 1).trim();
+        var normalizedCommand = cmdArg.length === 0 ? cmdName : (cmdName + ' ' + cmdArg);
         if (cmdName === 'setisthrall') {
-            var thrallArg = firstSpaceIdx === -1 ? '' : trimmedCommand.slice(firstSpaceIdx + 1).trim().toLowerCase();
+            var thrallArg = cmdArg.toLowerCase();
             var enableThrall = (thrallArg !== '0' && thrallArg !== 'false');
             setTargetPlayerIsThrall(gameStatePtr, targetController, enableThrall);
             return;
         }
-        preloadSummonBlueprint(commandText);
+        preloadSummonBlueprint(cmdName, cmdArg);
         if (!targetController.isNull() && targetController.add(UE_OFFSETS.playerControllerCheatManager).readPointer().isNull()) {
             ADH_PlayerController_AddCheats(targetController, 1);
         }
-        var commandFString = allocateFString(commandText.length + 10);
-        writeFStringValue(commandFString, commandText);
+        var commandFString = allocateFString(normalizedCommand.length + 10);
+        writeFStringValue(commandFString, normalizedCommand);
         UKismetSystemLibrary_ExecuteConsoleCommand(gameStatePtr, commandFString, targetController);
     } else if (action === 'add_inventory_item') {
         if (typeof payload.itemBlueprintPath === 'string' && typeof payload.itemCount === 'number' && Number.isFinite(payload.itemCount) && payload.itemCount > 0) {

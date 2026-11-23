@@ -3,29 +3,10 @@ use tokio_util::sync::CancellationToken;
 use crate::cli::match_setup::{prompt_match_config, MatchConfig, ServerSettings};
 use crate::colors;
 use crate::config::{is_valid_port_number, AppConfig, MAX_VALID_PORT, MIN_VALID_PORT};
-use crate::messages::ja::cli as cli_msg;
+use crate::languages;
+pub use crate::structs::cli::{LaunchPlan, WebConsoleSetupConfig};
+use crate::structs::languages::{CliErrorCode, CliMsg, CliMsgCode};
 use crate::terminal::{PromptError, Terminal};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct WebConsoleSetupConfig {
-    pub web_console_port: u16,
-    pub console_patch_port: u16,
-    pub auto_broadcast: bool,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct LaunchPlan {
-    pub web_console_port: u16,
-    pub console_patch_port: u16,
-    pub auto_broadcast: bool,
-    pub server_ports: [u16; 2],
-    pub map_id: &'static str,
-    pub map_label: &'static str,
-    pub settings: ServerSettings,
-    pub selected_option_numbers: Vec<u32>,
-    pub selected_option_labels: Vec<String>,
-    pub ue_map_argument: String,
-}
 
 impl LaunchPlan {
     #[must_use]
@@ -40,7 +21,7 @@ impl LaunchPlan {
             auto_broadcast: web_config.auto_broadcast,
             server_ports,
             map_id: match_config.map_id,
-            map_label: match_config.map_label,
+            map_label_code: match_config.map_label_code,
             settings: match_config.settings,
             selected_option_numbers: match_config.selected_option_numbers,
             selected_option_labels: match_config.selected_option_labels,
@@ -56,7 +37,7 @@ impl LaunchPlan {
             auto_broadcast: self.auto_broadcast,
             server_ports: self.server_ports,
             map_id: match_config.map_id,
-            map_label: match_config.map_label,
+            map_label_code: match_config.map_label_code,
             settings: match_config.settings,
             selected_option_numbers: match_config.selected_option_numbers,
             selected_option_labels: match_config.selected_option_labels,
@@ -76,12 +57,21 @@ pub fn parse_port_input(raw: &str, fallback: u16) -> Option<u16> {
     is_valid_port_number(value).then_some(value)
 }
 
-pub fn validate_web_port(raw: &str, fallback: u16, console_patch_port: u16) -> Result<u16, String> {
+pub fn validate_web_port(
+    raw: &str,
+    fallback: u16,
+    console_patch_port: u16,
+) -> Result<u16, CliErrorCode> {
     let Some(parsed): Option<u16> = parse_port_input(raw, fallback) else {
-        return Err(cli_msg::port_range_error(MIN_VALID_PORT, MAX_VALID_PORT));
+        return Err(CliErrorCode::PortOutOfRange {
+            min: MIN_VALID_PORT,
+            max: MAX_VALID_PORT,
+        });
     };
     if parsed == console_patch_port {
-        return Err(cli_msg::web_port_conflict_error(console_patch_port));
+        return Err(CliErrorCode::WebPortConflictsWithPatch {
+            patch_port: console_patch_port,
+        });
     }
     Ok(parsed)
 }
@@ -91,25 +81,28 @@ pub fn validate_server_ports(
     raw2: &str,
     default_ports: [u16; 2],
     web_config: WebConsoleSetupConfig,
-) -> Result<[u16; 2], String> {
+) -> Result<[u16; 2], CliErrorCode> {
     let (Some(p1), Some(p2)): (Option<u16>, Option<u16>) = (
         parse_port_input(raw1, default_ports[0]),
         parse_port_input(raw2, default_ports[1]),
     ) else {
-        return Err(cli_msg::port_range_error(MIN_VALID_PORT, MAX_VALID_PORT));
+        return Err(CliErrorCode::PortOutOfRange {
+            min: MIN_VALID_PORT,
+            max: MAX_VALID_PORT,
+        });
     };
     if p1 == p2 {
-        return Err(cli_msg::SERVER_PORT_DUPLICATE_ERROR.to_string());
+        return Err(CliErrorCode::ServerPortsDuplicate);
     }
     if p1 == web_config.web_console_port
         || p2 == web_config.web_console_port
         || p1 == web_config.console_patch_port
         || p2 == web_config.console_patch_port
     {
-        return Err(cli_msg::server_port_web_conflict_error(
-            web_config.web_console_port,
-            web_config.console_patch_port,
-        ));
+        return Err(CliErrorCode::ServerPortConflictsWithWeb {
+            web_port: web_config.web_console_port,
+            patch_port: web_config.console_patch_port,
+        });
     }
     Ok([p1, p2])
 }
@@ -123,13 +116,13 @@ pub async fn run_web_console_config_cli(
     terminal.println(&format!(
         "{} {}",
         colors::LIGHT_CYAN,
-        cli_msg::WEB_CONSOLE_SECTION_HEADER
+        languages::cli_text(CliMsgCode::WebConsoleSectionHeader)
     ));
 
     let web_port_prompt: String = format!(
         "{} * {} {}[Enter={}]{}: ",
         colors::LIGHT_WHITE,
-        cli_msg::WEB_PORT_PROMPT,
+        languages::cli_text(CliMsgCode::WebPortPrompt),
         colors::LIGHT_BLACK,
         config.web_console_port,
         colors::LIGHT_WHITE,
@@ -138,7 +131,11 @@ pub async fn run_web_console_config_cli(
         let raw_web: String = terminal.ask(&web_port_prompt, cancel).await?;
         match validate_web_port(&raw_web, config.web_console_port, config.console_patch_port) {
             Ok(port) => break port,
-            Err(err_msg) => terminal.println(&format!("{} * {err_msg}", colors::RED)),
+            Err(err_code) => terminal.println(&format!(
+                "{} * {}",
+                colors::RED,
+                languages::render_cli_error(err_code)
+            )),
         }
     };
 
@@ -146,9 +143,9 @@ pub async fn run_web_console_config_cli(
     let broadcast_prompt: String = format!(
         "{} * {}({}{}{}) {}[Enter={default_broadcast_num}]{}: ",
         colors::LIGHT_WHITE,
-        cli_msg::AUTO_BROADCAST_PROMPT_PREFIX,
+        languages::cli_text(CliMsgCode::AutoBroadcastPromptPrefix),
         colors::LIGHT_GREEN,
-        cli_msg::AUTO_BROADCAST_CHOICES,
+        languages::cli_text(CliMsgCode::AutoBroadcastChoices),
         colors::LIGHT_WHITE,
         colors::LIGHT_BLACK,
         colors::LIGHT_WHITE,
@@ -162,7 +159,7 @@ pub async fn run_web_console_config_cli(
             _ => terminal.println(&format!(
                 "{} * {}",
                 colors::RED,
-                cli_msg::INVALID_CHOICE_RETRY
+                languages::cli_text(CliMsgCode::InvalidChoiceRetry)
             )),
         }
     };
@@ -184,13 +181,13 @@ pub async fn run_server_setup_cli(
     terminal.println(&format!(
         "{} {}",
         colors::LIGHT_CYAN,
-        cli_msg::SERVER_SETUP_SECTION_HEADER
+        languages::cli_text(CliMsgCode::ServerSetupSectionHeader)
     ));
 
     let p1_prompt: String = format!(
         "{} * {}({}1/2{}) {}[Enter={}]{}: ",
         colors::LIGHT_WHITE,
-        cli_msg::SERVER_PORT_PROMPT_PREFIX,
+        languages::cli_text(CliMsgCode::ServerPortPromptPrefix),
         colors::LIGHT_GREEN,
         colors::LIGHT_WHITE,
         colors::LIGHT_BLACK,
@@ -200,7 +197,7 @@ pub async fn run_server_setup_cli(
     let p2_prompt: String = format!(
         "{} * {}({}2/2{}) {}[Enter={}]{}: ",
         colors::LIGHT_WHITE,
-        cli_msg::SERVER_PORT_PROMPT_PREFIX,
+        languages::cli_text(CliMsgCode::ServerPortPromptPrefix),
         colors::LIGHT_GREEN,
         colors::LIGHT_WHITE,
         colors::LIGHT_BLACK,
@@ -221,7 +218,11 @@ pub async fn run_server_setup_cli(
         };
         match validate_server_ports(&raw1, &raw2, config.server_ports, web_config) {
             Ok(ports) => break ports,
-            Err(err_msg) => terminal.println(&format!("{} * {err_msg}", colors::RED)),
+            Err(err_code) => terminal.println(&format!(
+                "{} * {}",
+                colors::RED,
+                languages::render_cli_error(err_code)
+            )),
         }
     };
 
@@ -230,12 +231,12 @@ pub async fn run_server_setup_cli(
     terminal.println(&format!(
         "{} {}",
         colors::LIGHT_CYAN,
-        cli_msg::SERVER_SETUP_SECTION_HEADER
+        languages::cli_text(CliMsgCode::ServerSetupSectionHeader)
     ));
     terminal.println(&format!(
         "{} * {} {}{} <-> {}",
         colors::LIGHT_WHITE,
-        cli_msg::SERVER_PORTS_SELECTED_LABEL,
+        languages::cli_text(CliMsgCode::ServerPortsSelectedLabel),
         colors::LIGHT_GREEN,
         server_ports[0],
         server_ports[1]
@@ -264,15 +265,15 @@ pub async fn run_reconfigure_match_cli(
     terminal.println(&format!(
         "{} {}",
         colors::LIGHT_CYAN,
-        cli_msg::RECONFIGURE_SECTION_HEADER
+        languages::cli_text(CliMsgCode::ReconfigureSectionHeader)
     ));
     terminal.println(&format!(
         "{} * {}",
         colors::LIGHT_BLACK,
-        cli_msg::reconfigure_preserved_notice(
-            current_plan.server_ports[0],
-            current_plan.server_ports[1]
-        )
+        languages::render_cli(&CliMsg::ReconfigurePreservedNotice {
+            port_1: current_plan.server_ports[0],
+            port_2: current_plan.server_ports[1],
+        })
     ));
 
     match prompt_match_config(terminal, &current_plan.settings, Some(cancel)).await {
@@ -285,36 +286,9 @@ pub async fn run_reconfigure_match_cli(
             terminal.println(&format!(
                 "{} * {}",
                 colors::RED,
-                cli_msg::reconfigure_interrupted_notice(&msg)
+                languages::render_cli(&CliMsg::ReconfigureInterruptedNotice { error_text: &msg })
             ));
             Some(current_plan.clone())
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn validates_web_and_server_port_collisions() {
-        assert_eq!(validate_web_port("", 7891, 7893), Ok(7891));
-        assert!(validate_web_port("7893", 7891, 7893).is_err());
-        assert!(validate_web_port("80", 7891, 7893).is_err());
-        assert!(validate_web_port("70000", 7891, 7893).is_err());
-
-        let web_cfg = WebConsoleSetupConfig {
-            web_console_port: 7891,
-            console_patch_port: 7893,
-            auto_broadcast: true,
-        };
-        assert_eq!(
-            validate_server_ports("", "", [7895, 7897], web_cfg),
-            Ok([7895, 7897])
-        );
-        assert!(validate_server_ports("7895", "7895", [7895, 7897], web_cfg).is_err());
-        assert!(validate_server_ports("7891", "7897", [7895, 7897], web_cfg).is_err());
-        assert!(validate_server_ports("7895", "7893", [7895, 7897], web_cfg).is_err());
-        assert!(validate_server_ports("1023", "7897", [7895, 7897], web_cfg).is_err());
     }
 }

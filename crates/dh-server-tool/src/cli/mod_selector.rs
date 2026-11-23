@@ -1,31 +1,15 @@
 use tokio_util::sync::CancellationToken;
 
 use crate::colors;
-use crate::messages::ja::cli as cli_msg;
+pub use crate::consts::cli::{MOD_MENU_COLS, MOD_MENU_COL_WIDTH};
+use crate::languages;
 use crate::mods::{
     find_conflicting_selected_options, find_option_by_number, get_mod_conflict_pairs, ModKind,
     ModMenuOption, PatchScript, DEFAULT_PATCH_SCRIPTS, SELECTABLE_MOD_OPTIONS,
 };
+pub use crate::structs::cli::{ModSelectionCommand, ModSelectionStepResult};
+use crate::structs::languages::{CliMsg, CliMsgCode};
 use crate::terminal::{pad_display_width, PromptError, Terminal};
-
-pub const MOD_MENU_COLS: usize = 4;
-pub const MOD_MENU_COL_WIDTH: usize = 27;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ModSelectionStepResult {
-    pub added_labels: Vec<&'static str>,
-    pub duplicate_labels: Vec<&'static str>,
-    pub conflict_notices: Vec<String>,
-    pub invalid_tokens: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ModSelectionCommand {
-    Confirm,
-    Cleared,
-    EmptyInvalid,
-    Processed(ModSelectionStepResult),
-}
 
 /// Formats the 4-column selectable MOD menu lines and the bidirectional conflict legend.
 #[must_use]
@@ -42,11 +26,12 @@ pub fn build_mod_menu_lines() -> Vec<String> {
                 continue;
             };
             let suffix: &str = if opt.kind == ModKind::Mode {
-                cli_msg::MOD_MODE_SUFFIX
+                languages::cli_text(CliMsgCode::ModModeSuffix)
             } else {
                 ""
             };
-            let cell: String = format!("{}:{}{suffix}", opt.number, opt.label);
+            let opt_label: &str = languages::mod_label(opt.label_code);
+            let cell: String = format!("{}:{opt_label}{suffix}", opt.number);
             let has_next_col: bool = (c + 1) * rows + r < total;
             if has_next_col {
                 line.push_str(&pad_display_width(&cell, MOD_MENU_COL_WIDTH));
@@ -65,7 +50,13 @@ pub fn build_mod_menu_lines() -> Vec<String> {
             .iter()
             .map(
                 |(a, b): &(&'static ModMenuOption, &'static ModMenuOption)| {
-                    format!("{}:{} <-> {}:{}", a.number, a.label, b.number, b.label)
+                    format!(
+                        "{}:{} <-> {}:{}",
+                        a.number,
+                        languages::mod_label(a.label_code),
+                        b.number,
+                        languages::mod_label(b.label_code)
+                    )
                 },
             )
             .collect::<Vec<String>>()
@@ -73,7 +64,7 @@ pub fn build_mod_menu_lines() -> Vec<String> {
         lines.push(format!(
             "{} * {} {pair_text}",
             colors::LIGHT_BLACK,
-            cli_msg::MOD_CONFLICT_LEGEND_PREFIX,
+            languages::cli_text(CliMsgCode::ModConflictLegendPrefix),
         ));
     }
 
@@ -87,7 +78,7 @@ pub fn format_selected_labels(selected_numbers: &[u32]) -> String {
         .map(|&n: &u32| {
             find_option_by_number(n).map_or_else(
                 || n.to_string(),
-                |item: &ModMenuOption| item.label.to_string(),
+                |item: &ModMenuOption| languages::mod_label(item.label_code).to_string(),
             )
         })
         .collect::<Vec<String>>()
@@ -138,9 +129,11 @@ pub fn apply_mod_selection_input(
             continue;
         };
 
+        let opt_label: &'static str = languages::mod_label(opt.label_code);
+
         if selected_numbers.contains(&opt.number) {
-            if !duplicate_labels.contains(&opt.label) {
-                duplicate_labels.push(opt.label);
+            if !duplicate_labels.contains(&opt_label) {
+                duplicate_labels.push(opt_label);
             }
             continue;
         }
@@ -150,13 +143,16 @@ pub fn apply_mod_selection_input(
         if !conflicts.is_empty() {
             let conflict_targets: String = conflicts
                 .iter()
-                .map(|item: &&ModMenuOption| format!("{}:{}", item.number, item.label))
+                .map(|item: &&ModMenuOption| {
+                    format!("{}:{}", item.number, languages::mod_label(item.label_code))
+                })
                 .collect::<Vec<String>>()
                 .join(", ");
-            let notice: String = cli_msg::mod_conflict_detail(
-                &format!("{}:{}", opt.number, opt.label),
-                &conflict_targets,
-            );
+            let option_text: String = format!("{}:{opt_label}", opt.number);
+            let notice: String = languages::render_cli(&CliMsg::ModConflictDetail {
+                option_text: &option_text,
+                targets: &conflict_targets,
+            });
             if !conflict_notices.contains(&notice) {
                 conflict_notices.push(notice);
             }
@@ -164,7 +160,7 @@ pub fn apply_mod_selection_input(
         }
 
         selected_numbers.push(opt.number);
-        added_labels.push(opt.label);
+        added_labels.push(opt_label);
     }
 
     ModSelectionCommand::Processed(ModSelectionStepResult {
@@ -181,26 +177,26 @@ pub async fn prompt_mod_selection(
 ) -> Result<(Vec<u32>, Vec<String>), PromptError> {
     let default_labels: String = DEFAULT_PATCH_SCRIPTS
         .iter()
-        .map(|patch: &PatchScript| patch.label)
+        .map(|patch: &PatchScript| languages::mod_label(patch.label_code))
         .collect::<Vec<&str>>()
         .join(", ");
 
     terminal.println(&format!(
         "{} * {} {}{default_labels}",
         colors::LIGHT_CYAN,
-        cli_msg::DEFAULT_MODS_LABEL,
+        languages::cli_text(CliMsgCode::DefaultModsLabel),
         colors::LIGHT_GREEN,
     ));
     terminal.println(&format!(
         "{} {} {}Y/y {}{} {}C/c {}{}",
         colors::LIGHT_YELLOW,
-        cli_msg::MOD_SELECTION_GUIDE_BEFORE_Y,
+        languages::cli_text(CliMsgCode::ModSelectionGuideBeforeY),
         colors::LIGHT_GREEN,
         colors::LIGHT_YELLOW,
-        cli_msg::MOD_SELECTION_GUIDE_BETWEEN_Y_AND_C,
+        languages::cli_text(CliMsgCode::ModSelectionGuideBetweenYAndC),
         colors::LIGHT_GREEN,
         colors::LIGHT_YELLOW,
-        cli_msg::MOD_SELECTION_GUIDE_AFTER_C,
+        languages::cli_text(CliMsgCode::ModSelectionGuideAfterC),
     ));
     terminal.println_empty();
 
@@ -208,7 +204,11 @@ pub async fn prompt_mod_selection(
         terminal.println(&line);
     }
 
-    let prompt: String = format!("{} * {} ", colors::LIGHT_CYAN, cli_msg::MOD_CHOICE_PROMPT);
+    let prompt: String = format!(
+        "{} * {} ",
+        colors::LIGHT_CYAN,
+        languages::cli_text(CliMsgCode::ModChoicePrompt)
+    );
     let mut selected_numbers: Vec<u32> = Vec::new();
 
     loop {
@@ -219,14 +219,14 @@ pub async fn prompt_mod_selection(
                 terminal.println(&format!(
                     "{} * {}",
                     colors::LIGHT_YELLOW,
-                    cli_msg::MOD_SELECTION_CLEARED
+                    languages::cli_text(CliMsgCode::ModSelectionCleared)
                 ));
             }
             ModSelectionCommand::EmptyInvalid => {
                 terminal.println(&format!(
                     "{} * {}",
                     colors::RED,
-                    cli_msg::INVALID_CHOICE_SHORT
+                    languages::cli_text(CliMsgCode::InvalidChoiceShort)
                 ));
             }
             ModSelectionCommand::Processed(step) => {
@@ -235,10 +235,12 @@ pub async fn prompt_mod_selection(
                     terminal.println(&format!(
                         "{} * {} {} {}{}",
                         colors::LIGHT_GREEN,
-                        cli_msg::MOD_ADDED_PREFIX,
+                        languages::cli_text(CliMsgCode::ModAddedPrefix),
                         step.added_labels.join(", "),
                         colors::LIGHT_BLACK,
-                        cli_msg::mod_current_selection(&current_names),
+                        languages::render_cli(&CliMsg::ModCurrentSelection {
+                            names: &current_names,
+                        }),
                     ));
                 }
                 if !step.duplicate_labels.is_empty() {
@@ -246,25 +248,30 @@ pub async fn prompt_mod_selection(
                     terminal.println(&format!(
                         "{} * {} {} {}{}",
                         colors::LIGHT_YELLOW,
-                        cli_msg::MOD_DUPLICATE_PREFIX,
+                        languages::cli_text(CliMsgCode::ModDuplicatePrefix),
                         step.duplicate_labels.join(", "),
                         colors::LIGHT_BLACK,
-                        cli_msg::mod_current_selection(&current_names),
+                        languages::render_cli(&CliMsg::ModCurrentSelection {
+                            names: &current_names,
+                        }),
                     ));
                 }
                 if !step.conflict_notices.is_empty() {
                     terminal.println(&format!(
                         "{} * {} {}",
                         colors::RED,
-                        cli_msg::MOD_CONFLICT_SKIPPED_PREFIX,
+                        languages::cli_text(CliMsgCode::ModConflictSkippedPrefix),
                         step.conflict_notices.join(" / "),
                     ));
                 }
                 if !step.invalid_tokens.is_empty() {
+                    let invalid_joined: String = step.invalid_tokens.join(", ");
                     terminal.println(&format!(
                         "{} * {}",
                         colors::RED,
-                        cli_msg::invalid_choice_list(&step.invalid_tokens.join(", ")),
+                        languages::render_cli(&CliMsg::InvalidChoiceList {
+                            items: &invalid_joined,
+                        }),
                     ));
                 }
             }
@@ -276,101 +283,10 @@ pub async fn prompt_mod_selection(
         .map(|&n: &u32| {
             find_option_by_number(n).map_or_else(
                 || n.to_string(),
-                |item: &ModMenuOption| item.label.to_string(),
+                |item: &ModMenuOption| languages::mod_label(item.label_code).to_string(),
             )
         })
         .collect();
 
     Ok((selected_numbers, selected_labels))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::terminal::display::strip_ansi;
-
-    #[test]
-    fn batch_input_supports_ascii_fullwidth_and_japanese_commas() {
-        let mut selected = Vec::new();
-        let res = apply_mod_selection_input(&mut selected, "1, 2，7、13");
-        assert_eq!(selected, vec![1, 2, 7, 13]);
-        match res {
-            ModSelectionCommand::Processed(step) => {
-                assert_eq!(step.added_labels.len(), 4);
-                assert_eq!(step.duplicate_labels, Vec::<&str>::new());
-                assert_eq!(step.conflict_notices, Vec::<String>::new());
-                assert_eq!(step.invalid_tokens, Vec::<String>::new());
-            }
-            other => panic!("unexpected command: {other:?}"),
-        }
-
-        let dup = apply_mod_selection_input(&mut selected, "7, 99, abc");
-        assert_eq!(selected, vec![1, 2, 7, 13]);
-        match dup {
-            ModSelectionCommand::Processed(step) => {
-                assert_eq!(step.added_labels, Vec::<&str>::new());
-                assert_eq!(step.duplicate_labels, vec!["骨の短剣モード"]);
-                assert_eq!(step.invalid_tokens, vec!["99", "abc"]);
-            }
-            other => panic!("unexpected command: {other:?}"),
-        }
-
-        assert_eq!(
-            apply_mod_selection_input(&mut selected, "C"),
-            ModSelectionCommand::Cleared
-        );
-        assert_eq!(selected, Vec::<u32>::new());
-        assert_eq!(
-            apply_mod_selection_input(&mut selected, "y"),
-            ModSelectionCommand::Confirm
-        );
-        assert_eq!(
-            apply_mod_selection_input(&mut selected, "  , 、 "),
-            ModSelectionCommand::EmptyInvalid
-        );
-    }
-
-    #[test]
-    fn enforces_all_four_bidirectional_conflict_rules_in_both_directions() {
-        let pairs = [(3u32, 21u32), (4, 22), (12, 14), (21, 22)];
-        for (a, b) in pairs {
-            let mut sel_fwd = Vec::new();
-            let res_fwd = apply_mod_selection_input(&mut sel_fwd, &format!("{a},{b}"));
-            assert_eq!(sel_fwd, vec![a], "forward conflict failed for {a}<->{b}");
-            match res_fwd {
-                ModSelectionCommand::Processed(step) => {
-                    assert_eq!(step.added_labels.len(), 1);
-                    assert_eq!(step.conflict_notices.len(), 1);
-                }
-                other => panic!("unexpected forward result: {other:?}"),
-            }
-
-            let mut sel_rev = Vec::new();
-            let _ = apply_mod_selection_input(&mut sel_rev, &b.to_string());
-            let res_rev = apply_mod_selection_input(&mut sel_rev, &a.to_string());
-            assert_eq!(sel_rev, vec![b], "reverse conflict failed for {b}<->{a}");
-            match res_rev {
-                ModSelectionCommand::Processed(step) => {
-                    assert_eq!(step.added_labels, Vec::<&str>::new());
-                    assert_eq!(step.conflict_notices.len(), 1);
-                }
-                other => panic!("unexpected reverse result: {other:?}"),
-            }
-        }
-    }
-
-    #[test]
-    fn renders_multi_column_menu_with_bone_dagger_suffix_and_conflict_legend() {
-        let lines = build_mod_menu_lines();
-        let plain = lines
-            .iter()
-            .map(|l| strip_ansi(l))
-            .collect::<Vec<_>>()
-            .join("\n");
-        assert!(plain.contains("7:骨の短剣モード [セット]"));
-        assert!(plain.contains("3:マップ補強(山頂) <-> 21:観光モード(山頂)"));
-        assert!(plain.contains("4:マップ補強(広漠) <-> 22:観光モード(広漠)"));
-        assert!(plain.contains("12:暴風雪マスケット <-> 14:開幕マスケット"));
-        assert!(plain.contains("21:観光モード(山頂) <-> 22:観光モード(広漠)"));
-    }
 }

@@ -14,10 +14,11 @@ use dh_server_tool::config::{
     CONFIG_RELATIVE_PATH,
 };
 use dh_server_tool::format::format_seconds;
-use dh_server_tool::messages::ja::app::{self as app_msg, ConfigSummaryParams};
+use dh_server_tool::languages;
 use dh_server_tool::mods::{PatchScript, DEFAULT_PATCH_SCRIPTS};
 use dh_server_tool::network::{fetch_public_ip, PublicIpResult, DEFAULT_PUBLIC_IP_TIMEOUT_MS};
 use dh_server_tool::server::{run_server_supervisor, LEGACY_GADGET_DLL_FILENAME};
+use dh_server_tool::structs::languages::{AppMsg, AppMsgCode, ConfigSummaryParams};
 use dh_server_tool::terminal::{
     install_panic_hook, restore_terminal_emergency, PromptError, Terminal, TerminalTabId,
 };
@@ -28,11 +29,11 @@ use dh_server_tool::web_console::{
 fn print_launch_summary(terminal: &Terminal, plan: &LaunchPlan) {
     let default_mod_names: String = DEFAULT_PATCH_SCRIPTS
         .iter()
-        .map(|patch: &PatchScript| patch.label)
+        .map(|patch: &PatchScript| languages::mod_label(patch.label_code))
         .collect::<Vec<&str>>()
         .join(", ");
     let selected_mod_names: String = if plan.selected_option_labels.is_empty() {
-        app_msg::NONE_LABEL.to_string()
+        languages::app_text(AppMsgCode::NoneLabel).to_string()
     } else {
         plan.selected_option_labels.join(", ")
     };
@@ -41,20 +42,20 @@ fn print_launch_summary(terminal: &Terminal, plan: &LaunchPlan) {
     terminal.println(&format!(
         "{} {}",
         colors::LIGHT_CYAN,
-        app_msg::SUMMARY_HEADER
+        languages::app_text(AppMsgCode::SummaryHeader)
     ));
     terminal.println(&format!(
         "{} * {} {}{} ({})",
         colors::LIGHT_WHITE,
-        app_msg::SUMMARY_MAP_LABEL,
+        languages::app_text(AppMsgCode::SummaryMapLabel),
         colors::LIGHT_GREEN,
-        plan.map_label,
+        languages::cli_text(plan.map_label_code),
         plan.map_id
     ));
     terminal.println(&format!(
         "{} * {} {}{} <-> {}",
         colors::LIGHT_WHITE,
-        app_msg::SUMMARY_SERVER_PORT_LABEL,
+        languages::app_text(AppMsgCode::SummaryServerPortLabel),
         colors::LIGHT_GREEN,
         plan.server_ports[0],
         plan.server_ports[1]
@@ -62,28 +63,30 @@ fn print_launch_summary(terminal: &Terminal, plan: &LaunchPlan) {
     terminal.println(&format!(
         "{} * {} {}{} {}{}",
         colors::LIGHT_WHITE,
-        app_msg::SUMMARY_WEB_CONSOLE_LABEL,
+        languages::app_text(AppMsgCode::SummaryWebConsoleLabel),
         colors::LIGHT_GREEN,
         plan.web_console_port,
         colors::LIGHT_BLACK,
-        app_msg::summary_internal_patch_port(plan.console_patch_port)
+        languages::render_app(&AppMsg::SummaryInternalPatchPort {
+            port: plan.console_patch_port,
+        })
     ));
     terminal.println(&format!(
         "{} * {} {}{default_mod_names}",
         colors::LIGHT_WHITE,
-        app_msg::SUMMARY_DEFAULT_MODS_LABEL,
+        languages::app_text(AppMsgCode::SummaryDefaultModsLabel),
         colors::CYAN,
     ));
     terminal.println(&format!(
         "{} * {} {}{selected_mod_names}",
         colors::LIGHT_WHITE,
-        app_msg::SUMMARY_SELECTED_MODS_LABEL,
+        languages::app_text(AppMsgCode::SummarySelectedModsLabel),
         colors::CYAN,
     ));
     terminal.println(&format!(
         "{} {}",
         colors::LIGHT_CYAN,
-        app_msg::SUMMARY_FOOTER
+        languages::app_text(AppMsgCode::SummaryFooter)
     ));
 }
 
@@ -100,15 +103,15 @@ async fn run_app() -> ExitCode {
     terminal.println(&format!(
         "{} * {} {}{}  {}{} {}{} {}{}",
         colors::LIGHT_CYAN,
-        app_msg::AUTHOR_LABEL,
+        languages::app_text(AppMsgCode::AuthorLabel),
         colors::LIGHT_WHITE,
-        app_msg::AUTHOR_NAME,
+        languages::app_text(AppMsgCode::AuthorName),
         colors::LIGHT_YELLOW,
-        app_msg::BRAND_BUILD,
+        languages::app_text(AppMsgCode::BrandBuild),
         colors::LIGHT_GREEN,
-        app_msg::BRAND_WITH,
+        languages::app_text(AppMsgCode::BrandWith),
         colors::LIGHT_BLUE,
-        app_msg::BRAND_ANTIGRAVITY,
+        languages::app_text(AppMsgCode::BrandAntigravity),
     ));
 
     // Ensure working directory contains the server binary (relative paths only)
@@ -117,7 +120,7 @@ async fn run_app() -> ExitCode {
         terminal.println(&format!(
             "{} * {}",
             colors::RED,
-            app_msg::MISSING_SERVER_DIR_ERROR
+            languages::app_text(AppMsgCode::MissingServerDirError)
         ));
         terminal.wait_for_exit_key().await;
         return ExitCode::FAILURE;
@@ -136,14 +139,16 @@ async fn run_app() -> ExitCode {
                     terminal.println(&format!(
                         "{} * {}",
                         colors::LIGHT_CYAN,
-                        app_msg::config_created(CONFIG_RELATIVE_PATH)
+                        languages::render_app(&AppMsg::ConfigCreated {
+                            relative_path: CONFIG_RELATIVE_PATH,
+                        })
                     ));
                 }
                 ConfigLoadOutcome::LoadFailed(err) => {
                     terminal.println(&format!(
                         "{} * {}",
                         colors::RED,
-                        app_msg::config_load_failed(err)
+                        languages::render_app(&AppMsg::ConfigLoadFailed { error_text: err })
                     ));
                 }
                 ConfigLoadOutcome::Loaded | ConfigLoadOutcome::CreateFailed => {}
@@ -151,10 +156,13 @@ async fn run_app() -> ExitCode {
             loaded.config
         }
         Err(err) => {
+            let err_str: String = err.to_string();
             terminal.println(&format!(
                 "{} * {}",
                 colors::RED,
-                app_msg::config_load_failed(&err.to_string())
+                languages::render_app(&AppMsg::ConfigLoadFailed {
+                    error_text: &err_str,
+                })
             ));
             AppConfig::default()
         }
@@ -164,7 +172,7 @@ async fn run_app() -> ExitCode {
         terminal.println(&format!(
             "{} * {} {}{ip}",
             colors::LIGHT_CYAN,
-            app_msg::PUBLIC_IP_LABEL,
+            languages::app_text(AppMsgCode::PublicIpLabel),
             colors::LIGHT_GREEN,
         ));
     } else {
@@ -172,7 +180,9 @@ async fn run_app() -> ExitCode {
         terminal.println(&format!(
             "{} * {}",
             colors::RED,
-            app_msg::public_ip_fetch_failed(err_text)
+            languages::render_app(&AppMsg::PublicIpFetchFailed {
+                error_text: err_text,
+            })
         ));
     }
 
@@ -181,12 +191,14 @@ async fn run_app() -> ExitCode {
         terminal.println(&format!(
             "{} * {}",
             colors::RED,
-            app_msg::missing_shipping_executable(&config.shipping_executable)
+            languages::render_app(&AppMsg::MissingShippingExecutable {
+                path: &config.shipping_executable,
+            })
         ));
         terminal.println(&format!(
             "{} * {}",
             colors::RED,
-            app_msg::MISSING_SERVER_DIR_ERROR
+            languages::app_text(AppMsgCode::MissingServerDirError)
         ));
         terminal.wait_for_exit_key().await;
         return ExitCode::FAILURE;
@@ -202,12 +214,17 @@ async fn run_app() -> ExitCode {
         terminal.println(&format!(
             "{} * {}",
             colors::LIGHT_YELLOW,
-            app_msg::legacy_frida_dll_detected(LEGACY_GADGET_DLL_FILENAME, &legacy_path_str)
+            languages::render_app(&AppMsg::LegacyFridaDllDetected {
+                file_name: LEGACY_GADGET_DLL_FILENAME,
+                full_path: &legacy_path_str,
+            })
         ));
         terminal.println(&format!(
             "{} * {}",
             colors::LIGHT_YELLOW,
-            app_msg::legacy_frida_dll_advice(&config.shipping_process_name)
+            languages::render_app(&AppMsg::LegacyFridaDllAdvice {
+                process_name: &config.shipping_process_name,
+            })
         ));
     }
 
@@ -215,14 +232,14 @@ async fn run_app() -> ExitCode {
     terminal.println(&format!(
         "{} * {}",
         colors::LIGHT_BLACK,
-        app_msg::config_summary(&ConfigSummaryParams {
+        languages::render_app(&AppMsg::ConfigSummary(ConfigSummaryParams {
             server_port_1: config.server_ports[0],
             server_port_2: config.server_ports[1],
             web_console_port: config.web_console_port,
             console_patch_port: config.console_patch_port,
             check_interval_text: &interval_text,
             restart_wait_seconds: config.restart_wait_seconds,
-        })
+        }))
     ));
     terminal.println_empty();
 
@@ -243,7 +260,7 @@ async fn run_app() -> ExitCode {
                 terminal.println(&format!(
                     "{} * {}",
                     colors::LIGHT_GREEN,
-                    app_msg::EXITED_CLEANLY
+                    languages::app_text(AppMsgCode::ExitedCleanly)
                 ));
                 return ExitCode::SUCCESS;
             }
@@ -251,7 +268,7 @@ async fn run_app() -> ExitCode {
                 terminal.println(&format!(
                     "{} * {}\n{msg}",
                     colors::RED,
-                    app_msg::UNEXPECTED_ERROR_HEADER,
+                    languages::app_text(AppMsgCode::UnexpectedErrorHeader),
                 ));
                 terminal.wait_for_exit_key().await;
                 return ExitCode::FAILURE;
@@ -270,10 +287,14 @@ async fn run_app() -> ExitCode {
     {
         Ok(handle) => handle,
         Err(err) => {
+            let err_str: String = err.to_string();
             terminal.println(&format!(
                 "{} * {}",
                 colors::RED,
-                app_msg::web_console_start_failed(web_config.web_console_port, &err.to_string())
+                languages::render_app(&AppMsg::WebConsoleStartFailed {
+                    port: web_config.web_console_port,
+                    error_text: &err_str,
+                })
             ));
             terminal.wait_for_exit_key().await;
             return ExitCode::FAILURE;
@@ -312,7 +333,7 @@ async fn run_app() -> ExitCode {
             terminal.println(&format!(
                 "{} * {}\n{msg}",
                 colors::RED,
-                app_msg::UNEXPECTED_ERROR_HEADER,
+                languages::app_text(AppMsgCode::UnexpectedErrorHeader),
             ));
             exit_code = ExitCode::FAILURE;
         }
@@ -324,7 +345,7 @@ async fn run_app() -> ExitCode {
         terminal.println(&format!(
             "{} * {}",
             colors::LIGHT_YELLOW,
-            app_msg::SHUTDOWN_SIGNAL_RECEIVED
+            languages::app_text(AppMsgCode::ShutdownSignalReceived)
         ));
     }
     web_console.shutdown().await;
@@ -334,7 +355,7 @@ async fn run_app() -> ExitCode {
         terminal.println(&format!(
             "{} * {}",
             colors::LIGHT_GREEN,
-            app_msg::EXITED_CLEANLY
+            languages::app_text(AppMsgCode::ExitedCleanly)
         ));
     } else {
         terminal.wait_for_exit_key().await;

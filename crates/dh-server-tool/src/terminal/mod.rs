@@ -4,7 +4,7 @@ pub mod tab_renderer;
 pub mod tabs;
 
 use std::io::{self, BufRead, IsTerminal, Stdin, StdinLock, Stdout, Write};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use tokio::sync::{mpsc, oneshot};
@@ -12,7 +12,10 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::colors;
-use crate::messages::ja::terminal as term_msg;
+use crate::languages;
+use crate::structs::languages::TerminalMsgCode;
+pub use crate::structs::terminal::Terminal;
+use crate::structs::terminal::{ModeState, PromptResult, TerminalInner};
 use crate::web_console::logger::WebLogSink;
 use crate::web_console::WebConsoleDisplayInfo;
 
@@ -26,27 +29,6 @@ pub use tab_renderer::{
     HitRegion, TerminalTabId, MAX_SERVER_TAB_LINES, MAX_WEB_LOG_LINES, TAB_HEADER_ROWS,
 };
 pub use tabs::{install_panic_hook, restore_terminal_emergency, PostMatchKey, PromptError};
-
-type PromptResult = Result<String, PromptError>;
-
-struct ModeState {
-    tx: Option<mpsc::UnboundedSender<tabs::TuiCommand>>,
-    task: Option<JoinHandle<()>>,
-    pre_tab_web_logs: Vec<String>,
-}
-
-struct TerminalInner {
-    stdin_is_tty: bool,
-    stdout_is_tty: bool,
-    mode: Mutex<ModeState>,
-}
-
-/// Thread-safe terminal controller supporting interactive dual-tab Alternate Screen TUI
-/// and automatic plain stdin/stdout fallback when non-TTY.
-#[derive(Clone)]
-pub struct Terminal {
-    inner: Arc<TerminalInner>,
-}
 
 impl Terminal {
     #[must_use]
@@ -198,7 +180,10 @@ impl Terminal {
             Option<mpsc::UnboundedSender<tabs::TuiCommand>>,
             Option<JoinHandle<()>>,
         ) = {
-            let Ok(mut guard) = self.inner.mode.lock() else {
+            let Ok(mut guard): Result<
+                MutexGuard<'_, ModeState>,
+                PoisonError<MutexGuard<'_, ModeState>>,
+            > = self.inner.mode.lock() else {
                 restore_terminal_emergency();
                 return;
             };
@@ -312,7 +297,7 @@ impl Terminal {
         let prompt: String = format!(
             "\n{} * {} ",
             colors::LIGHT_YELLOW,
-            term_msg::PRESS_ENTER_TO_EXIT
+            languages::terminal_text(TerminalMsgCode::PressEnterToExit)
         );
         let _ = self.ask(&prompt, None).await;
     }

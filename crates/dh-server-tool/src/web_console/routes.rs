@@ -3,29 +3,14 @@ use std::str::Chars;
 
 use serde_json::{Map, Value};
 
-use crate::colors;
-use crate::format::sanitize_log_text;
-use crate::messages::ja::web_console::{
-    actor_display_name, api, broadcasts, log_categories, log_details,
-};
+pub use crate::consts::web_console::{status_code, HIGH_STAT_WARNING_THRESHOLD};
+use crate::consts::web_console::{BONE_DAGGER_ITEM, MAX_SAFE_INT_F64};
+use crate::languages;
+use crate::structs::languages::{ApiCode, BroadcastEvent, LogCategoryCode, WebLogEvent};
+pub use crate::structs::web_console::ApiRouteContext;
 use crate::web_console::auth::{api_result, ApiResultPayload};
-use crate::web_console::bridge::{
-    build_console_broadcast_message, role_display, ConsoleBridge, BONE_DAGGER_ITEM,
-};
-use crate::web_console::logger::{
-    emit_web_log, format_console_command_preview, format_result_badge, WebLogSink,
-};
-
-pub const HIGH_STAT_WARNING_THRESHOLD: f64 = 500.0;
-const MAX_SAFE_INT_F64: f64 = 9_007_199_254_740_991.0;
-
-pub mod status_code {
-    pub const SUCCESS: u16 = 200;
-    pub const BAD_REQUEST: u16 = 400;
-    pub const SERVER_ERROR: u16 = 504;
-    pub const INVALID_VALUE: u16 = 416;
-    pub const PARTIAL_SUCCESS: u16 = 207;
-}
+use crate::web_console::bridge::build_console_broadcast_message;
+use crate::web_console::logger::emit_web_log_event;
 
 fn to_string_value(value: &Value) -> String {
     match value {
@@ -98,94 +83,91 @@ fn parse_js_int_base10(text: &str) -> Option<i64> {
     signed.parse::<i64>().ok()
 }
 
-pub struct ApiRouteContext<'a> {
-    pub bridge: &'a ConsoleBridge,
-    pub auto_broadcast: bool,
-    pub log_sink: &'a WebLogSink,
-}
-
 pub async fn handle_console_command(
     ctx: &ApiRouteContext<'_>,
     data: &Map<String, Value>,
     client_ip: &str,
 ) -> ApiResultPayload {
     let Some(target_role): Option<&str> = data.get("player_name").and_then(Value::as_str) else {
-        emit_web_log(
+        emit_web_log_event(
             ctx.log_sink,
-            log_categories::COMMAND,
-            colors::LIGHT_YELLOW,
-            &format!(
-                "{client_ip} | {} {}",
-                log_details::INVALID_PARAMS,
-                format_result_badge(status_code::BAD_REQUEST, None)
-            ),
+            &WebLogEvent::InvalidParams {
+                category: LogCategoryCode::Command,
+                client_ip,
+            },
         );
-        return api_result(status_code::BAD_REQUEST, api::NETWORK_PARAM_ERROR);
+        return api_result(status_code::BAD_REQUEST, ApiCode::NetworkParamError);
     };
     let Some(command): Option<&str> = data.get("command").and_then(Value::as_str) else {
-        emit_web_log(
+        emit_web_log_event(
             ctx.log_sink,
-            log_categories::COMMAND,
-            colors::LIGHT_YELLOW,
-            &format!(
-                "{client_ip} | {} {}",
-                log_details::INVALID_PARAMS,
-                format_result_badge(status_code::BAD_REQUEST, None)
-            ),
+            &WebLogEvent::InvalidParams {
+                category: LogCategoryCode::Command,
+                client_ip,
+            },
         );
-        return api_result(status_code::BAD_REQUEST, api::NETWORK_PARAM_ERROR);
+        return api_result(status_code::BAD_REQUEST, ApiCode::NetworkParamError);
     };
 
-    let role_label: String = sanitize_log_text(role_display(target_role), 24);
-    let cmd_preview: String = format_console_command_preview(command);
+    let trimmed_command: &str = command.trim();
+    let (raw_command_name, command_arg): (&str, &str) = match trimmed_command.find(' ') {
+        Some(idx) => (&trimmed_command[..idx], trimmed_command[idx + 1..].trim()),
+        None => (trimmed_command, ""),
+    };
+    let command_name: String = raw_command_name.to_ascii_lowercase();
+    let normalized_command: String = if command_arg.is_empty() {
+        command_name.clone()
+    } else {
+        format!("{command_name} {command_arg}")
+    };
 
     if let Err(err) = ctx
         .bridge
-        .execute_console_command(target_role, command)
+        .execute_console_command(target_role, &normalized_command)
         .await
     {
-        emit_web_log(
+        emit_web_log_event(
             ctx.log_sink,
-            log_categories::COMMAND,
-            colors::LIGHT_CYAN,
-            &format!(
-                "{client_ip} | {role_label} -> {cmd_preview} {}",
-                format_result_badge(status_code::SERVER_ERROR, Some(&err))
-            ),
+            &WebLogEvent::CommandResult {
+                client_ip,
+                role_key: target_role,
+                command: &normalized_command,
+                added_bone_dagger: false,
+                status: status_code::SERVER_ERROR,
+                err_detail: Some(&err),
+            },
         );
-        return api_result(status_code::SERVER_ERROR, api::SERVER_EXECUTION_ERROR);
+        return api_result(status_code::SERVER_ERROR, ApiCode::ServerExecutionError);
     }
 
-    let (command_name, command_arg): (&str, &str) = match command.find(' ') {
-        Some(idx) => (&command[..idx], &command[idx + 1..]),
-        None => (command, ""),
-    };
-    let mut extra_note: &str = "";
+    let mut added_bone_dagger: bool = false;
 
-    if command_name.eq_ignore_ascii_case("setisthrall") && command_arg.trim() != "0" {
-        extra_note = log_details::BONE_DAGGER_ADDED_SUFFIX;
+    if command_name == "setisthrall" && command_arg != "0" {
+        added_bone_dagger = true;
         if ctx
             .bridge
             .add_inventory_item(target_role, BONE_DAGGER_ITEM, 1)
             .await
             .is_err()
         {
-            emit_web_log(
+            emit_web_log_event(
                 ctx.log_sink,
-                log_categories::COMMAND,
-                colors::LIGHT_CYAN,
-                &format!(
-                    "{client_ip} | {role_label} -> {cmd_preview}{extra_note} {}",
-                    format_result_badge(status_code::PARTIAL_SUCCESS, None)
-                ),
+                &WebLogEvent::CommandResult {
+                    client_ip,
+                    role_key: target_role,
+                    command: &normalized_command,
+                    added_bone_dagger,
+                    status: status_code::PARTIAL_SUCCESS,
+                    err_detail: None,
+                },
             );
-            return api_result(status_code::PARTIAL_SUCCESS, api::BROADCAST_PARTIAL_ERROR);
+            return api_result(status_code::PARTIAL_SUCCESS, ApiCode::BroadcastPartialError);
         }
     }
 
     if ctx.auto_broadcast {
         if let Some(notice) =
-            build_console_broadcast_message(target_role, command_name, command_arg)
+            build_console_broadcast_message(target_role, &command_name, command_arg)
         {
             if ctx
                 .bridge
@@ -193,30 +175,34 @@ pub async fn handle_console_command(
                 .await
                 .is_err()
             {
-                emit_web_log(
+                emit_web_log_event(
                     ctx.log_sink,
-                    log_categories::COMMAND,
-                    colors::LIGHT_CYAN,
-                    &format!(
-                        "{client_ip} | {role_label} -> {cmd_preview}{extra_note} {}",
-                        format_result_badge(status_code::PARTIAL_SUCCESS, None)
-                    ),
+                    &WebLogEvent::CommandResult {
+                        client_ip,
+                        role_key: target_role,
+                        command: &normalized_command,
+                        added_bone_dagger,
+                        status: status_code::PARTIAL_SUCCESS,
+                        err_detail: None,
+                    },
                 );
-                return api_result(status_code::PARTIAL_SUCCESS, api::BROADCAST_PARTIAL_ERROR);
+                return api_result(status_code::PARTIAL_SUCCESS, ApiCode::BroadcastPartialError);
             }
         }
     }
 
-    emit_web_log(
+    emit_web_log_event(
         ctx.log_sink,
-        log_categories::COMMAND,
-        colors::LIGHT_CYAN,
-        &format!(
-            "{client_ip} | {role_label} -> {cmd_preview}{extra_note} {}",
-            format_result_badge(status_code::SUCCESS, None)
-        ),
+        &WebLogEvent::CommandResult {
+            client_ip,
+            role_key: target_role,
+            command: &normalized_command,
+            added_bone_dagger,
+            status: status_code::SUCCESS,
+            err_detail: None,
+        },
     );
-    api_result(status_code::SUCCESS, api::SUCCESS)
+    api_result(status_code::SUCCESS, ApiCode::Success)
 }
 
 pub async fn handle_set_human(
@@ -237,52 +223,41 @@ pub async fn handle_set_human(
         Option<&str>,
         Option<&Value>,
     ) = (target_role_opt, property_name_opt, non_null_value_opt) else {
-        emit_web_log(
+        emit_web_log_event(
             ctx.log_sink,
-            log_categories::STATUS,
-            colors::LIGHT_YELLOW,
-            &format!(
-                "{client_ip} | {} {}",
-                log_details::INVALID_PARAMS,
-                format_result_badge(status_code::BAD_REQUEST, None)
-            ),
+            &WebLogEvent::InvalidParams {
+                category: LogCategoryCode::Status,
+                client_ip,
+            },
         );
-        return api_result(status_code::BAD_REQUEST, api::NETWORK_PARAM_ERROR);
+        return api_result(status_code::BAD_REQUEST, ApiCode::NetworkParamError);
     };
     if is_empty_string {
-        emit_web_log(
+        emit_web_log_event(
             ctx.log_sink,
-            log_categories::STATUS,
-            colors::LIGHT_YELLOW,
-            &format!(
-                "{client_ip} | {} {}",
-                log_details::INVALID_PARAMS,
-                format_result_badge(status_code::BAD_REQUEST, None)
-            ),
+            &WebLogEvent::InvalidParams {
+                category: LogCategoryCode::Status,
+                client_ip,
+            },
         );
-        return api_result(status_code::BAD_REQUEST, api::NETWORK_PARAM_ERROR);
+        return api_result(status_code::BAD_REQUEST, ApiCode::NetworkParamError);
     }
 
-    let role_label: String = sanitize_log_text(role_display(target_role), 24);
-    let safe_prop: String = sanitize_log_text(property_name, 32);
     let parsed_value_opt: Option<f64> = js_number_from_value(raw_value);
     let Some(property_value): Option<f64> =
         parsed_value_opt.filter(|v: &f64| v.is_finite() && *v >= 0.0)
     else {
-        emit_web_log(
+        let raw_text: String = to_string_value(raw_value);
+        emit_web_log_event(
             ctx.log_sink,
-            log_categories::STATUS,
-            colors::LIGHT_YELLOW,
-            &format!(
-                "{client_ip} | {role_label} | {safe_prop} = {} {}",
-                sanitize_log_text(&to_string_value(raw_value), 16),
-                format_result_badge(
-                    status_code::INVALID_VALUE,
-                    Some(log_details::INVALID_NUMBER_REASON)
-                )
-            ),
+            &WebLogEvent::StatusInvalidValue {
+                client_ip,
+                role_key: target_role,
+                prop_name: property_name,
+                raw_value: &raw_text,
+            },
         );
-        return api_result(status_code::INVALID_VALUE, api::INVALID_VALUE_ERROR);
+        return api_result(status_code::INVALID_VALUE, ApiCode::InvalidValueError);
     };
 
     let value_str: String = format_js_number(property_value);
@@ -291,52 +266,60 @@ pub async fn handle_set_human(
         .set_human_property(target_role, property_name, property_value)
         .await
     {
-        emit_web_log(
+        emit_web_log_event(
             ctx.log_sink,
-            log_categories::STATUS,
-            colors::LIGHT_BLUE,
-            &format!(
-                "{client_ip} | {role_label} | {safe_prop} = {value_str} {}",
-                format_result_badge(status_code::SERVER_ERROR, Some(&err))
-            ),
+            &WebLogEvent::StatusResult {
+                client_ip,
+                role_key: target_role,
+                prop_name: property_name,
+                value_text: &value_str,
+                status: status_code::SERVER_ERROR,
+                err_detail: Some(&err),
+            },
         );
-        return api_result(status_code::SERVER_ERROR, api::SERVER_EXECUTION_ERROR);
+        return api_result(status_code::SERVER_ERROR, ApiCode::ServerExecutionError);
     }
 
     if ctx.auto_broadcast {
-        let notice: String = broadcasts::modified_stats(role_display(target_role));
+        let notice: String = languages::render_broadcast(&BroadcastEvent::ModifiedStats {
+            role_key: target_role,
+        });
         if ctx
             .bridge
             .broadcast_message_except(target_role, &notice)
             .await
             .is_err()
         {
-            emit_web_log(
+            emit_web_log_event(
                 ctx.log_sink,
-                log_categories::STATUS,
-                colors::LIGHT_BLUE,
-                &format!(
-                    "{client_ip} | {role_label} | {safe_prop} = {value_str} {}",
-                    format_result_badge(status_code::PARTIAL_SUCCESS, None)
-                ),
+                &WebLogEvent::StatusResult {
+                    client_ip,
+                    role_key: target_role,
+                    prop_name: property_name,
+                    value_text: &value_str,
+                    status: status_code::PARTIAL_SUCCESS,
+                    err_detail: None,
+                },
             );
-            return api_result(status_code::PARTIAL_SUCCESS, api::BROADCAST_PARTIAL_ERROR);
+            return api_result(status_code::PARTIAL_SUCCESS, ApiCode::BroadcastPartialError);
         }
     }
 
-    emit_web_log(
+    emit_web_log_event(
         ctx.log_sink,
-        log_categories::STATUS,
-        colors::LIGHT_BLUE,
-        &format!(
-            "{client_ip} | {role_label} | {safe_prop} = {value_str} {}",
-            format_result_badge(status_code::SUCCESS, None)
-        ),
+        &WebLogEvent::StatusResult {
+            client_ip,
+            role_key: target_role,
+            prop_name: property_name,
+            value_text: &value_str,
+            status: status_code::SUCCESS,
+            err_detail: None,
+        },
     );
     if property_value > HIGH_STAT_WARNING_THRESHOLD {
-        return api_result(status_code::SUCCESS, api::HIGH_VALUE_WARNING);
+        return api_result(status_code::SUCCESS, ApiCode::HighValueWarning);
     }
-    api_result(status_code::SUCCESS, api::SUCCESS)
+    api_result(status_code::SUCCESS, ApiCode::Success)
 }
 
 pub async fn handle_add_item(
@@ -353,41 +336,29 @@ pub async fn handle_add_item(
         Option<&str>,
         Option<&Value>,
     ) = (target_role_opt, item_blueprint_path_opt, raw_item_count_opt) else {
-        emit_web_log(
+        emit_web_log_event(
             ctx.log_sink,
-            log_categories::ITEM,
-            colors::LIGHT_YELLOW,
-            &format!(
-                "{client_ip} | {} {}",
-                log_details::INVALID_PARAMS,
-                format_result_badge(status_code::BAD_REQUEST, None)
-            ),
+            &WebLogEvent::InvalidParams {
+                category: LogCategoryCode::Item,
+                client_ip,
+            },
         );
-        return api_result(status_code::BAD_REQUEST, api::NETWORK_PARAM_ERROR);
+        return api_result(status_code::BAD_REQUEST, ApiCode::NetworkParamError);
     };
 
-    let role_label: String = sanitize_log_text(role_display(target_role), 24);
-    let item_label: String = sanitize_log_text(
-        actor_display_name(item_blueprint_path).unwrap_or(item_blueprint_path),
-        40,
-    );
     let count_str: String = to_string_value(raw_item_count);
     let Some(item_count): Option<i64> = parse_js_int_base10(&count_str).filter(|c: &i64| *c > 0)
     else {
-        emit_web_log(
+        emit_web_log_event(
             ctx.log_sink,
-            log_categories::ITEM,
-            colors::LIGHT_YELLOW,
-            &format!(
-                "{client_ip} | {role_label} | {item_label} x{} {}",
-                sanitize_log_text(&count_str, 12),
-                format_result_badge(
-                    status_code::INVALID_VALUE,
-                    Some(log_details::INVALID_COUNT_REASON)
-                )
-            ),
+            &WebLogEvent::ItemInvalidCount {
+                client_ip,
+                role_key: target_role,
+                item_key: item_blueprint_path,
+                raw_count: &count_str,
+            },
         );
-        return api_result(status_code::INVALID_VALUE, api::INVALID_VALUE_ERROR);
+        return api_result(status_code::INVALID_VALUE, ApiCode::InvalidValueError);
     };
 
     if let Err(err) = ctx
@@ -395,52 +366,59 @@ pub async fn handle_add_item(
         .add_inventory_item(target_role, item_blueprint_path, item_count)
         .await
     {
-        emit_web_log(
+        emit_web_log_event(
             ctx.log_sink,
-            log_categories::ITEM,
-            colors::LIGHT_GREEN,
-            &format!(
-                "{client_ip} | {role_label} | {item_label} x{item_count} {}",
-                format_result_badge(status_code::SERVER_ERROR, Some(&err))
-            ),
+            &WebLogEvent::ItemResult {
+                client_ip,
+                role_key: target_role,
+                item_key: item_blueprint_path,
+                count: item_count,
+                status: status_code::SERVER_ERROR,
+                err_detail: Some(&err),
+            },
         );
-        return api_result(status_code::SERVER_ERROR, api::SERVER_EXECUTION_ERROR);
+        return api_result(status_code::SERVER_ERROR, ApiCode::ServerExecutionError);
     }
 
     if ctx.auto_broadcast {
-        let broadcast_item_label: &str =
-            actor_display_name(item_blueprint_path).unwrap_or(item_blueprint_path);
-        let notice: String =
-            broadcasts::acquired_item(role_display(target_role), broadcast_item_label, item_count);
+        let notice: String = languages::render_broadcast(&BroadcastEvent::AcquiredItem {
+            role_key: target_role,
+            item_key: item_blueprint_path,
+            count: item_count,
+        });
         if ctx
             .bridge
             .broadcast_message_except(target_role, &notice)
             .await
             .is_err()
         {
-            emit_web_log(
+            emit_web_log_event(
                 ctx.log_sink,
-                log_categories::ITEM,
-                colors::LIGHT_GREEN,
-                &format!(
-                    "{client_ip} | {role_label} | {item_label} x{item_count} {}",
-                    format_result_badge(status_code::PARTIAL_SUCCESS, None)
-                ),
+                &WebLogEvent::ItemResult {
+                    client_ip,
+                    role_key: target_role,
+                    item_key: item_blueprint_path,
+                    count: item_count,
+                    status: status_code::PARTIAL_SUCCESS,
+                    err_detail: None,
+                },
             );
-            return api_result(status_code::PARTIAL_SUCCESS, api::BROADCAST_PARTIAL_ERROR);
+            return api_result(status_code::PARTIAL_SUCCESS, ApiCode::BroadcastPartialError);
         }
     }
 
-    emit_web_log(
+    emit_web_log_event(
         ctx.log_sink,
-        log_categories::ITEM,
-        colors::LIGHT_GREEN,
-        &format!(
-            "{client_ip} | {role_label} | {item_label} x{item_count} {}",
-            format_result_badge(status_code::SUCCESS, None)
-        ),
+        &WebLogEvent::ItemResult {
+            client_ip,
+            role_key: target_role,
+            item_key: item_blueprint_path,
+            count: item_count,
+            status: status_code::SUCCESS,
+            err_detail: None,
+        },
     );
-    api_result(status_code::SUCCESS, api::SUCCESS)
+    api_result(status_code::SUCCESS, ApiCode::Success)
 }
 
 pub async fn handle_set_storage(
@@ -454,38 +432,28 @@ pub async fn handle_set_storage(
     let (Some(target_role), Some(raw_limit)): (Option<&str>, Option<&Value>) =
         (target_role_opt, raw_limit_opt)
     else {
-        emit_web_log(
+        emit_web_log_event(
             ctx.log_sink,
-            log_categories::STORAGE,
-            colors::LIGHT_YELLOW,
-            &format!(
-                "{client_ip} | {} {}",
-                log_details::INVALID_PARAMS,
-                format_result_badge(status_code::BAD_REQUEST, None)
-            ),
+            &WebLogEvent::InvalidParams {
+                category: LogCategoryCode::Storage,
+                client_ip,
+            },
         );
-        return api_result(status_code::BAD_REQUEST, api::NETWORK_PARAM_ERROR);
+        return api_result(status_code::BAD_REQUEST, ApiCode::NetworkParamError);
     };
 
-    let role_label: String = sanitize_log_text(role_display(target_role), 24);
     let limit_str: String = to_string_value(raw_limit);
     let Some(storage_limit): Option<i64> = parse_js_int_base10(&limit_str).filter(|l: &i64| *l > 0)
     else {
-        emit_web_log(
+        emit_web_log_event(
             ctx.log_sink,
-            log_categories::STORAGE,
-            colors::LIGHT_YELLOW,
-            &format!(
-                "{client_ip} | {role_label} | {} {} {}",
-                log_details::STORAGE_CAPACITY_LABEL,
-                sanitize_log_text(&limit_str, 12),
-                format_result_badge(
-                    status_code::INVALID_VALUE,
-                    Some(log_details::INVALID_VALUE_REASON)
-                )
-            ),
+            &WebLogEvent::StorageInvalidValue {
+                client_ip,
+                role_key: target_role,
+                raw_limit: &limit_str,
+            },
         );
-        return api_result(status_code::INVALID_VALUE, api::INVALID_VALUE_ERROR);
+        return api_result(status_code::INVALID_VALUE, ApiCode::InvalidValueError);
     };
 
     if let Err(err) = ctx
@@ -493,53 +461,55 @@ pub async fn handle_set_storage(
         .set_player_storage_limit(target_role, storage_limit)
         .await
     {
-        emit_web_log(
+        emit_web_log_event(
             ctx.log_sink,
-            log_categories::STORAGE,
-            colors::LIGHT_MAGENTA,
-            &format!(
-                "{client_ip} | {role_label} | {} {storage_limit} {}",
-                log_details::STORAGE_CAPACITY_LABEL,
-                format_result_badge(status_code::SERVER_ERROR, Some(&err))
-            ),
+            &WebLogEvent::StorageResult {
+                client_ip,
+                role_key: target_role,
+                limit: storage_limit,
+                status: status_code::SERVER_ERROR,
+                err_detail: Some(&err),
+            },
         );
-        return api_result(status_code::SERVER_ERROR, api::SERVER_EXECUTION_ERROR);
+        return api_result(status_code::SERVER_ERROR, ApiCode::ServerExecutionError);
     }
 
     if ctx.auto_broadcast {
-        let notice: String =
-            broadcasts::storage_limit_changed(role_display(target_role), storage_limit);
+        let notice: String = languages::render_broadcast(&BroadcastEvent::StorageLimitChanged {
+            role_key: target_role,
+            limit: storage_limit,
+        });
         if ctx
             .bridge
             .broadcast_message_except(target_role, &notice)
             .await
             .is_err()
         {
-            emit_web_log(
+            emit_web_log_event(
                 ctx.log_sink,
-                log_categories::STORAGE,
-                colors::LIGHT_MAGENTA,
-                &format!(
-                    "{client_ip} | {role_label} | {} {storage_limit} {}",
-                    log_details::STORAGE_CAPACITY_LABEL,
-                    format_result_badge(status_code::PARTIAL_SUCCESS, None)
-                ),
+                &WebLogEvent::StorageResult {
+                    client_ip,
+                    role_key: target_role,
+                    limit: storage_limit,
+                    status: status_code::PARTIAL_SUCCESS,
+                    err_detail: None,
+                },
             );
-            return api_result(status_code::PARTIAL_SUCCESS, api::BROADCAST_PARTIAL_ERROR);
+            return api_result(status_code::PARTIAL_SUCCESS, ApiCode::BroadcastPartialError);
         }
     }
 
-    emit_web_log(
+    emit_web_log_event(
         ctx.log_sink,
-        log_categories::STORAGE,
-        colors::LIGHT_MAGENTA,
-        &format!(
-            "{client_ip} | {role_label} | {} {storage_limit} {}",
-            log_details::STORAGE_CAPACITY_LABEL,
-            format_result_badge(status_code::SUCCESS, None)
-        ),
+        &WebLogEvent::StorageResult {
+            client_ip,
+            role_key: target_role,
+            limit: storage_limit,
+            status: status_code::SUCCESS,
+            err_detail: None,
+        },
     );
-    api_result(status_code::SUCCESS, api::SUCCESS)
+    api_result(status_code::SUCCESS, ApiCode::Success)
 }
 
 pub async fn handle_send_thrall_msg(
@@ -553,45 +523,41 @@ pub async fn handle_send_thrall_msg(
     let (Some(target_role), Some(message)): (Option<&str>, Option<&str>) =
         (target_role_opt, message_opt)
     else {
-        emit_web_log(
+        emit_web_log_event(
             ctx.log_sink,
-            log_categories::NOTICE,
-            colors::LIGHT_YELLOW,
-            &format!(
-                "{client_ip} | {} {}",
-                log_details::INVALID_PARAMS,
-                format_result_badge(status_code::BAD_REQUEST, None)
-            ),
+            &WebLogEvent::InvalidParams {
+                category: LogCategoryCode::Notice,
+                client_ip,
+            },
         );
-        return api_result(status_code::BAD_REQUEST, api::NETWORK_PARAM_ERROR);
+        return api_result(status_code::BAD_REQUEST, ApiCode::NetworkParamError);
     };
 
-    let role_label: String = sanitize_log_text(role_display(target_role), 24);
-    let safe_msg: String = sanitize_log_text(message, 48);
-
     if let Err(err) = ctx.bridge.send_player_message(target_role, message).await {
-        emit_web_log(
+        emit_web_log_event(
             ctx.log_sink,
-            log_categories::NOTICE,
-            colors::LIGHT_YELLOW,
-            &format!(
-                "{client_ip} | {role_label} -> 「{safe_msg}」 {}",
-                format_result_badge(status_code::SERVER_ERROR, Some(&err))
-            ),
+            &WebLogEvent::NoticeResult {
+                client_ip,
+                role_key: target_role,
+                message,
+                status: status_code::SERVER_ERROR,
+                err_detail: Some(&err),
+            },
         );
-        return api_result(status_code::SERVER_ERROR, api::SERVER_EXECUTION_ERROR);
+        return api_result(status_code::SERVER_ERROR, ApiCode::ServerExecutionError);
     }
 
-    emit_web_log(
+    emit_web_log_event(
         ctx.log_sink,
-        log_categories::NOTICE,
-        colors::LIGHT_YELLOW,
-        &format!(
-            "{client_ip} | {role_label} -> 「{safe_msg}」 {}",
-            format_result_badge(status_code::SUCCESS, None)
-        ),
+        &WebLogEvent::NoticeResult {
+            client_ip,
+            role_key: target_role,
+            message,
+            status: status_code::SUCCESS,
+            err_detail: None,
+        },
     );
-    api_result(status_code::SUCCESS, api::SUCCESS)
+    api_result(status_code::SUCCESS, ApiCode::Success)
 }
 
 pub async fn handle_broadcast(
@@ -600,45 +566,39 @@ pub async fn handle_broadcast(
     client_ip: &str,
 ) -> ApiResultPayload {
     let Some(message): Option<&str> = data.get("msg").and_then(Value::as_str) else {
-        emit_web_log(
+        emit_web_log_event(
             ctx.log_sink,
-            log_categories::BROADCAST,
-            colors::LIGHT_YELLOW,
-            &format!(
-                "{client_ip} | {} {}",
-                log_details::INVALID_PARAMS,
-                format_result_badge(status_code::BAD_REQUEST, None)
-            ),
+            &WebLogEvent::InvalidParams {
+                category: LogCategoryCode::Broadcast,
+                client_ip,
+            },
         );
-        return api_result(status_code::BAD_REQUEST, api::NETWORK_PARAM_ERROR);
+        return api_result(status_code::BAD_REQUEST, ApiCode::NetworkParamError);
     };
 
-    let safe_msg: String = sanitize_log_text(message, 48);
     if let Err(err) = ctx.bridge.broadcast_message_to_all(message).await {
-        emit_web_log(
+        emit_web_log_event(
             ctx.log_sink,
-            log_categories::BROADCAST,
-            colors::LIGHT_YELLOW,
-            &format!(
-                "{client_ip} | {} -> 「{safe_msg}」 {}",
-                log_details::BROADCAST_ALL_TARGET,
-                format_result_badge(status_code::SERVER_ERROR, Some(&err))
-            ),
+            &WebLogEvent::BroadcastResult {
+                client_ip,
+                message,
+                status: status_code::SERVER_ERROR,
+                err_detail: Some(&err),
+            },
         );
-        return api_result(status_code::SERVER_ERROR, api::SERVER_EXECUTION_ERROR);
+        return api_result(status_code::SERVER_ERROR, ApiCode::ServerExecutionError);
     }
 
-    emit_web_log(
+    emit_web_log_event(
         ctx.log_sink,
-        log_categories::BROADCAST,
-        colors::LIGHT_YELLOW,
-        &format!(
-            "{client_ip} | {} -> 「{safe_msg}」 {}",
-            log_details::BROADCAST_ALL_TARGET,
-            format_result_badge(status_code::SUCCESS, None)
-        ),
+        &WebLogEvent::BroadcastResult {
+            client_ip,
+            message,
+            status: status_code::SUCCESS,
+            err_detail: None,
+        },
     );
-    api_result(status_code::SUCCESS, api::SUCCESS)
+    api_result(status_code::SUCCESS, ApiCode::Success)
 }
 
 pub async fn handle_kick_player(
@@ -647,65 +607,60 @@ pub async fn handle_kick_player(
     client_ip: &str,
 ) -> ApiResultPayload {
     let Some(target_role): Option<&str> = data.get("player_name").and_then(Value::as_str) else {
-        emit_web_log(
+        emit_web_log_event(
             ctx.log_sink,
-            log_categories::KICK,
-            colors::LIGHT_RED,
-            &format!(
-                "{client_ip} | {} {}",
-                log_details::INVALID_PARAMS,
-                format_result_badge(status_code::BAD_REQUEST, None)
-            ),
+            &WebLogEvent::InvalidParams {
+                category: LogCategoryCode::Kick,
+                client_ip,
+            },
         );
-        return api_result(status_code::BAD_REQUEST, api::NETWORK_PARAM_ERROR);
+        return api_result(status_code::BAD_REQUEST, ApiCode::NetworkParamError);
     };
 
-    let role_label: String = sanitize_log_text(role_display(target_role), 24);
     if let Err(err) = ctx.bridge.kick_target_player(target_role).await {
-        emit_web_log(
+        emit_web_log_event(
             ctx.log_sink,
-            log_categories::KICK,
-            colors::LIGHT_RED,
-            &format!(
-                "{client_ip} | {role_label} {} {}",
-                log_details::KICK_VERB,
-                format_result_badge(status_code::SERVER_ERROR, Some(&err))
-            ),
+            &WebLogEvent::KickResult {
+                client_ip,
+                role_key: target_role,
+                status: status_code::SERVER_ERROR,
+                err_detail: Some(&err),
+            },
         );
-        return api_result(status_code::SERVER_ERROR, api::SERVER_EXECUTION_ERROR);
+        return api_result(status_code::SERVER_ERROR, ApiCode::ServerExecutionError);
     }
 
     if ctx.auto_broadcast {
-        let notice: String = broadcasts::kicked(role_display(target_role));
+        let notice: String = languages::render_broadcast(&BroadcastEvent::Kicked {
+            role_key: target_role,
+        });
         if ctx
             .bridge
             .broadcast_message_except(target_role, &notice)
             .await
             .is_err()
         {
-            emit_web_log(
+            emit_web_log_event(
                 ctx.log_sink,
-                log_categories::KICK,
-                colors::LIGHT_RED,
-                &format!(
-                    "{client_ip} | {role_label} {} {}",
-                    log_details::KICK_VERB,
-                    format_result_badge(status_code::PARTIAL_SUCCESS, None)
-                ),
+                &WebLogEvent::KickResult {
+                    client_ip,
+                    role_key: target_role,
+                    status: status_code::PARTIAL_SUCCESS,
+                    err_detail: None,
+                },
             );
-            return api_result(status_code::PARTIAL_SUCCESS, api::BROADCAST_PARTIAL_ERROR);
+            return api_result(status_code::PARTIAL_SUCCESS, ApiCode::BroadcastPartialError);
         }
     }
 
-    emit_web_log(
+    emit_web_log_event(
         ctx.log_sink,
-        log_categories::KICK,
-        colors::LIGHT_RED,
-        &format!(
-            "{client_ip} | {role_label} {} {}",
-            log_details::KICK_VERB,
-            format_result_badge(status_code::SUCCESS, None)
-        ),
+        &WebLogEvent::KickResult {
+            client_ip,
+            role_key: target_role,
+            status: status_code::SUCCESS,
+            err_detail: None,
+        },
     );
-    api_result(status_code::SUCCESS, api::SUCCESS)
+    api_result(status_code::SUCCESS, ApiCode::Success)
 }
