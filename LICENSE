@@ -49,7 +49,7 @@ Languages included:
 1. 权利保留与授权范围
    本项目不主张对《Dread Hunger》及其衍生生态享有任何排他性、商业性或对抗游戏版权方及相关原资产权利方的权利。维护者仅就独立编写且与游戏原生及相关商用资产可分离的源代码、脚本及文档，依法保留著作权；本协议所设限制均出于防御性目的，仅用于防止闭源、倒卖与独占。
 
-   在遵守本许可证全部条款的前提下，您可出于个人或非商业目的，在全球范围内免费、非独占、不可转让地使用、复制、修改、集成与再分发本项目。当您向第三方再分发本项目或其衍生作品时，接收方直接依据本许可证自动获得授权。持续合规期间本授权不可撤销；一旦违约，则按第五条自动终止。
+   在遵守本许可证全部条款的前提下，您可出于个人或非商业目的，在全球范围内免费、非独占、不可转让地使用、复制、修改、集成与再分发上述维护者保留著作权的独立原创部分。当您向第三方再分发上述部分或其衍生作品时，接收方直接依据本许可证自动获得授权。持续合规期间本授权不可撤销；一旦违约，则按第五条自动终止。
 
 2. 二次开发必须同时满足的三项条件
    除游戏版权方（Digital Confectioners Ltd.）外，任何个人、团队或组织基于本项目进行修改、重构、集成、分发或衍生创作时，均须同时满足：
@@ -164,7 +164,7 @@ Languages included:
 1. 権利の留保および許諾の範囲
    本プロジェクトは、『Dread Hunger』およびその派生エコシステムに対して、いかなる排他的・商業的権利、またはゲーム著作権者および関連する原アセット権利者に対抗する権利も主張しません。メンテナーは、独自に記述し、かつ原ゲームおよび関連商用資産から分離可能なソースコード、スクリプト、およびドキュメントについてのみ、法令に基づき著作権を留保します。本ライセンスの制限は、クローズド化・営利転売・独占を防止する防御的目的のためにのみ設けられています。
 
-   本ライセンスの全条項を遵守することを条件として、個人または非営利の目的に限り、世界的・非独占的・無償・譲渡不可で本プロジェクトを使用、複製、改変、統合、および再配布できます。第三者へ再配布する場合、受領者は本ライセンスの条項に基づき自動的に直接許諾を受けます。条項を遵守している限り本許諾は撤回されず、違反があった場合は第5条に従い自動的に終了します。
+   本ライセンスの全条項を遵守することを条件として、個人または非営利の目的に限り、世界的・非独占的・無償・譲渡不可で、上記のメンテナーが著作権を留保する独自オリジナル部分を使用、複製、改変、統合、および再配布できます。当該部分またはその派生物を第三者へ再配布する場合、受領者は本ライセンスの条項に基づき自動的に直接許諾を受けます。条項を遵守している限り本許諾は撤回されず、違反があった場合は第5条に従い自動的に終了します。
 
 2. 二次開発で満たすべき3つの条件
    ゲーム著作権者（Digital Confectioners Ltd.）を除き、本プロジェクトを基に改変、再構築、統合、再配布、または派生物を制作する場合は、以下のすべてを同時に満たす必要があります。
@@ -282,7 +282,7 @@ Article 2 | License Grant, Source Disclosure, and Community Contributions
 1. Rights Retention and Grant
    This project claims no exclusive, commercial, or adversarial rights over "Dread Hunger," its ecosystem, or against the Game Copyright Holder or relevant original asset rightsholders. Solely for source code, scripts, and documentation independently authored by the maintainer and separable from the Original Game and Related Commercial Assets, the maintainer retains copyright as provided by law. The restrictions in this License exist strictly for defensive purposes: preventing closed-source hoarding, monetization, and monopolization.
 
-   Provided you comply with all terms of this License, you are granted a worldwide, non-exclusive, royalty-free, non-transferable right to use, copy, modify, integrate, and redistribute this project for personal or non-commercial purposes. Each time you redistribute this project or a derivative work, the recipient automatically receives a direct license under these terms. This grant is irrevocable while you remain in compliance and terminates automatically upon breach under Article 5.
+   Provided you comply with all terms of this License, you are granted a worldwide, non-exclusive, royalty-free, non-transferable right to use, copy, modify, integrate, and redistribute the independently authored portions in which the maintainer retains copyright as stated above, for personal or non-commercial purposes. Each time you redistribute such portions or a derivative work thereof, the recipient automatically receives a direct license under these terms. This grant is irrevocable while you remain in compliance and terminates automatically upon breach under Article 5.
 
 2. Three Mandatory Conditions for Derivative Works
    Except for the Game Copyright Holder (Digital Confectioners Ltd.), anyone who modifies, refactors, integrates, redistributes, or builds derivative works from this project must simultaneously meet all three conditions:
