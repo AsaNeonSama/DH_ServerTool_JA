@@ -14,12 +14,22 @@ var FMemory_Free = new NativeFunction(moduleBase.add(0x105DD50), 'void', ['point
 
 var UClass_GetPrivateStaticClass = new NativeFunction(moduleBase.add(0x11F02E0), 'pointer', [], 'win64');
 var ADH_Character_GetPrivateStaticClass = new NativeFunction(moduleBase.add(0xEA0F90), 'pointer', [], 'win64');
+var ADH_PlayerState_GetPrivateStaticClass = new NativeFunction(moduleBase.add(0xEED6B0), 'pointer', [], 'win64');
 var APlayerController_GetPrivateStaticClass = new NativeFunction(moduleBase.add(0x2AA84E0), 'pointer', [], 'win64');
+var GWorld_ptr = moduleBase.add(0x46ED420);
 var GUObjectArray_ptr = moduleBase.add(0x45C40C8);
 var cachedDHCharacterClass = ptr(0);
 var cachedPlayerControllerClass = ptr(0);
 var StaticLoadObject = new NativeFunction(moduleBase.add(0x137B290), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer', 'int32', 'pointer', 'int8', 'pointer'], 'win64');
 var StaticFindObject = new NativeFunction(moduleBase.add(0x137AAA0), 'pointer', ['pointer', 'pointer', 'pointer', 'int8'], 'win64');
+var UWorld_SpawnActor = new NativeFunction(moduleBase.add(0x2624510), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer'], 'win64');
+var FActorSpawnParameters_Ctor = new NativeFunction(moduleBase.add(0x29584A0), 'void', ['pointer'], 'win64');
+var UGameplayStatics_BeginDeferredActorSpawnFromClass = new NativeFunction(moduleBase.add(0x25570C0), 'pointer', ['pointer', 'pointer', 'pointer', 'uint8', 'pointer'], 'win64');
+var UGameplayStatics_FinishSpawningActor = new NativeFunction(moduleBase.add(0x255FCF0), 'pointer', ['pointer', 'pointer'], 'win64');
+var APawn_SetPlayerState = new NativeFunction(moduleBase.add(0x2752480), 'void', ['pointer', 'pointer'], 'win64');
+var ADH_HumanCharacter_InitFromPlayerState = new NativeFunction(moduleBase.add(0xD5AA60), 'void', ['pointer', 'pointer', 'int8'], 'win64');
+var ADH_GameState_SetMatchResult = new NativeFunction(moduleBase.add(0xDA9C30), 'void', ['pointer', 'uint8', 'uint8'], 'win64');
+var TArray_Ptr_AddUnique = new NativeFunction(moduleBase.add(0x769CC0), 'int32', ['pointer', 'pointer'], 'win64');
 
 var UDH_InventoryManager_AddInventory = new NativeFunction(moduleBase.add(0xDBC040), 'void', ['pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'int8', 'pointer'], 'win64');
 var UDH_InventoryManager_SetStorageLimit = new NativeFunction(moduleBase.add(0xDE3DA0), 'void', ['pointer', 'int32'], 'win64');
@@ -28,6 +38,8 @@ var ADH_PlayerController_ReceiveThrallMessage = new NativeFunction(moduleBase.ad
 var ADH_PlayerController_AddCheats = new NativeFunction(moduleBase.add(0xE2B7E0), 'void', ['pointer', 'int8'], 'win64');
 var ADH_PlayerController_SetDesiresThrallVision_Impl = new NativeFunction(moduleBase.add(0xE4D980), 'void', ['pointer', 'int8'], 'win64');
 var ADH_PlayerState_SetIsThrall = new NativeFunction(moduleBase.add(0xE4E880), 'void', ['pointer', 'int8'], 'win64');
+var ADH_SpellManager_SetEquippedSpells = new NativeFunction(moduleBase.add(0xE81F00), 'void', ['pointer', 'pointer'], 'win64');
+var ADH_SpellManager_SetSpellChargeLevel = new NativeFunction(moduleBase.add(0xE82CC0), 'void', ['pointer', 'float'], 'win64');
 var ADH_HumanCharacter_SetIsSpiritWalking = new NativeFunction(moduleBase.add(0xD70310), 'void', ['pointer', 'int8', 'float'], 'win64');
 var AActor_GetWorldTimerManager = new NativeFunction(moduleBase.add(0x22DDC30), 'pointer', ['pointer'], 'win64');
 var FTimerManager_FindTimer = new NativeFunction(moduleBase.add(0x28F2D80), 'pointer', ['pointer', 'pointer'], 'win64');
@@ -47,20 +59,31 @@ var UE_OFFSETS = {
     uObjectNamePrivate: 0x18,
     uStructChainArray: 0x30,
     uStructChainDepth: 0x38,
+    actorRootComponent: 0x130,
     actorVtableK2DestroyActor: 0x310,
+    sceneComponentToWorldRot: 0x1C0,
+    sceneComponentToWorldPos: 0x1D0,
+    worldGameInstance: 0x180,
+    gameInstancePlayerRoleList: 0x3B8,
     gameStateAuthorityGameMode: 0x228,
     gameStatePlayerArray: 0x238,
+    gameModePlayerStateClass: 0x248,
     gameModeGameSession: 0x278,
+    gameModeVtableEndMatch: 0x838,
     playerStateOwnerController: 0xE0,
+    playerStateFlags: 0x22A,
     playerStatePlayerName: 0x300,
     playerStateSpellManager: 0x488,
     playerStateOtherThralls: 0x578,
     playerStateSelectedRole: 0x590,
+    playerStateRealPawn: 0x638,
+    spellManagerEquippedSpells: 0x288,
     roleDataOnlineName: 0x48,
     playerControllerPlayerState: 0x228,
     playerControllerPawn: 0x250,
     playerControllerCheatManager: 0x338,
     humanInventoryManager: 0x808,
+    humanLastDHPlayerState: 0xC40,
     humanSpiritWalkTimerHandle: 0xD50
 };
 
@@ -99,6 +122,7 @@ var SUMMON_BLUEPRINT_PATHS = {
     BP_Cannibal_Crawler_C: '/Game/Blueprints/AI/Cannibal/BP_Cannibal_Crawler.BP_Cannibal_Crawler_C',
     BP_Cannibal_Shambler_C: '/Game/Blueprints/AI/Cannibal/BP_Cannibal_Shambler.BP_Cannibal_Shambler_C',
     BP_HumanCharacter_C: '/Game/Blueprints/Player/BP_HumanCharacter.BP_HumanCharacter_C',
+    BP_HumanCharacter_Thrall_C: '/Game/Blueprints/Player/BP_HumanCharacter.BP_HumanCharacter_C',
     BP_Totem_C: '/Game/Blueprints/Game/Totems/BP_Totem.BP_Totem_C',
     BP_ExplosionActor_C: '/Game/Blueprints/Game/BP_ExplosionActor.BP_ExplosionActor_C',
     BP_Explosion_Nitro_C: '/Game/Blueprints/Game/BP_Explosion_Nitro.BP_Explosion_Nitro_C'
@@ -355,6 +379,255 @@ function removeFromOtherThrallsArray(playerStatePtr, targetToRemovePtr) {
     }
 }
 
+var trackedGameStatePtr = ptr(0);
+var summonedThrallPlayerStates = [];
+var savedEquippedSpellsByPs = {};
+
+function pruneSummonedThrallPlayerStates(gameStatePtr) {
+    if (!trackedGameStatePtr.equals(gameStatePtr)) {
+        trackedGameStatePtr = gameStatePtr;
+        summonedThrallPlayerStates = [];
+        savedEquippedSpellsByPs = {};
+        return;
+    }
+    var alive = [];
+    for (var i = 0; i < summonedThrallPlayerStates.length; i++) {
+        var ps = summonedThrallPlayerStates[i];
+        if (!ps.isNull() && !isPendingKill(ps)) {
+            alive.push(ps);
+        }
+    }
+    summonedThrallPlayerStates = alive;
+}
+
+function snapshotSpellManagerEquippedSpells(playerStatePtr, spellManagerPtr) {
+    if (playerStatePtr.isNull() || spellManagerPtr.isNull() || isPendingKill(spellManagerPtr)) {
+        return;
+    }
+    var eqPtr = spellManagerPtr.add(UE_OFFSETS.spellManagerEquippedSpells);
+    var dataPtr = eqPtr.readPointer();
+    var count = eqPtr.add(8).readS32();
+    if (dataPtr.isNull() || count <= 0 || count > 16) {
+        return;
+    }
+    var spells = [];
+    for (var i = 0; i < count; i++) {
+        var clsPtr = dataPtr.add(8 * i).readPointer();
+        if (!clsPtr.isNull() && !isPendingKill(clsPtr)) {
+            spells.push(clsPtr);
+        }
+    }
+    if (spells.length > 0) {
+        savedEquippedSpellsByPs[playerStatePtr.toString()] = spells;
+    }
+}
+
+function restoreSpellManagerEquippedSpells(playerStatePtr) {
+    if (playerStatePtr.isNull() || isPendingKill(playerStatePtr)) {
+        return;
+    }
+    var saved = savedEquippedSpellsByPs[playerStatePtr.toString()];
+    if (!saved || saved.length === 0) {
+        return;
+    }
+    var spellManagerPtr = playerStatePtr.add(UE_OFFSETS.playerStateSpellManager).readPointer();
+    if (spellManagerPtr.isNull() || isPendingKill(spellManagerPtr)) {
+        return;
+    }
+    var curCount = spellManagerPtr.add(UE_OFFSETS.spellManagerEquippedSpells + 8).readS32();
+    if (curCount > 0) {
+        return;
+    }
+    var valid = [];
+    for (var i = 0; i < saved.length; i++) {
+        if (!saved[i].isNull() && !isPendingKill(saved[i])) {
+            valid.push(saved[i]);
+        }
+    }
+    if (valid.length === 0) {
+        return;
+    }
+    var buf = Memory.alloc(16 + valid.length * 8);
+    var dataBuf = buf.add(16);
+    for (var j = 0; j < valid.length; j++) {
+        dataBuf.add(8 * j).writePointer(valid[j]);
+    }
+    buf.writePointer(dataBuf);
+    buf.add(8).writeS32(valid.length);
+    buf.add(12).writeS32(valid.length);
+    ADH_SpellManager_SetEquippedSpells(spellManagerPtr, buf);
+}
+
+function addUniquePointer(tArrayPtr, elemPtr) {
+    if (tArrayPtr.isNull() || elemPtr.isNull()) {
+        return;
+    }
+    var elemBuf = Memory.alloc(8);
+    elemBuf.writePointer(elemPtr);
+    TArray_Ptr_AddUnique(tArrayPtr, elemBuf);
+}
+
+function makeAlignedTransform(x, y, z, yawRad) {
+    var raw = Memory.alloc(0x40);
+    var rem = raw.and(0xF).toInt32();
+    var aligned = rem === 0 ? raw : raw.add(16 - rem);
+    var halfYaw = yawRad * 0.5;
+    aligned.writeFloat(0.0);
+    aligned.add(0x04).writeFloat(0.0);
+    aligned.add(0x08).writeFloat(Math.sin(halfYaw));
+    aligned.add(0x0C).writeFloat(Math.cos(halfYaw));
+    aligned.add(0x10).writeFloat(x);
+    aligned.add(0x14).writeFloat(y);
+    aligned.add(0x18).writeFloat(z);
+    aligned.add(0x1C).writeFloat(0.0);
+    aligned.add(0x20).writeFloat(1.0);
+    aligned.add(0x24).writeFloat(1.0);
+    aligned.add(0x28).writeFloat(1.0);
+    aligned.add(0x2C).writeFloat(0.0);
+    return { raw: raw, ptr: aligned };
+}
+
+function findRoleDataByOnlineName(worldPtr, targetOnlineName) {
+    if (worldPtr.isNull() || isPendingKill(worldPtr) || !targetOnlineName) {
+        return ptr(0);
+    }
+    var gameInstancePtr = worldPtr.add(UE_OFFSETS.worldGameInstance).readPointer();
+    if (gameInstancePtr.isNull() || isPendingKill(gameInstancePtr)) {
+        return ptr(0);
+    }
+    var roleListPtr = gameInstancePtr.add(UE_OFFSETS.gameInstancePlayerRoleList);
+    var dataPtr = roleListPtr.readPointer();
+    var count = roleListPtr.add(8).readS32();
+    if (dataPtr.isNull() || count <= 0 || count > 32) {
+        return ptr(0);
+    }
+    for (var i = 0; i < count; i++) {
+        var rolePtr = dataPtr.add(i * 8).readPointer();
+        if (!rolePtr.isNull() && !isPendingKill(rolePtr)) {
+            if (readFStringNonOwning(rolePtr.add(UE_OFFSETS.roleDataOnlineName)) === targetOnlineName) {
+                return rolePtr;
+            }
+        }
+    }
+    return ptr(0);
+}
+
+function spawnSummonedMarine(gameStatePtr, playerControllerPtr, isThrall) {
+    if (gameStatePtr.isNull() || isPendingKill(gameStatePtr) || playerControllerPtr.isNull() || isPendingKill(playerControllerPtr)) {
+        return;
+    }
+    var worldPtr = GWorld_ptr.readPointer();
+    if (worldPtr.isNull() || isPendingKill(worldPtr)) {
+        return;
+    }
+    var targetPawn = playerControllerPtr.add(UE_OFFSETS.playerControllerPawn).readPointer();
+    if (targetPawn.isNull() || isPendingKill(targetPawn)) {
+        return;
+    }
+    var rootComponent = targetPawn.add(UE_OFFSETS.actorRootComponent).readPointer();
+    if (rootComponent.isNull() || isPendingKill(rootComponent)) {
+        return;
+    }
+    var px = rootComponent.add(UE_OFFSETS.sceneComponentToWorldPos).readFloat();
+    var py = rootComponent.add(UE_OFFSETS.sceneComponentToWorldPos + 4).readFloat();
+    var pz = rootComponent.add(UE_OFFSETS.sceneComponentToWorldPos + 8).readFloat();
+    if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(pz)) {
+        return;
+    }
+    var qx = rootComponent.add(UE_OFFSETS.sceneComponentToWorldRot).readFloat();
+    var qy = rootComponent.add(UE_OFFSETS.sceneComponentToWorldRot + 4).readFloat();
+    var qz = rootComponent.add(UE_OFFSETS.sceneComponentToWorldRot + 8).readFloat();
+    var qw = rootComponent.add(UE_OFFSETS.sceneComponentToWorldRot + 12).readFloat();
+    var fx = 1.0 - 2.0 * (qy * qy + qz * qz);
+    var fy = 2.0 * (qx * qy + qw * qz);
+    var len = Math.sqrt(fx * fx + fy * fy);
+    if (!Number.isFinite(len) || len < 1e-4) {
+        fx = 1.0;
+        fy = 0.0;
+    } else {
+        fx /= len;
+        fy /= len;
+    }
+    var spawnX = px + fx * 180.0;
+    var spawnY = py + fy * 180.0;
+    var spawnZ = pz + 10.0;
+    var facingYaw = Math.atan2(-fy, -fx);
+
+    var humanClass = resolveBlueprintClass(SUMMON_BLUEPRINT_PATHS.BP_HumanCharacter_C);
+    if (humanClass.isNull()) {
+        return;
+    }
+    var tf = makeAlignedTransform(spawnX, spawnY, spawnZ, facingYaw);
+    var spawnParams = Memory.alloc(0x40);
+    FActorSpawnParameters_Ctor(spawnParams);
+    spawnParams.add(0x28).writeU8(1); // AlwaysSpawn
+    var spawnedPawn = UWorld_SpawnActor(worldPtr, humanClass, tf.ptr, spawnParams);
+    if (spawnedPawn.isNull() || isPendingKill(spawnedPawn)) {
+        return;
+    }
+
+    var gameModePtr = gameStatePtr.add(UE_OFFSETS.gameStateAuthorityGameMode).readPointer();
+    var psClass = (!gameModePtr.isNull() && !isPendingKill(gameModePtr))
+        ? gameModePtr.add(UE_OFFSETS.gameModePlayerStateClass).readPointer()
+        : ptr(0);
+    if (psClass.isNull()) {
+        psClass = ADH_PlayerState_GetPrivateStaticClass();
+    }
+    if (psClass.isNull()) {
+        return;
+    }
+
+    // 遅延スポーンで FinishSpawning 前に bIsInactive(0x20) + bIsABot(0x08) を立てることで、
+    // サーバー・クライアント両方の GameState::PlayerArray (スコアボード等) に混入させない
+    var dummyPs = UGameplayStatics_BeginDeferredActorSpawnFromClass(worldPtr, psClass, tf.ptr, 1, ptr(0));
+    if (dummyPs.isNull() || isPendingKill(dummyPs)) {
+        return;
+    }
+    var psFlags = dummyPs.add(UE_OFFSETS.playerStateFlags).readU8();
+    dummyPs.add(UE_OFFSETS.playerStateFlags).writeU8(psFlags | 0x28);
+    var marineRole = findRoleDataByOnlineName(worldPtr, 'Marine');
+    if (!marineRole.isNull()) {
+        dummyPs.add(UE_OFFSETS.playerStateSelectedRole).writePointer(marineRole);
+    }
+    UGameplayStatics_FinishSpawningActor(dummyPs, tf.ptr);
+
+    APawn_SetPlayerState(spawnedPawn, dummyPs);
+    spawnedPawn.add(UE_OFFSETS.humanLastDHPlayerState).writePointer(dummyPs);
+    dummyPs.add(UE_OFFSETS.playerStateRealPawn).writePointer(spawnedPawn);
+    ADH_HumanCharacter_InitFromPlayerState(spawnedPawn, dummyPs, 1);
+
+    if (isThrall) {
+        pruneSummonedThrallPlayerStates(gameStatePtr);
+        ADH_PlayerState_SetIsThrall(dummyPs, 1);
+        summonedThrallPlayerStates.push(dummyPs);
+    }
+}
+
+function endMatchWithWinner(gameStatePtr, explorersWin) {
+    if (gameStatePtr.isNull() || isPendingKill(gameStatePtr)) {
+        return;
+    }
+    // UDH_CheatManager::EndMatch(bool bExplorersWin) と同一:
+    // 1 = 探検家勝利 (PT_EXPLORERS / GOR_EXPLORERS_ESCAPED)
+    // 2 = 傀儡勝利   (PT_THRALL    / GOR_EXPLORERS_DIED)
+    var resultCode = explorersWin ? 1 : 2;
+    ADH_GameState_SetMatchResult(gameStatePtr, resultCode, resultCode);
+    var gameModePtr = gameStatePtr.add(UE_OFFSETS.gameStateAuthorityGameMode).readPointer();
+    if (gameModePtr.isNull() || isPendingKill(gameModePtr)) {
+        return;
+    }
+    var vtablePtr = gameModePtr.readPointer();
+    if (vtablePtr.isNull()) {
+        return;
+    }
+    var endMatchFnPtr = vtablePtr.add(UE_OFFSETS.gameModeVtableEndMatch).readPointer();
+    if (endMatchFnPtr.isNull()) {
+        return;
+    }
+    var endMatchFn = new NativeFunction(endMatchFnPtr, 'void', ['pointer'], 'win64');
+    endMatchFn(gameModePtr);
+}
+
 function setTargetPlayerIsThrall(gameStatePtr, playerControllerPtr, isThrall) {
     if (gameStatePtr.isNull() || isPendingKill(gameStatePtr) || playerControllerPtr.isNull() || isPendingKill(playerControllerPtr)) {
         return;
@@ -363,15 +636,26 @@ function setTargetPlayerIsThrall(gameStatePtr, playerControllerPtr, isThrall) {
     if (playerStatePtr.isNull() || isPendingKill(playerStatePtr)) {
         return;
     }
+    pruneSummonedThrallPlayerStates(gameStatePtr);
     if (isThrall) {
         ADH_PlayerState_SetIsThrall(playerStatePtr, 1);
+        // クライアント側 SetEquippedSpellsFromSave(+0x7B9) は試合中1度しか走らないため、
+        // 傀儡→探検家→傀儡へ戻した場合は退避済み EquippedSpells を新 SpellManager へ復元して同期する
+        restoreSpellManagerEquippedSpells(playerStatePtr);
+        for (var s = 0; s < summonedThrallPlayerStates.length; s++) {
+            var dummyPs = summonedThrallPlayerStates[s];
+            if (!dummyPs.isNull() && !isPendingKill(dummyPs)) {
+                addUniquePointer(playerStatePtr.add(UE_OFFSETS.playerStateOtherThralls), dummyPs);
+                addUniquePointer(dummyPs.add(UE_OFFSETS.playerStateOtherThralls), playerStatePtr);
+            }
+        }
         return;
     }
     // 傀儡から探検家へ安全に戻す:
     // 1. 傀儡ビジョンを無効化
     ADH_PlayerController_SetDesiresThrallVision_Impl(playerControllerPtr, 0);
 
-    // 2. 対象および他プレイヤーの OtherThralls 配列から対象を除去
+    // 2. 対象および他プレイヤー(召喚傀儡海兵含む)の OtherThralls 配列から対象を除去
     var targetOtherThrallsPtr = playerStatePtr.add(UE_OFFSETS.playerStateOtherThralls);
     if (targetOtherThrallsPtr.add(8).readS32() > 0) {
         targetOtherThrallsPtr.add(8).writeS32(0);
@@ -387,11 +671,18 @@ function setTargetPlayerIsThrall(gameStatePtr, playerControllerPtr, isThrall) {
             }
         }
     }
+    for (var d = 0; d < summonedThrallPlayerStates.length; d++) {
+        var summonedPs = summonedThrallPlayerStates[d];
+        if (!summonedPs.isNull() && !isPendingKill(summonedPs)) {
+            removeFromOtherThrallsArray(summonedPs, playerStatePtr);
+        }
+    }
 
-    // 3. SpellManager (+0x488) を破棄・クリアして呪文とトーテム権限を剥奪
+    // 3. SpellManager (+0x488) の装備呪文を退避してから破棄・クリアし、呪文とトーテム権限を剥奪
     var spellManagerPtr = playerStatePtr.add(UE_OFFSETS.playerStateSpellManager).readPointer();
     if (!spellManagerPtr.isNull()) {
         if (!isPendingKill(spellManagerPtr)) {
+            snapshotSpellManagerEquippedSpells(playerStatePtr, spellManagerPtr);
             destroyActorSafe(spellManagerPtr);
         }
         playerStatePtr.add(UE_OFFSETS.playerStateSpellManager).writePointer(ptr(0));
@@ -399,6 +690,22 @@ function setTargetPlayerIsThrall(gameStatePtr, playerControllerPtr, isThrall) {
 
     // 4. bIsThrall (+0x572) を 0 に設定し、デリゲートと関連状態を更新
     ADH_PlayerState_SetIsThrall(playerStatePtr, 0);
+}
+
+function setTargetPlayerSpellCharge(playerControllerPtr, chargeLevel) {
+    if (playerControllerPtr.isNull() || isPendingKill(playerControllerPtr)) {
+        return;
+    }
+    var playerStatePtr = playerControllerPtr.add(UE_OFFSETS.playerControllerPlayerState).readPointer();
+    if (playerStatePtr.isNull() || isPendingKill(playerStatePtr)) {
+        return;
+    }
+    var spellManagerPtr = playerStatePtr.add(UE_OFFSETS.playerStateSpellManager).readPointer();
+    if (spellManagerPtr.isNull() || isPendingKill(spellManagerPtr)) {
+        return;
+    }
+    var clamped = chargeLevel < 0.0 ? 0.0 : (chargeLevel > 1.0 ? 1.0 : chargeLevel);
+    ADH_SpellManager_SetSpellChargeLevel(spellManagerPtr, clamped);
 }
 
 function setHumanCharacterProperty(playerControllerPtr, propertyName, propertyValue) {
@@ -610,6 +917,23 @@ function executeQueuedPayload(gameStatePtr, payload) {
             var thrallArg = cmdArg.toLowerCase();
             var enableThrall = (thrallArg !== '0' && thrallArg !== 'false');
             setTargetPlayerIsThrall(gameStatePtr, targetController, enableThrall);
+            return;
+        }
+        if (cmdName === 'setspellcharge') {
+            var parsedCharge = parseFloat(cmdArg);
+            if (Number.isFinite(parsedCharge)) {
+                setTargetPlayerSpellCharge(targetController, parsedCharge);
+            }
+            return;
+        }
+        if (cmdName === 'endmatch') {
+            var endArg = cmdArg.toLowerCase();
+            var explorersWin = (endArg !== '0' && endArg !== 'false');
+            endMatchWithWinner(gameStatePtr, explorersWin);
+            return;
+        }
+        if (cmdName === 'summon' && (cmdArg === 'BP_HumanCharacter_C' || cmdArg === 'BP_HumanCharacter_Thrall_C')) {
+            spawnSummonedMarine(gameStatePtr, targetController, cmdArg === 'BP_HumanCharacter_Thrall_C');
             return;
         }
         preloadSummonBlueprint(cmdName, cmdArg);

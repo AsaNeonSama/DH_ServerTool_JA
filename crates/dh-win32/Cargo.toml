@@ -2,6 +2,8 @@
 name = "dh-win32"
 version = "0.1.0"
 edition = "2021"
+license-file.workspace = true
+repository.workspace = true
 description = "Typed Win32 wrappers for DH_ServerTool_JA (Job Objects, processes, PEB/OEP inspection, UDP/TCP tables, console & clipboard)"
 
 [dependencies]

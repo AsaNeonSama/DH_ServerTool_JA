@@ -2,6 +2,8 @@
 name = "dh-gadget-injector"
 version = "0.1.0"
 edition = "2021"
+license-file.workspace = true
+repository.workspace = true
 description = "Reusable Frida Gadget 17.27.4 OEP early-injection runtime with NTFS hard-link caching, Frida 16->17 shim, and loopback NDJSON log/handshake channel"
 
 [dependencies]

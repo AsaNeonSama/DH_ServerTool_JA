@@ -3,6 +3,7 @@ use crate::structs::languages::ModLabelCode;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModGroup {
     Default,
+    ContentMod,
     Single,
     BoneDagger,
 }
@@ -14,12 +15,20 @@ pub enum ModKind {
 }
 
 #[derive(Debug, Clone, Copy)]
+pub struct ContentModAssetBundle {
+    pub mod_id: &'static str,
+    pub archive_zst: &'static [u8],
+    pub archive_sha256: &'static str,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub struct PatchScript {
     pub id: &'static str,
     pub file_name: &'static str,
     pub label_code: ModLabelCode,
     pub group: ModGroup,
     pub source: &'static str,
+    pub asset_bundle: Option<&'static ContentModAssetBundle>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -1731,6 +1731,10 @@
           value: "BP_HumanCharacter_C",
         },
         {
+          textContent: tUi("summons", "BP_HumanCharacter_Thrall_C"),
+          value: "BP_HumanCharacter_Thrall_C",
+        },
+        {
           textContent: tUi("summons", "BP_Totem_C"),
           value: "BP_Totem_C",
         },
@@ -2389,11 +2393,15 @@
         endMatchSelect.name = "endMatch";
         endMatchSelect.id = "endMatch";
         endMatchSelect.required = true;
-        const endMatchOptionY = document.createElement("option");
-        endMatchOptionY.textContent = tUi("toggles", "on");
-        endMatchOptionY.value = "1";
+        const endMatchOptionExplorers = document.createElement("option");
+        endMatchOptionExplorers.textContent = tUi("endMatchSides", "explorers");
+        endMatchOptionExplorers.value = "1";
+        const endMatchOptionThralls = document.createElement("option");
+        endMatchOptionThralls.textContent = tUi("endMatchSides", "thralls");
+        endMatchOptionThralls.value = "0";
 
-        endMatchSelect.appendChild(endMatchOptionY);
+        endMatchSelect.appendChild(endMatchOptionExplorers);
+        endMatchSelect.appendChild(endMatchOptionThralls);
         baseForm.appendChild(endMatchLabel);
         baseForm.appendChild(endMatchSelect);
       };

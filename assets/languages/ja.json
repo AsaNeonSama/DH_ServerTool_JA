@@ -54,7 +54,7 @@
       "blizzardIntensity": "暴風雪強度: ",
       "slomo": "加速値設定",
       "god": "無敵スイッチ: ",
-      "endMatch": "終了スイッチ: ",
+      "endMatch": "勝利陣営: ",
       "statusOrder": "設定タイプ: ",
       "statusSwitch": "設定スイッチ: ",
       "statusNumber": "数値設定: ",
@@ -86,10 +86,15 @@
       "BP_Predator_Wolf_C": "狼",
       "BP_Predator_Bear_C": "熊",
       "CANNIBAL_RANDOM": "人喰い人種",
-      "BP_HumanCharacter_C": "海兵",
+      "BP_HumanCharacter_C": "海兵 (船員)",
+      "BP_HumanCharacter_Thrall_C": "海兵 (傀儡)",
       "BP_Totem_C": "トーテム",
       "BP_ExplosionActor_C": "爆裂魔法",
       "BP_Explosion_Nitro_C": "大爆裂魔法・チャージ 120 %"
+    },
+    "endMatchSides": {
+      "explorers": "探検家勝利",
+      "thralls": "傀儡勝利"
     },
     "spellCharges": {
       "0.37": "レベル１",

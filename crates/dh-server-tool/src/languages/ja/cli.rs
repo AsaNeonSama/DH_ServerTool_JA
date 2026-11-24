@@ -34,13 +34,24 @@ pub fn text(code: CliMsgCode) -> &'static str {
         CliMsgCode::SettingThralls => "傀儡人数設定",
         CliMsgCode::InvalidChoiceRetry => "規格外の選択肢を入力しました、やり直してください!",
         CliMsgCode::InvalidChoiceShort => "規格外の選択肢です!",
+        CliMsgCode::ContentModsLabel => {
+            "クライアントPAK必須MOD (プレイヤー側へ対応 .pak 導入が必要):"
+        }
+        CliMsgCode::ContentModsGuideBeforeY => {
+            "下記のナンバーでMODを選択してください(カンマ区切りで複数選択可 例: 1 /"
+        }
+        CliMsgCode::ContentModChoicePrompt => {
+            "クライアントPAK必須MODを入力してください (不要ならそのまま Y):"
+        }
+        CliMsgCode::ContentModPakSuffix => " [PAK必須]",
         CliMsgCode::DefaultModsLabel => "デフォルトMOD(自動注入):",
+        CliMsgCode::ServerOnlyModsLabel => "サーバー専用MOD (クライアントPAK不要):",
         CliMsgCode::ModSelectionGuideBeforeY => {
             "下記のナンバーで機能を選択してください(カンマ区切りで複数選択可 例: 1,2,7 /"
         }
         CliMsgCode::ModSelectionGuideBetweenYAndC => "で決定 /",
         CliMsgCode::ModSelectionGuideAfterC => "でクリア):",
-        CliMsgCode::ModChoicePrompt => "選択肢を入力してください:",
+        CliMsgCode::ModChoicePrompt => "サーバー専用MODを入力してください:",
         CliMsgCode::ModModeSuffix => " [セット]",
         CliMsgCode::ModConflictLegendPrefix => "同時選択不可(排他):",
         CliMsgCode::ModSelectionCleared => "選択済みのスクリプトをクリアしました。",

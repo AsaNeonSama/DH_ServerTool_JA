@@ -1,6 +1,6 @@
 use tokio_util::sync::CancellationToken;
 
-use crate::cli::mod_selector::prompt_mod_selection;
+use crate::cli::mod_selector::{prompt_content_mod_selection, prompt_mod_selection};
 use crate::colors;
 pub use crate::consts::cli::MAP_OPTIONS;
 use crate::consts::cli::{
@@ -301,7 +301,12 @@ pub async fn prompt_match_config(
         ));
     };
 
-    // 3. MOD selection loop
+    // 3. Content MOD selection (client .pak required) — FIRST
+    terminal.println_empty();
+    let (selected_content_option_numbers, selected_content_option_labels): (Vec<u32>, Vec<String>) =
+        prompt_content_mod_selection(terminal, cancel).await?;
+
+    // 4. Server-only JS MOD selection (no client .pak required) — SECOND
     terminal.println_empty();
     let (selected_option_numbers, selected_option_labels): (Vec<u32>, Vec<String>) =
         prompt_mod_selection(terminal, cancel).await?;
@@ -311,6 +316,8 @@ pub async fn prompt_match_config(
         map_id: map_choice.id,
         map_label_code: map_choice.label_code,
         settings,
+        selected_content_option_numbers,
+        selected_content_option_labels,
         selected_option_numbers,
         selected_option_labels,
         ue_map_argument,

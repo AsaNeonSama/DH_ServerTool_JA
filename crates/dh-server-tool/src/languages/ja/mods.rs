@@ -7,6 +7,7 @@ pub fn label(code: ModLabelCode) -> &'static str {
         ModLabelCode::DefaultSpellChargeFix => "スペルチャージ修正",
         ModLabelCode::DefaultDeathOfflineAnnouncement => "オフラインアナウンス",
         ModLabelCode::DefaultNetworkFix => "ネットワーク接続保護・乱入防止",
+        ModLabelCode::ContentTotemSpells => "カスタムスペル(新呪文5種)",
         ModLabelCode::RandRole => "役職ランダム",
         ModLabelCode::SpellCastStart => "開幕沈黙",
         ModLabelCode::ResourcesSpawnerDeparture => "マップ補強(山頂)",

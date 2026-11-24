@@ -20,7 +20,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let out_dir_raw: String = env::var("OUT_DIR")?;
     let out_dir: PathBuf = PathBuf::from(out_dir_raw);
 
-    let assets_dir: PathBuf = manifest_dir.join("..").join("..").join("assets");
+    let workspace_root: PathBuf = manifest_dir.join("..").join("..");
+    let assets_dir: PathBuf = workspace_root.join("assets");
     let console_dir: PathBuf = assets_dir.join("console");
     let languages_dir: PathBuf = assets_dir.join("languages");
 

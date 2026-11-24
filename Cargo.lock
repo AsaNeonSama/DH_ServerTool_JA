@@ -352,6 +352,7 @@ dependencies = [
  "unicode-width",
  "uuid",
  "winresource",
+ "zstd",
 ]
 
 [[package]]

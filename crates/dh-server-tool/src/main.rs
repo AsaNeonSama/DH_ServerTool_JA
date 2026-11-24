@@ -32,6 +32,11 @@ fn print_launch_summary(terminal: &Terminal, plan: &LaunchPlan) {
         .map(|patch: &PatchScript| languages::mod_label(patch.label_code))
         .collect::<Vec<&str>>()
         .join(", ");
+    let content_mod_names: String = if plan.selected_content_option_labels.is_empty() {
+        languages::app_text(AppMsgCode::NoneLabel).to_string()
+    } else {
+        plan.selected_content_option_labels.join(", ")
+    };
     let selected_mod_names: String = if plan.selected_option_labels.is_empty() {
         languages::app_text(AppMsgCode::NoneLabel).to_string()
     } else {
@@ -76,6 +81,12 @@ fn print_launch_summary(terminal: &Terminal, plan: &LaunchPlan) {
         colors::LIGHT_WHITE,
         languages::app_text(AppMsgCode::SummaryDefaultModsLabel),
         colors::CYAN,
+    ));
+    terminal.println(&format!(
+        "{} * {} {}{content_mod_names}",
+        colors::LIGHT_WHITE,
+        languages::app_text(AppMsgCode::SummaryContentModsLabel),
+        colors::LIGHT_MAGENTA,
     ));
     terminal.println(&format!(
         "{} * {} {}{selected_mod_names}",

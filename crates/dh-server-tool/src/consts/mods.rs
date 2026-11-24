@@ -3,6 +3,10 @@ use crate::structs::mods::{ModGroup, ModKind, ModMenuOption, PatchScript};
 
 pub const CONSOLE_PATCH_ID: &str = "default:console_win64";
 pub const CONSOLE_PATCH_PORT_TOKEN: &str = "__CONSOLE_PATCH_PORT__";
+pub const CONTENT_MOD_ASSET_ROOT_TOKEN: &str = "__CONTENT_MOD_ASSET_ROOT__";
+pub const CONTENT_MOD_CACHE_SUBDIR: &str = "content_mods";
+pub const CONTENT_MOD_READY_MARKER: &str = ".ready";
+pub const CONTENT_MOD_ARCHIVE_MAGIC: &[u8; 4] = b"DHCM";
 
 // Default mods (always injected first in exact order without prompting)
 pub const DEFAULT_PATCH_SCRIPTS: &[PatchScript] = &[
@@ -12,6 +16,7 @@ pub const DEFAULT_PATCH_SCRIPTS: &[PatchScript] = &[
         label_code: ModLabelCode::DefaultConsole,
         group: ModGroup::Default,
         source: include_str!("../../../../assets/mods/default/コンソール連携.js"),
+        asset_bundle: None,
     },
     PatchScript {
         id: "default:spell_charge_fix_win64",
@@ -19,6 +24,7 @@ pub const DEFAULT_PATCH_SCRIPTS: &[PatchScript] = &[
         label_code: ModLabelCode::DefaultSpellChargeFix,
         group: ModGroup::Default,
         source: include_str!("../../../../assets/mods/default/スペルチャージ修正.js"),
+        asset_bundle: None,
     },
     PatchScript {
         id: "default:death_offline_announcement_win64",
@@ -26,6 +32,7 @@ pub const DEFAULT_PATCH_SCRIPTS: &[PatchScript] = &[
         label_code: ModLabelCode::DefaultDeathOfflineAnnouncement,
         group: ModGroup::Default,
         source: include_str!("../../../../assets/mods/default/死亡切断通知.js"),
+        asset_bundle: None,
     },
     PatchScript {
         id: "default:network_fix_win64",
@@ -33,10 +40,31 @@ pub const DEFAULT_PATCH_SCRIPTS: &[PatchScript] = &[
         label_code: ModLabelCode::DefaultNetworkFix,
         group: ModGroup::Default,
         source: include_str!("../../../../assets/mods/default/接続保護_乱入防止.js"),
+        asset_bundle: None,
     },
 ];
 
-// Selectable MOD menu options (1..=22; practical/competitive 1..=13, fun/variant 14..=22)
+// Selectable Content MODs requiring matching client .pak files (prompted FIRST)
+// Server runs pure-JS runtime UClass synthesis (Option C: zero server-side .uasset/.uexp files).
+pub const SELECTABLE_CONTENT_MOD_OPTIONS: &[ModMenuOption] = &[ModMenuOption {
+    id: "content_totem_spells",
+    number: 1,
+    label_code: ModLabelCode::ContentTotemSpells,
+    kind: ModKind::Single,
+    conflicts_with: &[],
+    scripts: &[PatchScript {
+        id: "content:totem_spells_win64",
+        file_name: "カスタムスペル.js",
+        label_code: ModLabelCode::ContentTotemSpells,
+        group: ModGroup::ContentMod,
+        source: include_str!(
+            "../../../../assets/content_mods/server/totem_spells/カスタムスペル.js"
+        ),
+        asset_bundle: None,
+    }],
+}];
+
+// Selectable server-only JS MOD menu options (no client .pak required, prompted SECOND; 1..=22)
 pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
     ModMenuOption {
         id: "rand_role",
@@ -50,6 +78,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             label_code: ModLabelCode::RandRole,
             group: ModGroup::Single,
             source: include_str!("../../../../assets/mods/single/役職ランダム.js"),
+            asset_bundle: None,
         }],
     },
     ModMenuOption {
@@ -64,6 +93,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             label_code: ModLabelCode::SpellCastStart,
             group: ModGroup::Single,
             source: include_str!("../../../../assets/mods/single/開幕沈黙.js"),
+            asset_bundle: None,
         }],
     },
     ModMenuOption {
@@ -78,6 +108,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             label_code: ModLabelCode::ResourcesSpawnerDeparture,
             group: ModGroup::Single,
             source: include_str!("../../../../assets/mods/single/マップ補強_山頂.js"),
+            asset_bundle: None,
         }],
     },
     ModMenuOption {
@@ -92,6 +123,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             label_code: ModLabelCode::ResourcesSpawnerExpanse,
             group: ModGroup::Single,
             source: include_str!("../../../../assets/mods/single/マップ補強_広漠.js"),
+            asset_bundle: None,
         }],
     },
     ModMenuOption {
@@ -106,6 +138,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             label_code: ModLabelCode::SpellCustom,
             group: ModGroup::Single,
             source: include_str!("../../../../assets/mods/single/五サボタージュ.js"),
+            asset_bundle: None,
         }],
     },
     ModMenuOption {
@@ -120,6 +153,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             label_code: ModLabelCode::MadmateNormalNolimit,
             group: ModGroup::Single,
             source: include_str!("../../../../assets/mods/single/狂人モード.js"),
+            asset_bundle: None,
         }],
     },
     ModMenuOption {
@@ -135,6 +169,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
                 label_code: ModLabelCode::BoneDaggerScriptMain,
                 group: ModGroup::BoneDagger,
                 source: include_str!("../../../../assets/mods/bone_dagger/骨の短剣_本体.js"),
+                asset_bundle: None,
             },
             PatchScript {
                 id: "bone_dagger:custom_droptable_bone_dagger_win64",
@@ -142,6 +177,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
                 label_code: ModLabelCode::BoneDaggerScriptDropTable,
                 group: ModGroup::BoneDagger,
                 source: include_str!("../../../../assets/mods/bone_dagger/骨の短剣_ドロップ.js"),
+                asset_bundle: None,
             },
             PatchScript {
                 id: "bone_dagger:set_inventory_win64",
@@ -149,6 +185,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
                 label_code: ModLabelCode::BoneDaggerScriptInventory,
                 group: ModGroup::BoneDagger,
                 source: include_str!("../../../../assets/mods/bone_dagger/骨の短剣_初期装備.js"),
+                asset_bundle: None,
             },
         ],
     },
@@ -164,6 +201,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             label_code: ModLabelCode::QuestSystem,
             group: ModGroup::Single,
             source: include_str!("../../../../assets/mods/single/クエスト報酬.js"),
+            asset_bundle: None,
         }],
     },
     ModMenuOption {
@@ -178,6 +216,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             label_code: ModLabelCode::AddStorage,
             group: ModGroup::Single,
             source: include_str!("../../../../assets/mods/single/全員バックパック.js"),
+            asset_bundle: None,
         }],
     },
     ModMenuOption {
@@ -192,6 +231,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             label_code: ModLabelCode::WhetstoneAnyItem,
             group: ModGroup::Single,
             source: include_str!("../../../../assets/mods/single/万能砥石.js"),
+            asset_bundle: None,
         }],
     },
     ModMenuOption {
@@ -206,6 +246,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             label_code: ModLabelCode::ArrowFullRecovery,
             group: ModGroup::Single,
             source: include_str!("../../../../assets/mods/single/矢回収100.js"),
+            asset_bundle: None,
         }],
     },
     ModMenuOption {
@@ -220,6 +261,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             label_code: ModLabelCode::BlizzardArmoryOpen,
             group: ModGroup::Single,
             source: include_str!("../../../../assets/mods/single/暴風雪マスケット.js"),
+            asset_bundle: None,
         }],
     },
     ModMenuOption {
@@ -234,6 +276,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             label_code: ModLabelCode::GunAndBow,
             group: ModGroup::Single,
             source: include_str!("../../../../assets/mods/single/銃_弓同時所持.js"),
+            asset_bundle: None,
         }],
     },
     ModMenuOption {
@@ -248,6 +291,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             label_code: ModLabelCode::StartArmoryOpen,
             group: ModGroup::Single,
             source: include_str!("../../../../assets/mods/single/開幕マスケット.js"),
+            asset_bundle: None,
         }],
     },
     ModMenuOption {
@@ -262,6 +306,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             label_code: ModLabelCode::VomitModify,
             group: ModGroup::Single,
             source: include_str!("../../../../assets/mods/single/毒耐性.js"),
+            asset_bundle: None,
         }],
     },
     ModMenuOption {
@@ -276,6 +321,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             label_code: ModLabelCode::NorthGhost,
             group: ModGroup::Single,
             source: include_str!("../../../../assets/mods/single/ミステリーモード.js"),
+            asset_bundle: None,
         }],
     },
     ModMenuOption {
@@ -290,6 +336,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             label_code: ModLabelCode::Grenade,
             group: ModGroup::Single,
             source: include_str!("../../../../assets/mods/single/グレネード.js"),
+            asset_bundle: None,
         }],
     },
     ModMenuOption {
@@ -304,6 +351,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             label_code: ModLabelCode::MoonJump,
             group: ModGroup::Single,
             source: include_str!("../../../../assets/mods/single/八艘飛び.js"),
+            asset_bundle: None,
         }],
     },
     ModMenuOption {
@@ -318,6 +366,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             label_code: ModLabelCode::SpellNoCd,
             group: ModGroup::Single,
             source: include_str!("../../../../assets/mods/single/スペルチャージ無限.js"),
+            asset_bundle: None,
         }],
     },
     ModMenuOption {
@@ -332,6 +381,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             label_code: ModLabelCode::NoDeath,
             group: ModGroup::Single,
             source: include_str!("../../../../assets/mods/single/無限復活.js"),
+            asset_bundle: None,
         }],
     },
     ModMenuOption {
@@ -346,6 +396,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             label_code: ModLabelCode::SightseeingDeparture,
             group: ModGroup::Single,
             source: include_str!("../../../../assets/mods/single/観光モード_山頂.js"),
+            asset_bundle: None,
         }],
     },
     ModMenuOption {
@@ -360,6 +411,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             label_code: ModLabelCode::SightseeingExpanse,
             group: ModGroup::Single,
             source: include_str!("../../../../assets/mods/single/観光モード_広漠.js"),
+            asset_bundle: None,
         }],
     },
 ];

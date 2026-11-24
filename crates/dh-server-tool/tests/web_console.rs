@@ -70,6 +70,26 @@ fn formats_console_command_preview() {
         "summon 熊"
     );
     assert_eq!(
+        format_console_command_preview("summon BP_HumanCharacter_C"),
+        "summon 海兵 (船員)"
+    );
+    assert_eq!(
+        format_console_command_preview("summon BP_HumanCharacter_Thrall_C"),
+        "summon 海兵 (傀儡)"
+    );
+    assert_eq!(
+        format_console_command_preview("endmatch 1"),
+        "endmatch 探検家勝利"
+    );
+    assert_eq!(
+        format_console_command_preview("endmatch 0"),
+        "endmatch 傀儡勝利"
+    );
+    assert_eq!(
+        format_console_command_preview("EndMatch false"),
+        "endmatch 傀儡勝利"
+    );
+    assert_eq!(
         format_console_command_preview("SetBlizzardIntensity 0.35"),
         "setblizzardintensity 0.35"
     );
@@ -117,6 +137,19 @@ fn builds_console_broadcast_messages() {
     assert_eq!(
         build_console_broadcast_message("Captain", "SUMMON", "BP_Predator_Wolf_C").as_deref(),
         Some("船長 が狼を召喚しました")
+    );
+    assert_eq!(
+        build_console_broadcast_message("Captain", "summon", "BP_HumanCharacter_C").as_deref(),
+        Some("船長 が海兵 (船員)を召喚しました")
+    );
+    assert_eq!(
+        build_console_broadcast_message("Captain", "summon", "BP_HumanCharacter_Thrall_C")
+            .as_deref(),
+        Some("船長 が海兵 (傀儡)を召喚しました")
+    );
+    assert_eq!(
+        build_console_broadcast_message("Captain", "endmatch", "0"),
+        None
     );
     assert_eq!(
         build_console_broadcast_message("Cook", "SetIsThrall", "1").as_deref(),

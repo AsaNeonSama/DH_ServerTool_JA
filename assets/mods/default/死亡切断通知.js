@@ -194,6 +194,9 @@ function SendDeathMessage(PlayerState) {
     if (PlayerState.isNull() || isPendingKill(PlayerState)) {
         return;
     }
+    if ((PlayerState.add(0x22A).readU8() & 0x20) !== 0) {
+        return;
+    }
     var name = getPlayerRoleName(PlayerState);
     var DeathMessages = {
         0: `${name} が死亡しました`,
@@ -210,6 +213,9 @@ function SendDeathMessage(PlayerState) {
 
 function SendDisconnectedMessage(PlayerState) {
     if (PlayerState.isNull() || isPendingKill(PlayerState)) {
+        return;
+    }
+    if ((PlayerState.add(0x22A).readU8() & 0x20) !== 0) {
         return;
     }
     var name = getPlayerRoleName(PlayerState);

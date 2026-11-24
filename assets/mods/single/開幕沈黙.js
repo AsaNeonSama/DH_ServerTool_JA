@@ -82,21 +82,14 @@ function castOpeningHush(GameState) {
     }
     ActiveSpellManagers.push(SpellManager);
 
-    // TS_Hush (ThrallSpells インデックス4) が切り捨てられないよう MaxSpells (+0x228, 初期値3) を拡張
-    SpellManager.add(0x228).writeU32(10);
-
-    var GameInstance = UDH_GameInstance_GetInstance(SpellManager);
-    if (!GameInstance.isNull()) {
-        var ThrallSpells = GameInstance.add(0x440);
-        ADH_SpellManager_SetEquippedSpells(SpellManager, ThrallSpells);
-    } else {
-        var SingleSpellArr = Memory.alloc(24);
-        SingleSpellArr.writePointer(SingleSpellArr.add(16));
-        SingleSpellArr.add(8).writeU32(1);
-        SingleSpellArr.add(12).writeU32(1);
-        SingleSpellArr.add(16).writePointer(SpellClass);
-        ADH_SpellManager_SetEquippedSpells(SpellManager, SingleSpellArr);
-    }
+    // ワールド所有の一時 SpellManager には TS_Hush 単体のみを装備（他プレイヤーの装備へ影響させない）
+    SpellManager.add(0x228).writeU32(1);
+    var SingleSpellArr = Memory.alloc(24);
+    SingleSpellArr.writePointer(SingleSpellArr.add(16));
+    SingleSpellArr.add(8).writeU32(1);
+    SingleSpellArr.add(12).writeU32(1);
+    SingleSpellArr.add(16).writePointer(SpellClass);
+    ADH_SpellManager_SetEquippedSpells(SpellManager, SingleSpellArr);
 
     // Tier 1 (TST_ONE=2、30秒) を設定し、チャージ残量 (+0x284) が閾値を満たすよう補正
     ADH_SpellManager_SetSpellChargeTier(SpellManager, SPELL_TIER_LEVEL_1);

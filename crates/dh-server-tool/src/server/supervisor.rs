@@ -20,7 +20,9 @@ pub use crate::consts::server::{
 };
 use crate::format::format_seconds;
 use crate::languages;
-use crate::mods::{build_injection_plan, PatchScript, ResolvedPatchScript, DEFAULT_PATCH_SCRIPTS};
+use crate::mods::{
+    prepare_injection_plan, PatchScript, ResolvedPatchScript, DEFAULT_PATCH_SCRIPTS,
+};
 use crate::server::patch_logger::{
     append_patch_runtime_log, reset_patch_runtime_log, PatchLogLevel,
     PATCH_RUNTIME_LOG_RELATIVE_PATH,
@@ -113,6 +115,11 @@ fn print_round_config_summary(
         .map(|patch: &PatchScript| languages::mod_label(patch.label_code))
         .collect::<Vec<&str>>()
         .join(", ");
+    let content_mod_names: String = if plan.selected_content_option_labels.is_empty() {
+        languages::app_text(AppMsgCode::NoneLabel).to_string()
+    } else {
+        plan.selected_content_option_labels.join(", ")
+    };
     let selected_mod_names: String = if plan.selected_option_labels.is_empty() {
         languages::app_text(AppMsgCode::NoneLabel).to_string()
     } else {
@@ -147,6 +154,12 @@ fn print_round_config_summary(
         colors::LIGHT_WHITE,
         languages::app_text(AppMsgCode::SummaryDefaultModsLabel),
         colors::CYAN,
+    ));
+    terminal.println(&format!(
+        "{} * {} {}{content_mod_names}",
+        colors::LIGHT_WHITE,
+        languages::app_text(AppMsgCode::SummaryContentModsLabel),
+        colors::LIGHT_MAGENTA,
     ));
     terminal.println(&format!(
         "{} * {} {}{selected_mod_names}",
@@ -269,6 +282,30 @@ async fn spawn_and_inject_round(
     Ok(session)
 }
 
+fn prepare_round_patches(
+    terminal: &Terminal,
+    plan: &LaunchPlan,
+) -> Option<Vec<ResolvedPatchScript>> {
+    match prepare_injection_plan(
+        &plan.selected_content_option_numbers,
+        &plan.selected_option_numbers,
+        plan.console_patch_port,
+        None,
+    ) {
+        Ok(list) => Some(list),
+        Err(err) => {
+            terminal.println(&format!(
+                "{} * {}",
+                colors::RED,
+                languages::render_server(&ServerMsg::ContentModAssetPrepareError {
+                    error_text: &err,
+                })
+            ));
+            None
+        }
+    }
+}
+
 /// Runs the alternating-port game server lifecycle loop:
 /// spawn+OEP-inject -> 30s `INIT_OK` handshake -> UDP+process watchdog ->
 /// post-match countdown (`R` reconfigure / `Enter` immediate restart) -> alternate port.
@@ -279,10 +316,11 @@ pub async fn run_server_supervisor(
     cancel: &CancellationToken,
 ) {
     let mut active_plan: LaunchPlan = initial_plan;
-    let mut patches: Vec<ResolvedPatchScript> = build_injection_plan(
-        &active_plan.selected_option_numbers,
-        active_plan.console_patch_port,
-    );
+    let Some(mut patches): Option<Vec<ResolvedPatchScript>> =
+        prepare_round_patches(terminal, &active_plan)
+    else {
+        return;
+    };
 
     let mut current_port: u16 = active_plan.server_ports[0];
     let mut round: u32 = 0;
@@ -472,10 +510,12 @@ pub async fn run_server_supervisor(
                     break;
                 }
                 active_plan = updated_plan;
-                patches = build_injection_plan(
-                    &active_plan.selected_option_numbers,
-                    active_plan.console_patch_port,
-                );
+                let Some(next_patches): Option<Vec<ResolvedPatchScript>> =
+                    prepare_round_patches(terminal, &active_plan)
+                else {
+                    break;
+                };
+                patches = next_patches;
                 terminal.println_empty();
                 print_round_config_summary(
                     terminal,

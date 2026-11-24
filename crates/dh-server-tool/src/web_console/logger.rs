@@ -81,6 +81,15 @@ pub fn format_console_command_preview(command: &str) -> String {
             return format!("summon {known_name}");
         }
     }
+    if cmd_name == "endmatch" {
+        let side_code: WebLogDetailCode = if cmd_arg == "0" || cmd_arg.eq_ignore_ascii_case("false")
+        {
+            WebLogDetailCode::EndMatchThrallsWin
+        } else {
+            WebLogDetailCode::EndMatchExplorersWin
+        };
+        return format!("endmatch {}", languages::web_detail_text(side_code));
+    }
     let normalized: String = if cmd_arg.is_empty() {
         cmd_name
     } else {

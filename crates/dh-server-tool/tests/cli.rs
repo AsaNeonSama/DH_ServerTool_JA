@@ -4,7 +4,8 @@ use dh_server_tool::cli::match_setup::{
     ServerSettings,
 };
 use dh_server_tool::cli::mod_selector::{
-    apply_mod_selection_input, build_mod_menu_lines, ModSelectionCommand,
+    apply_content_mod_selection_input, apply_mod_selection_input, build_content_mod_menu_lines,
+    build_mod_menu_lines, ModSelectionCommand,
 };
 use dh_server_tool::languages;
 use dh_server_tool::structs::languages::CliErrorCode;
@@ -214,4 +215,46 @@ fn renders_multi_column_menu_with_bone_dagger_suffix_and_conflict_legend() {
     assert!(plain.contains("4:マップ補強(広漠) <-> 22:観光モード(広漠)"));
     assert!(plain.contains("12:暴風雪マスケット <-> 14:開幕マスケット"));
     assert!(plain.contains("21:観光モード(山頂) <-> 22:観光モード(広漠)"));
+}
+
+#[test]
+fn renders_and_processes_content_mod_selection_separately_from_server_only_mods() {
+    let lines = build_content_mod_menu_lines();
+    let plain = lines
+        .iter()
+        .map(|l| strip_ansi(l))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(plain.contains("1:カスタムスペル(新呪文5種) [PAK必須]"));
+    assert!(!plain.contains("役職ランダム"));
+
+    let mut selected = Vec::new();
+    let added = apply_content_mod_selection_input(&mut selected, "1");
+    assert_eq!(selected, vec![1]);
+    match added {
+        ModSelectionCommand::Processed(step) => {
+            assert_eq!(step.added_labels, vec!["カスタムスペル(新呪文5種)"]);
+            assert_eq!(step.invalid_tokens, Vec::<String>::new());
+        }
+        other => panic!("unexpected command: {other:?}"),
+    }
+
+    let invalid = apply_content_mod_selection_input(&mut selected, "2");
+    assert_eq!(selected, vec![1]);
+    match invalid {
+        ModSelectionCommand::Processed(step) => {
+            assert_eq!(step.invalid_tokens, vec!["2"]);
+        }
+        other => panic!("unexpected command: {other:?}"),
+    }
+
+    assert_eq!(
+        apply_content_mod_selection_input(&mut selected, "c"),
+        ModSelectionCommand::Cleared
+    );
+    assert_eq!(selected, Vec::<u32>::new());
+    assert_eq!(
+        apply_content_mod_selection_input(&mut selected, "y"),
+        ModSelectionCommand::Confirm
+    );
 }

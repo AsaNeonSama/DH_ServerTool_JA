@@ -28,7 +28,8 @@ pub fn actor_display_name(key: &str) -> Option<&'static str> {
         "BP_Cannibal_C" | "BP_Cannibal_Crawler_C" | "BP_Cannibal_Shambler_C" => {
             Some("人喰い人種")
         }
-        "BP_HumanCharacter_C" => Some("海兵"),
+        "BP_HumanCharacter_C" => Some("海兵 (船員)"),
+        "BP_HumanCharacter_Thrall_C" => Some("海兵 (傀儡)"),
         "BP_Totem_C" => Some("トーテム"),
         "BP_ExplosionActor_C" => Some("爆裂魔法"),
         "BP_Explosion_Nitro_C" => Some("大爆裂魔法・チャージ 120 %"),
@@ -212,6 +213,8 @@ pub fn detail_text(code: WebLogDetailCode) -> &'static str {
         WebLogDetailCode::BroadcastAllTarget => "全員",
         WebLogDetailCode::KickVerb => "をキック",
         WebLogDetailCode::ShutdownDetail => "Webコンソールを停止しました",
+        WebLogDetailCode::EndMatchExplorersWin => "探検家勝利",
+        WebLogDetailCode::EndMatchThrallsWin => "傀儡勝利",
     }
 }
 

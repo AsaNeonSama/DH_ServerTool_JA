@@ -63,6 +63,8 @@ pub enum WebLogDetailCode {
     BroadcastAllTarget,
     KickVerb,
     ShutdownDetail,
+    EndMatchExplorersWin,
+    EndMatchThrallsWin,
 }
 
 /// Structured Web Console (Tab 1) log event.
@@ -260,6 +262,7 @@ pub enum AppMsgCode {
     SummaryServerPortLabel,
     SummaryWebConsoleLabel,
     SummaryDefaultModsLabel,
+    SummaryContentModsLabel,
     SummarySelectedModsLabel,
     NoneLabel,
     ExitedCleanly,
@@ -335,7 +338,12 @@ pub enum CliMsgCode {
     SettingThralls,
     InvalidChoiceRetry,
     InvalidChoiceShort,
+    ContentModsLabel,
+    ContentModsGuideBeforeY,
+    ContentModChoicePrompt,
+    ContentModPakSuffix,
     DefaultModsLabel,
+    ServerOnlyModsLabel,
     ModSelectionGuideBeforeY,
     ModSelectionGuideBetweenYAndC,
     ModSelectionGuideAfterC,
@@ -377,6 +385,7 @@ pub enum ModLabelCode {
     DefaultSpellChargeFix,
     DefaultDeathOfflineAnnouncement,
     DefaultNetworkFix,
+    ContentTotemSpells,
     RandRole,
     SpellCastStart,
     ResourcesSpawnerDeparture,
@@ -453,6 +462,9 @@ pub enum ServerMsg<'a> {
         port: u16,
     },
     StartupInjectError {
+        error_text: &'a str,
+    },
+    ContentModAssetPrepareError {
         error_text: &'a str,
     },
     StartupRetryAfter {

@@ -6,6 +6,10 @@ members = [
     "crates/dh-server-tool",
 ]
 
+[workspace.package]
+license-file = "LICENSE"
+repository = "https://github.com/AsaNeonSama/DH_ServerTool_JA"
+
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "warn"
 

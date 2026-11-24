@@ -64,6 +64,9 @@ pub fn render(msg: &ServerMsg<'_>) -> String {
         ServerMsg::StartupInjectError { error_text } => {
             format!("サーバー起動・注入エラー: {error_text}")
         }
+        ServerMsg::ContentModAssetPrepareError { error_text } => {
+            format!("クライアントPAK必須MODの資産展開に失敗しました: {error_text}")
+        }
         ServerMsg::StartupRetryAfter { delay_text } => {
             format!("{delay_text}後にポートを切り替えて再試行します...")
         }

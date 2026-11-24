@@ -1,9 +1,13 @@
 use std::collections::HashSet;
+use std::fs;
+use std::path::PathBuf;
 
 use dh_server_tool::mods::{
     are_mod_options_conflicting, build_injection_plan, find_conflicting_selected_options,
-    find_option_by_number, get_mod_conflict_pairs, CONSOLE_PATCH_ID, CONSOLE_PATCH_PORT_TOKEN,
-    DEFAULT_PATCH_SCRIPTS, SELECTABLE_MOD_OPTIONS,
+    find_content_option_by_number, find_option_by_number, get_mod_conflict_pairs,
+    prepare_injection_plan, CONSOLE_PATCH_ID, CONSOLE_PATCH_PORT_TOKEN,
+    CONTENT_MOD_ASSET_ROOT_TOKEN, DEFAULT_PATCH_SCRIPTS, SELECTABLE_CONTENT_MOD_OPTIONS,
+    SELECTABLE_MOD_OPTIONS,
 };
 
 #[test]
@@ -118,5 +122,105 @@ fn enforces_all_four_bidirectional_conflict_rules() {
             "single:blizzard_armory_open_win64",
             "single:sightseeing_expanse_win64",
         ]
+    );
+}
+
+#[test]
+fn embeds_zero_asset_totem_spells_content_mod_and_orders_before_server_only_mods() {
+    assert_eq!(SELECTABLE_CONTENT_MOD_OPTIONS.len(), 1);
+    let opt = find_content_option_by_number(1).expect("content mod #1 must exist");
+    assert_eq!(opt.id, "content_totem_spells");
+    assert_eq!(opt.scripts.len(), 1);
+    let script = &opt.scripts[0];
+    assert!(
+        script.asset_bundle.is_none(),
+        "Option C pure-JS totem spells server script must not embed server-side .uasset bundles"
+    );
+    assert!(
+        !script.source.contains(CONTENT_MOD_ASSET_ROOT_TOKEN),
+        "Option C pure-JS totem spells script must not reference __CONTENT_MOD_ASSET_ROOT__"
+    );
+    for class_name in [
+        "TS_BombMice_C",
+        "TS_BoomShip_C",
+        "TS_Teleport_C",
+        "TS_Intimidate_C",
+        "TS_Transfer_C",
+    ] {
+        assert!(
+            script.source.contains(class_name),
+            "missing synthetic spell class: {class_name}"
+        );
+    }
+    assert!(
+        script.source.contains("intimidateRadiusUU: 5000.0"),
+        "TS_Intimidate radius must be 50m (5000.0 UU)"
+    );
+    assert!(
+        script.source.contains("0xE84190") && script.source.contains("0xD47050"),
+        "TS_BombMice must hook SpawnAI (0xE84190) and bind AddTargetToThreatTable (0xD47050)"
+    );
+
+    let temp_cache: PathBuf =
+        std::env::temp_dir().join(format!("dh_content_mod_test_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&temp_cache);
+
+    // Injection order: 4 default -> Content MODs -> Server-only JS MODs
+    let plan = prepare_injection_plan(&[1], &[1, 13], 7893, Some(&temp_cache))
+        .expect("prepare_injection_plan must succeed");
+    let names: Vec<&str> = plan.iter().map(|p| p.file_name.as_str()).collect();
+    assert_eq!(
+        names,
+        vec![
+            "コンソール連携.js",
+            "スペルチャージ修正.js",
+            "死亡切断通知.js",
+            "接続保護_乱入防止.js",
+            "カスタムスペル.js",
+            "役職ランダム.js",
+            "銃_弓同時所持.js",
+        ]
+    );
+    assert!(
+        !temp_cache.exists(),
+        "zero-asset Option C Content MOD should not create any server asset cache directory"
+    );
+}
+
+#[test]
+fn console_bridge_handles_per_player_setspellcharge_directly() {
+    let console_raw = DEFAULT_PATCH_SCRIPTS
+        .iter()
+        .find(|p| p.id == CONSOLE_PATCH_ID)
+        .expect("console default patch must exist");
+    assert!(
+        console_raw.source.contains("cmdName === 'setspellcharge'"),
+        "console bridge must intercept setspellcharge per player"
+    );
+    assert!(
+        console_raw.source.contains("0xE82CC0"),
+        "console bridge must bind ADH_SpellManager::SetSpellChargeLevel (0xE82CC0)"
+    );
+    assert!(
+        console_raw.source.contains("cmdName === 'endmatch'"),
+        "console bridge must intercept endmatch with victory side selection"
+    );
+    assert!(
+        console_raw.source.contains("0xDA9C30"),
+        "console bridge must bind ADH_GameState::SetMatchResult (0xDA9C30)"
+    );
+    assert!(
+        console_raw.source.contains("BP_HumanCharacter_Thrall_C"),
+        "console bridge must support summoning Thrall Marine (BP_HumanCharacter_Thrall_C)"
+    );
+    assert!(
+        console_raw.source.contains("0x25570C0") && console_raw.source.contains("0x255FCF0"),
+        "console bridge must use deferred PlayerState spawn so summoned Marines stay out of PlayerArray"
+    );
+    assert!(
+        console_raw.source.contains("0xE81F00")
+            && console_raw.source.contains("snapshotSpellManagerEquippedSpells")
+            && console_raw.source.contains("restoreSpellManagerEquippedSpells"),
+        "console bridge must snapshot and restore EquippedSpells via SetEquippedSpells (0xE81F00) across Thrall toggles"
     );
 }
