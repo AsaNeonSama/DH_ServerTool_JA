@@ -21,7 +21,8 @@ Languages included:
   [可以] 免费用于个人或非商业目的的学习、技术交流、自建服运维、修改与分享。
   [必须] 二次开发或修改分发时，公开完整源码、沿用本协议、保留原始声明。
   [禁止] 闭源/加密壳分发、任何直接或变相商业盈利、任何平台或私服独占。
-  [边界] 游戏版权全归官方；未经官方授权的游戏原生派生文件不产生独立产权；
+  [边界] 游戏版权归官方，所含 UE4 付费商用资产依原资产及版权方购买情况而定；
+         未经相应权利方授权的原生及相关商用资产派生文件不产生独立产权；
          缺乏准确、有效且受法律保护的版权权属基础的下架要求概不受理。
 
 --------------------------------------------------------------------------------
@@ -29,24 +30,24 @@ Languages included:
 使用、复制、修改、集成或分发本项目（DH_ServerTool_JA，含源代码、脚本、构建产物及文档）前，请阅读以下条款。一旦实施上述任一行为，即视为您同意受本许可证约束。
 
 --------------------------------------------------------------------------------
-第一条｜游戏版权归属与官方下架通道
+第一条｜游戏与资产版权归属及权利方下架通道
 --------------------------------------------------------------------------------
 
-1. 游戏原生资产归属
-   《Dread Hunger》游戏本体及其全部原生资产（含美术、音频、官方代码、商标及原始数据结构）的知识产权，均归新西兰 Digital Confectioners Ltd.（下称“游戏版权方”）所有。
+1. 游戏原生资产及 UE4 付费商用资产归属
+   《Dread Hunger》游戏本体及其官方原生资产（含官方美术、音频、官方代码、商标及原始数据结构）的知识产权，归新西兰 Digital Confectioners Ltd.（下称“游戏版权方”）所有。除游戏版权方自有资产外，游戏中亦包含部分 Unreal Engine 4（UE4）付费商用资产，该类资产的知识产权归属与权利范围应依原资产的原始权属、许可条款及游戏版权方的实际购买与授权情况而定（以上两类资产以下合称“游戏原生及相关商用资产”）。
 
 2. 非官方性质与风险自担
    本项目是玩家社区开发的非官方辅助工具，仅供技术交流与学习参考。鉴于官方已公开专用服务端（Dedicated Server）并停止维护运营，本工具仅面向自建专用服务端环境设计。您需自行评估并承担使用本工具的一切运行与合规风险。
 
-3. 官方专属下架通道
-   如本项目无意中侵犯游戏版权方的合法权益，请通过本协议头部载明的联系方式，以官方域名邮箱、官方认证渠道或有效授权文件联系维护者。身份核验通过后，维护者将立即清理并下架相关内容。
+3. 官方及原资产权利方下架通道
+   如本项目无意中侵犯游戏版权方或相关 UE4 付费商用资产合法权利方的合法权益，请通过本协议头部载明的联系方式，以官方域名邮箱、官方认证渠道或有效权属与授权证明文件联系维护者。身份及权属核验通过后，维护者将立即清理并下架相关内容。
 
 --------------------------------------------------------------------------------
 第二条｜授权范围、源码公开义务与社区贡献
 --------------------------------------------------------------------------------
 
 1. 权利保留与授权范围
-   本项目不主张对《Dread Hunger》及其衍生生态享有任何排他性、商业性或对抗游戏版权方的权利。维护者仅就独立编写且与游戏原生资产可分离的源代码、脚本及文档，依法保留著作权；本协议所设限制均出于防御性目的，仅用于防止闭源、倒卖与独占。
+   本项目不主张对《Dread Hunger》及其衍生生态享有任何排他性、商业性或对抗游戏版权方及相关原资产权利方的权利。维护者仅就独立编写且与游戏原生及相关商用资产可分离的源代码、脚本及文档，依法保留著作权；本协议所设限制均出于防御性目的，仅用于防止闭源、倒卖与独占。
 
    在遵守本许可证全部条款的前提下，您可出于个人或非商业目的，在全球范围内免费、非独占、不可转让地使用、复制、修改、集成与再分发本项目。当您向第三方再分发本项目或其衍生作品时，接收方直接依据本许可证自动获得授权。持续合规期间本授权不可撤销；一旦违约，则按第五条自动终止。
 
@@ -88,20 +89,20 @@ Languages included:
 
 1. 不受版权保护的客观范围
    依据各法域通行著作权法原则——包括思想与表达二分法、独创性要件及非法演绎排除规则（例如美国《版权法》17 U.S.C. § 102(b) 与 § 103(a)）——以下内容本身不产生独立且受法律保护的知识产权，任何社区、团队或个人均不得对其主张版权或独占权：
-   - 未经游戏版权方授权的《Dread Hunger》游戏本体及全部原生资产；
-   - 未经游戏版权方（Digital Confectioners Ltd.）授权，基于游戏原生文件修改、提取、重打包或与原生资产不可分离的各类社区派生文件；
+   - 未经相应合法权利方（含游戏版权方及所含 UE4 付费商用资产的合法权利方）授权的《Dread Hunger》游戏本体及全部游戏原生及相关商用资产；
+   - 未经相应合法权利方授权，基于游戏原生文件或所含 UE4 付费商用资产修改、提取、重打包或与游戏原生及相关商用资产不可分离的各类社区派生文件；
    - 围绕该游戏产生的功能构想、玩法机制、内存偏移与参数定义、公开通信格式及通用互操作接口。
 
 2. 独立实现与互操作性声明
-   本项目核心代码、脚本及文档由维护者独立编写与重构，仅就独立创作且与游戏原生资产可分离的部分适用本协议第二条的权利保留与防御性约束：
+   本项目核心代码、脚本及文档由维护者独立编写与重构，仅就独立创作且与游戏原生及相关商用资产可分离的部分适用本协议第二条的权利保留与防御性约束：
    - 本项目仅为实现与《Dread Hunger》服务端及社区生态的技术兼容与互操作，遵循公开的通用配置格式、接口结构及上述第 1 款所列不受版权保护的客观技术事实；
    - 本项目不主张对任何第三方独立原创代码的权利，也不有意包含未经授权、受法律保护的第三方专有或独立原创源码；
    - 引入的与《Dread Hunger》无关的通用第三方开源组件，仍各自受其原有开源许可证约束。
 
 3. 下架受理标准与滥用反制
-   - 官方资产通道：涉及《Dread Hunger》本体及原生资产的下架请求，仅按第一条受理经核验的游戏版权方（Digital Confectioners Ltd.）正式通知。
-   - 无有效权属基础概不受理：对于无法提供准确、有效且受法律保护的版权权属基础及合法权利证明的下架要求（包括以缺乏合法权属基础的版权主张、未经官方授权的游戏原生派生文件、功能构想、玩法机制或接口兼容为由提出的要求），维护者概不受理。
-   - 独立原创代码核验：第三方若主张本项目包含其受法律保护且与游戏原生资产可分离的独立原创源码，须依法提交可核验的权属证明及具体源码级定位与比对证据；核实属实后，维护者将依法及时处理。
+   - 官方及原资产通道：涉及《Dread Hunger》本体及游戏原生及相关商用资产的下架请求，仅按第一条受理经核验的游戏版权方（Digital Confectioners Ltd.）或对应 UE4 付费商用资产合法权利方的正式通知。
+   - 无有效权属基础概不受理：对于无法提供准确、有效且受法律保护的版权权属基础及合法权利证明的下架要求（包括以缺乏合法权属基础的版权主张、未经相应合法权利方授权的游戏原生及相关商用资产派生文件、功能构想、玩法机制或接口兼容为由提出的要求），维护者概不受理。
+   - 独立原创代码核验：第三方若主张本项目包含其受法律保护且与游戏原生及相关商用资产可分离的独立原创源码，须依法提交可核验的权属证明及具体源码级定位与比对证据；核实属实后，维护者将依法及时处理。
    - 滥用投诉的反制保留：若缺乏法定依据或出于恶意的投诉触发托管平台处理流程，维护者保留依法提交反通知（包括美国《数字千年版权法》17 U.S.C. § 512(g) 规定的反通知程序）及追究虚假陈述责任（包括 17 U.S.C. § 512(f) 规定的损害赔偿责任）的全部权利。
 
 --------------------------------------------------------------------------------
@@ -135,33 +136,33 @@ Languages included:
   [許可] 個人または非営利目的の学習、技術交流、自己ホスト運用、改変、共有は無料です。
   [義務] 二次開発・改変配布時は、完全なソース公開・本ライセンス継承・表示保持が必須です。
   [禁止] クローズド化、難読化のみでの配布、直接・間接の営利利用、特定プラットフォームでの独占。
-  [境界] 原ゲームの著作権はすべて公式に帰属。公式許諾のない原ゲーム派生ファイルには独立した
-         権利は生じません。正確・有効かつ法的に保護される著作権の帰属根拠を欠く削除要請は
-         一切受理しません。
+  [境界] 原ゲームの著作権は公式に帰属し、含まれる UE4 有料商用アセットは原アセットおよび
+         公式の購入・許諾状況に依拠します。権利者の許諾のない派生ファイルには独立した権利は
+         生じず、正確・有効かつ法的に保護される著作権の帰属根拠を欠く削除要請は一切受理しません。
 
 --------------------------------------------------------------------------------
 
 本プロジェクト（DH_ServerTool_JA：ソースコード、スクリプト、ビルド成果物、関連ドキュメントを含みます）を使用、複製、改変、統合、または再配布する前に、以下の条項をお読みください。いずれかの行為を行った時点で、本ライセンスに同意したものとみなされます。
 
 --------------------------------------------------------------------------------
-第1条｜ゲーム著作権の帰属および公式削除窓口
+第1条｜ゲーム・アセット著作権の帰属および権利者削除窓口
 --------------------------------------------------------------------------------
 
-1. 原ゲーム資産の帰属
-   ゲーム『Dread Hunger』本体およびすべてのオリジナル資産（美術、音声、公式コード、商標、オリジナルのデータ構造等）に関する知的財産権は、すべてニュージーランドの Digital Confectioners Ltd.（以下「ゲーム著作権者」といいます）に帰属します。
+1. 原ゲーム資産および UE4 有料商用アセットの帰属
+   ゲーム『Dread Hunger』本体およびその公式オリジナル資産（公式美術、音声、公式コード、商標、オリジナルのデータ構造等）に関する知的財産権は、ニュージーランドの Digital Confectioners Ltd.（以下「ゲーム著作権者」といいます）に帰属します。ゲーム著作権者自身の資産のほか、ゲーム内には一部の Unreal Engine 4（UE4）有料商用アセットも含まれており、これらの知的財産権の帰属および権利範囲は、原アセットの本来の権利関係・ライセンス条項、ならびにゲーム著作権者の実際の購入・許諾状況に従って定まります（以上の2種類を総称して、以下「原ゲームおよび関連商用資産」といいます）。
 
 2. 非公式ツールの性質と自己責任
    本プロジェクトは、技術交流および学習を目的としてプレイヤーコミュニティが開発した非公式の補助ツールです。公式による専用サーバー（Dedicated Server）の公開および公式運営の終了を踏まえ、自己ホスト型専用サーバー環境向けに設計されています。利用に伴う運用上・法令上のリスクは、利用者ご自身の責任で判断・負担してください。
 
-3. 公式専用の削除窓口
-   万が一、本プロジェクトがゲーム著作権者の合法的な権利を侵害している場合は、本ライセンス冒頭に記載の連絡先を通じて、公式ドメインのメールアドレス、公式認証チャネル、または有効な委任証明によりメンテナーへご連絡ください。本人確認の完了後、直ちに該当内容を削除・公開停止します。
+3. 公式および原アセット権利者専用の削除窓口
+   万が一、本プロジェクトがゲーム著作権者または関連する UE4 有料商用アセットの適法な権利者の正当な権利を侵害している場合は、本ライセンス冒頭に記載の連絡先を通じて、公式ドメインのメールアドレス、公式認証チャネル、または有効な権利・委任証明によりメンテナーへご連絡ください。本人および権利関係の確認が完了した後、直ちに該当内容を削除・公開停止します。
 
 --------------------------------------------------------------------------------
 第2条｜許諾の範囲、ソース公開義務およびコミュニティ貢献
 --------------------------------------------------------------------------------
 
 1. 権利の留保および許諾の範囲
-   本プロジェクトは、『Dread Hunger』およびその派生エコシステムに対して、いかなる排他的・商業的権利、またはゲーム著作権者に対抗する権利も主張しません。メンテナーは、独自に記述し、かつ原ゲームのオリジナル資産から分離可能なソースコード、スクリプト、およびドキュメントについてのみ、法令に基づき著作権を留保します。本ライセンスの制限は、クローズド化・営利転売・独占を防止する防御的目的のためにのみ設けられています。
+   本プロジェクトは、『Dread Hunger』およびその派生エコシステムに対して、いかなる排他的・商業的権利、またはゲーム著作権者および関連する原アセット権利者に対抗する権利も主張しません。メンテナーは、独自に記述し、かつ原ゲームおよび関連商用資産から分離可能なソースコード、スクリプト、およびドキュメントについてのみ、法令に基づき著作権を留保します。本ライセンスの制限は、クローズド化・営利転売・独占を防止する防御的目的のためにのみ設けられています。
 
    本ライセンスの全条項を遵守することを条件として、個人または非営利の目的に限り、世界的・非独占的・無償・譲渡不可で本プロジェクトを使用、複製、改変、統合、および再配布できます。第三者へ再配布する場合、受領者は本ライセンスの条項に基づき自動的に直接許諾を受けます。条項を遵守している限り本許諾は撤回されず、違反があった場合は第5条に従い自動的に終了します。
 
@@ -203,20 +204,20 @@ Languages included:
 
 1. 著作権保護の対象外となる客観的範囲
    各法域の著作権法に共通する原則——アイデア・表現二分論、創作性の要件、および違法な二次的著作物の保護除外（米国著作権法 17 U.S.C. § 102(b) および § 103(a) 等）——に基づき、以下の事項自体には独立して法的に保護される知的財産権は生じず、いかなるコミュニティ、チーム、個人もこれらに対する著作権や独占権を主張できません。
-   - ゲーム著作権者の許諾を得ていない『Dread Hunger』ゲーム本体およびすべてのオリジナル資産。
-   - ゲーム著作権者（Digital Confectioners Ltd.）の許諾なく、ゲームのオリジナルファイルを改変・抽出・再パッケージ化して作成された、またはオリジナル資産と不可分な各種コミュニティ派生ファイル。
+   - 該当する適法な権利者（ゲーム著作権者および含まれる UE4 有料商用アセットの適法な権利者を含みます）の許諾を得ていない『Dread Hunger』ゲーム本体ならびにすべての原ゲームおよび関連商用資産。
+   - 該当する適法な権利者の許諾なく、ゲームのオリジナルファイルまたは含まれる UE4 有料商用アセットを改変・抽出・再パッケージ化して作成された、あるいは原ゲームおよび関連商用資産と不可分な各種コミュニティ派生ファイル。
    - 同ゲームに関連する機能構想、ゲームプレイの仕組み、メモリオフセットおよびパラメータ定義、公開通信形式、ならびに汎用的な相互運用インターフェース。
 
 2. 独自実装および相互運用性の表明
-   本プロジェクトの中核コード、スクリプト、およびドキュメントは、メンテナーが独自に記述・再構築したものであり、独自に創作され、かつ原ゲームのオリジナル資産から分離可能な部分に限り、第2条の権利留保および防御的制約が適用されます。
+   本プロジェクトの中核コード、スクリプト、およびドキュメントは、メンテナーが独自に記述・再構築したものであり、独自に創作され、かつ原ゲームおよび関連商用資産から分離可能な部分に限り、第2条の権利留保および防御的制約が適用されます。
    - 本プロジェクトは、『Dread Hunger』専用サーバーおよびコミュニティエコシステムとの技術的互換性・相互運用性を確保する目的に限り、公開されている汎用設定形式、インターフェース構造、および前項の著作権保護対象外となる客観的技術事実に準拠しています。
    - 本プロジェクトは第三者の独自オリジナルコードに対する権利を主張せず、無許諾かつ法的に保護される第三者の専有ソースコードまたは独自オリジナルソースコードを意図的に含むものでもありません。
    - 『Dread Hunger』と無関係な汎用サードパーティ製オープンソースコンポーネントは、引き続き元のオープンソースライセンスに従います。
 
 3. 削除要請の受理基準および濫用への対抗措置
-   - 公式資産に関する要請：『Dread Hunger』本体およびオリジナル資産の権利に基づく削除要請は、第1条に従い本人確認済みのゲーム著作権者（Digital Confectioners Ltd.）からの正式通知のみを受け付けます。
-   - 有効な権利根拠のない要請の不受理：正確・有効かつ法的に保護される著作権の帰属根拠および適法な権利証明を提示できない削除要請（適法な権利根拠を欠く著作権主張、公式許諾のない原ゲーム派生ファイル、機能構想、ゲーム仕様、またはインターフェース互換性のみを理由とする要請を含みます）は、メンテナーにおいて一切受理しません。
-   - 独自オリジナルソースコードの検証：第三者が、法的に保護され、かつ原ゲームのオリジナル資産から分離可能な自らの独自オリジナルソースコードが本プロジェクトに含まれていると主張する場合は、法令に基づき検証可能な権利証明および具体的なソースコード単位の特定・比較証拠を提出してください。事実確認のうえ、法令に従って速やかに対応します。
+   - 公式および原アセットに関する要請：『Dread Hunger』本体ならびに原ゲームおよび関連商用資産の権利に基づく削除要請は、第1条に従い本人・権利確認済みのゲーム著作権者（Digital Confectioners Ltd.）または対応する UE4 有料商用アセットの適法な権利者からの正式通知のみを受け付けます。
+   - 有効な権利根拠のない要請の不受理：正確・有効かつ法的に保護される著作権の帰属根拠および適法な権利証明を提示できない削除要請（適法な権利根拠を欠く著作権主張、該当する適法な権利者の許諾のない原ゲームおよび関連商用資産の派生ファイル、機能構想、ゲーム仕様、またはインターフェース互換性のみを理由とする要請を含みます）は、メンテナーにおいて一切受理しません。
+   - 独自オリジナルソースコードの検証：第三者が、法的に保護され、かつ原ゲームおよび関連商用資産から分離可能な自らの独自オリジナルソースコードが本プロジェクトに含まれていると主張する場合は、法令に基づき検証可能な権利証明および具体的なソースコード単位の特定・比較証拠を提出してください。事実確認のうえ、法令に従って速やかに対応します。
    - 濫用的な削除申立てに対する対抗措置の留保：法的根拠を欠く、または悪意ある申立てによってホスティングプラットフォームの処理が開始された場合、メンテナーは法令に基づく対抗通知（米国デジタルミレニアム著作権法 17 U.S.C. § 512(g) に基づく対抗通知手続を含みます）の提出および虚偽申告に対する損害賠償請求（17 U.S.C. § 512(f) を含みます）を含むすべての権利を留保します。
 
 --------------------------------------------------------------------------------
@@ -251,34 +252,35 @@ Languages included:
   [MUST]   Publish full source code, keep this exact License, and retain notices on any derivative.
   [CANNOT] Distribute closed-source/obfuscated-only builds, monetize directly or indirectly,
            or lock this tool into exclusive platforms or private servers.
-  [SCOPE]  All game copyrights belong to the Game Copyright Holder. Unauthorized files derived
-           from original game assets do not create independent IP rights. Takedown requests
-           without an accurate, valid, and legally protected copyright ownership basis will
-           not be accepted.
+  [SCOPE]  Game copyrights belong to the Game Copyright Holder, while embedded paid commercial
+           UE4 assets depend on the original asset rights and the Game Copyright Holder's
+           purchase/licensing terms. Unauthorized files derived from those assets do not create
+           independent IP rights. Takedown requests without an accurate, valid, and legally
+           protected copyright ownership basis will not be accepted.
 
 --------------------------------------------------------------------------------
 
 Please read the terms below before using, copying, modifying, integrating, or distributing this project (DH_ServerTool_JA, including its source code, scripts, build outputs, and documentation). Doing any of the above means you agree to be bound by this License.
 
 --------------------------------------------------------------------------------
-Article 1 | Game Copyright Ownership and Official Takedown Channel
+Article 1 | Game & Asset Copyright Ownership and Rightsholder Takedown Channel
 --------------------------------------------------------------------------------
 
-1. Original Game Assets
-   All intellectual property rights in the game "Dread Hunger" and its original assets (including artwork, audio, official code, trademarks, and native data structures) belong to Digital Confectioners Ltd. (New Zealand) (the "Game Copyright Holder").
+1. Original Game Assets and Paid Commercial UE4 Assets
+   Intellectual property rights in the game "Dread Hunger" and its official original assets (including official artwork, audio, official code, trademarks, and native data structures) belong to Digital Confectioners Ltd. (New Zealand) (the "Game Copyright Holder"). In addition to the Game Copyright Holder's own assets, the game also contains certain paid commercial Unreal Engine 4 (UE4) assets, whose intellectual property ownership and scope of rights depend on the original asset's ownership, license terms, and the Game Copyright Holder's actual purchase and licensing status (collectively, the "Original Game and Related Commercial Assets").
 
 2. Unofficial Nature and Assumed Risk
    This project is an unofficial community utility built strictly for technical exchange and learning. Because the official Dedicated Server has been publicly released and official live operations have ended, this tool is designed exclusively for self-hosted dedicated server environments. You assume all operational and legal compliance risks from using it.
 
-3. Official Takedown Channel
-   If any part of this project inadvertently infringes the legitimate rights of the Game Copyright Holder, please contact the maintainer through the contact link listed in the header via an official domain email, verified official channel, or valid proof of authorization. Once verified, the relevant content will be removed promptly.
+3. Official and Rightsholder Takedown Channel
+   If any part of this project inadvertently infringes the legitimate rights of the Game Copyright Holder or the lawful rightsholder of any relevant paid commercial UE4 asset, please contact the maintainer through the contact link listed in the header via an official domain email, verified official channel, or valid proof of ownership and authorization. Once identity and ownership are verified, the relevant content will be removed promptly.
 
 --------------------------------------------------------------------------------
 Article 2 | License Grant, Source Disclosure, and Community Contributions
 --------------------------------------------------------------------------------
 
 1. Rights Retention and Grant
-   This project claims no exclusive, commercial, or adversarial rights over "Dread Hunger," its ecosystem, or against the Game Copyright Holder. Solely for source code, scripts, and documentation independently authored by the maintainer and separable from original game assets, the maintainer retains copyright as provided by law. The restrictions in this License exist strictly for defensive purposes: preventing closed-source hoarding, monetization, and monopolization.
+   This project claims no exclusive, commercial, or adversarial rights over "Dread Hunger," its ecosystem, or against the Game Copyright Holder or relevant original asset rightsholders. Solely for source code, scripts, and documentation independently authored by the maintainer and separable from the Original Game and Related Commercial Assets, the maintainer retains copyright as provided by law. The restrictions in this License exist strictly for defensive purposes: preventing closed-source hoarding, monetization, and monopolization.
 
    Provided you comply with all terms of this License, you are granted a worldwide, non-exclusive, royalty-free, non-transferable right to use, copy, modify, integrate, and redistribute this project for personal or non-commercial purposes. Each time you redistribute this project or a derivative work, the recipient automatically receives a direct license under these terms. This grant is irrevocable while you remain in compliance and terminates automatically upon breach under Article 5.
 
@@ -320,20 +322,20 @@ Article 4 | Rights Boundaries, Interoperability, and Takedown Standards
 
 1. Objective Scope Excluded from Copyright Protection
    Under widely recognized copyright principles across jurisdictions — including the idea-expression dichotomy, originality requirements, and exclusion of unlawful derivatives (such as 17 U.S.C. § 102(b) and § 103(a)) — the following do not give rise to independent, legally protected intellectual property rights, and no community, team, or individual may claim copyright or exclusive control over them:
-   - Unauthorized copies or uses of the game "Dread Hunger" and all of its original assets;
-   - Community-derived files created without authorization from the Game Copyright Holder (Digital Confectioners Ltd.) by modifying, extracting, or repacking original game files, or otherwise inseparable from original game assets; and
+   - Copies or uses of the game "Dread Hunger" and all Original Game and Related Commercial Assets without authorization from the applicable lawful rightsholders (including the Game Copyright Holder and lawful rightsholders of embedded paid commercial UE4 assets);
+   - Community-derived files created without authorization from the applicable lawful rightsholders by modifying, extracting, or repacking original game files or embedded paid commercial UE4 assets, or otherwise inseparable from the Original Game and Related Commercial Assets; and
    - Feature ideas, gameplay mechanics, memory offsets and parameter definitions, public communication formats, and general interoperability interfaces related to the game.
 
 2. Independent Implementation and Interoperability Statement
-   The core source code, scripts, and documentation of this project are independently authored and refactored by the maintainer, and the rights retention and defensive constraints under Article 2 apply strictly to independently authored expression separable from original game assets:
+   The core source code, scripts, and documentation of this project are independently authored and refactored by the maintainer, and the rights retention and defensive constraints under Article 2 apply strictly to independently authored expression separable from the Original Game and Related Commercial Assets:
    - Solely to achieve technical compatibility and interoperability with the "Dread Hunger" dedicated server and community ecosystem, this project adheres to publicly observable common configuration formats, interface structures, and the unprotectable objective technical facts listed in Section 1 above.
    - This project claims no rights over any third party's independently authored code and does not intentionally include unauthorized, legally protected third-party proprietary or independently authored source code.
    - Any general-purpose third-party open-source components unrelated to "Dread Hunger" remain governed by their respective original open-source licenses.
 
 3. Takedown Acceptance Standards and Abuse Countermeasures
-   - Official Asset Channel: Takedown requests concerning "Dread Hunger" or its original assets are handled exclusively under Article 1 upon verified official notice from the Game Copyright Holder (Digital Confectioners Ltd.).
-   - Rejection of Invalid Claims: Takedown requests that lack an accurate, valid, and legally protected copyright ownership basis and verifiable proof of rights — including requests relying on copyright claims without a lawful ownership basis, unauthorized derivatives of original game assets, feature ideas, gameplay mechanics, or interface compatibility — will not be accepted or entertained by the maintainer.
-   - Verification of Independent Code Claims: Any third party claiming this project includes their legally protected, independently authored source code separable from original game assets must submit verifiable proof of ownership and specific source-level identification and comparison evidence under applicable law. Verified claims will be addressed promptly in accordance with law.
+   - Official and Asset Rightsholder Channel: Takedown requests concerning "Dread Hunger" or the Original Game and Related Commercial Assets are handled exclusively under Article 1 upon verified official notice from the Game Copyright Holder (Digital Confectioners Ltd.) or the lawful rightsholder of the relevant paid commercial UE4 asset.
+   - Rejection of Invalid Claims: Takedown requests that lack an accurate, valid, and legally protected copyright ownership basis and verifiable proof of rights — including requests relying on copyright claims without a lawful ownership basis, unauthorized derivatives of Original Game and Related Commercial Assets, feature ideas, gameplay mechanics, or interface compatibility — will not be accepted or entertained by the maintainer.
+   - Verification of Independent Code Claims: Any third party claiming this project includes their legally protected, independently authored source code separable from the Original Game and Related Commercial Assets must submit verifiable proof of ownership and specific source-level identification and comparison evidence under applicable law. Verified claims will be addressed promptly in accordance with law.
    - Countermeasures Against Abuse: If a bad-faith or legally unfounded complaint triggers a hosting platform's takedown process, the maintainer reserves all rights to submit statutory counter-notices (including under 17 U.S.C. § 512(g) of the DMCA) and pursue damages for material misrepresentation (including under 17 U.S.C. § 512(f)).
 
 --------------------------------------------------------------------------------

@@ -4,7 +4,7 @@
 //   [6] TS_BoomShip_C   (船体爆破)       : CD 300s / 持続 2/4/6s / STS_CASTER / 船体に 2/4/6 箇所の破口 (半径 500/1000/1500)
 //   [7] TS_Teleport_C   (テレポート)     : CD 120s / 持続 2s / トーテム指定転移 + 牢獄脱出 + ニトロ破壊 + 霊界入場/出現演出
 //   [8] TS_Intimidate_C (威嚇)           : CD 120s / 持続 5/10/15s / STS_CASTER(霊界同等・即発動) / 半径50m丸腰化 / 通知なし(効果音のみ)
-//   [9] TS_Transfer_C   (エネルギー譲渡) : CD 90s  / 持続 2.5s / STS_TARGET / 仲間の傀儡のみ指定可能 / 段階別エネルギー譲渡
+//   [9] TS_Transfer_C   (エネルギー譲渡) : CD 90s  / 持続 2.5s / STS_TARGET / 仲間の傀儡のみ指定可能 / 段階別エネルギー譲渡 / 通知なし(効果音のみ)
 // ※ サーバー側 .pak / .uasset / .uexp 一切不要：UE4 ネイティブ API で UBlueprintGeneratedClass をメモリ合成し
 //    クライアント .pak とビット単位で一致する ClassNetCacheChecksum を維持
 
@@ -56,7 +56,7 @@
         intimidateRadiusUU: 5000.0,
         intimidateDurationsByTier: { 2: 5.0, 3: 10.0, 4: 15.0 },
 
-        // エネルギー譲渡 (TS_Transfer): 仲間の傀儡のみ指定可能
+        // エネルギー譲渡 (TS_Transfer): 通知なし・効果音のみ・仲間の傀儡のみ指定可能
         transferCooldownSec: 90.0,
         transferDurationSec: 2.5,
         transferChargeByTier: {
@@ -143,6 +143,8 @@
 
         // 爆弾ネズミ (TS_BombMice)
         ADH_Character_OnDied: 0xEA11C0,
+        ADH_AnimalCharacter_TakeDamage: 0xD73410,
+        ADH_AnimalCharacter_Destroyed: 0xD4FDA0,
         UDH_TotemSpell_Summoning_SpawnAI: 0xE84190,
         ADH_AIController_AddTargetToThreatTable: 0xD47050,
         FActorSpawnParameters_Ctor: 0x29584A0,
@@ -161,10 +163,7 @@
         UDH_InventoryManager_SelectInventory_Impl: 0xDE20C0,
         UDH_InventoryManager_UseInventory_Impl: 0xDEABB0,
         UDH_InventoryManager_AimInventory_Impl: 0xDBD3D0,
-        UDH_InventoryManager_ReloadInventory_Impl: 0xDDE3A0,
-
-        // プレイヤー通知 RPC（エネルギー譲渡用）
-        ADH_PC_ReceiveThrallMessage: 0xEE7810
+        UDH_InventoryManager_ReloadInventory_Impl: 0xDDE3A0
     };
 
     var OFFSETS = {
@@ -418,7 +417,6 @@
     var AActor_GetWorldTimerManager = new NativeFunction(moduleBase.add(RVA.AActor_GetWorldTimerManager), 'pointer', ['pointer'], 'win64');
     var FTimerManager_FindTimer = new NativeFunction(moduleBase.add(RVA.FTimerManager_FindTimer), 'pointer', ['pointer', 'pointer'], 'win64');
     var FTimerManager_InternalClearTimer = new NativeFunction(moduleBase.add(RVA.FTimerManager_InternalClearTimer), 'void', ['pointer', 'uint64'], 'win64');
-    var ADH_PC_ReceiveThrallMessage = new NativeFunction(moduleBase.add(RVA.ADH_PC_ReceiveThrallMessage), 'void', ['pointer', 'pointer', 'pointer'], 'win64');
 
     // GC 防止用トップレベル配列（すべての NativeCallback を常駐保持）
     var pinnedCallbacks = [];
@@ -758,31 +756,6 @@
         return readObjectName(cls);
     }
 
-    function sendThrallNotice(pcPtr, message) {
-        if (!pcPtr || pcPtr.isNull() || isPendingKill(pcPtr) || !message) {
-            return;
-        }
-        var fTextPtr = Memory.alloc(24);
-        fTextPtr.writeU64(0);
-        fTextPtr.add(8).writeU64(0);
-        fTextPtr.add(16).writeU64(0);
-
-        var cap = message.length + 3;
-        var fStringPtr = Memory.alloc(16 + cap * 3);
-        var bufPtr = fStringPtr.add(16);
-        fStringPtr.writePointer(bufPtr);
-        fStringPtr.add(8).writeU32(message.length + 1);
-        fStringPtr.add(12).writeU32(cap);
-        bufPtr.writeUtf16String(message);
-
-        FText_FromString(fTextPtr, fStringPtr);
-        try {
-            ADH_PC_ReceiveThrallMessage(pcPtr, fTextPtr, ptr(0));
-        } finally {
-            FText_Dtor(fTextPtr);
-        }
-    }
-
     function getWorldAndTime() {
         var world = moduleBase.add(RVA.GWorld).readPointer();
         if (!world || world.isNull()) {
@@ -972,6 +945,7 @@
             var ratCls = loadVanillaClass(VANILLA_PATHS.BP_Prey_Rat);
             if (!ratCls.isNull()) {
                 cachedClasses.bpPreyRat = ratCls;
+                captureWildRatCdoDefaultsOnce(ratCls);
                 writeOwnedPointerTArray(cdo.add(OFFSETS.UDH_TotemSpell_Summoning_SummonedAIClasses), [ratCls]);
             }
             writeTierTMap(
@@ -1257,9 +1231,19 @@
     var activeTeleportTargets = {};
     var teleportSpiritWalkMap = {};
 
-    // 爆弾ネズミ (TS_BombMice): spellKey -> { spell, instigatorHuman } / ratKey -> { rat, spellKey, instigatorHuman, fusing, fuseAt }
+    // 爆弾ネズミ (TS_BombMice):
+    //   - activeBombMiceSpells: spellKey -> { spell, instigatorHuman }
+    //   - trackedBombMice: ptrKey -> 個体ごとの独立状態 { rat, ptrKey, internalIndex, nameRaw, identityKey, spellKey, instigatorHuman, preferredTarget, fusing, fuseAt, detonated, nextAggroAt }
+    //   - finishedBombMouseIds: 起爆・消滅済みの個体識別子（SummonedAIs 残存やポインタ再利用による誤追跡を完全遮断）
+    //   - wildRatCdoDefaults / origExplosionCdoDefaults: 原版 CDO の不変スナップショット（野生ネズミや通常爆発への波及を防止）
     var activeBombMiceSpells = {};
     var trackedBombMice = {};
+    var finishedBombMouseIds = {};
+    var wildRatCdoDefaults = null;
+    var origExplosionCdoDefaults = null;
+    var ratCdoSwapDepth = 0;
+    var inBombMouseDetonation = 0;
+    var pendingBombMouseDetonations = [];
 
     function resetRuntimeStateIfWorldChanged(worldPtr) {
         var key = worldPtr && !worldPtr.isNull() ? worldPtr.toString() : '';
@@ -1270,6 +1254,11 @@
             teleportSpiritWalkMap = {};
             activeBombMiceSpells = {};
             trackedBombMice = {};
+            finishedBombMouseIds = {};
+            pendingBombMouseDetonations = [];
+            if (ratCdoSwapDepth === 0) {
+                restoreWildRatCdoDefaults();
+            }
         }
     }
 
@@ -1538,6 +1527,109 @@
         return chosen;
     }
 
+    function captureWildRatCdoDefaultsOnce(ratCls) {
+        if (wildRatCdoDefaults !== null || !ratCls || ratCls.isNull()) {
+            return;
+        }
+        var ratCdo = ratCls.add(OFFSETS.UClass_ClassDefaultObject).readPointer();
+        if (ratCdo.isNull() || isPendingKill(ratCdo)) {
+            return;
+        }
+        var ctrlCls = ratCdo.add(OFFSETS.APawn_AIControllerClass).readPointer();
+        var ctrlName = (!ctrlCls.isNull() && !isPendingKill(ctrlCls)) ? readObjectName(ctrlCls) : '';
+        // 食人鬼コントローラに書き換わった状態ではなく、野生ネズミ本来の CDO のみを不変保存
+        if (ctrlName === 'BP_CannibalController_C') {
+            return;
+        }
+        wildRatCdoDefaults = {
+            cdo: ratCdo,
+            autoPossess: ratCdo.add(OFFSETS.APawn_AutoPossessAI).readU8(),
+            teamId: ratCdo.add(OFFSETS.ADH_Character_TeamID).readU8(),
+            aiControllerClass: ctrlCls
+        };
+    }
+
+    function restoreWildRatCdoDefaults() {
+        if (!wildRatCdoDefaults || !wildRatCdoDefaults.cdo || wildRatCdoDefaults.cdo.isNull()) {
+            return;
+        }
+        try {
+            if (isPendingKill(wildRatCdoDefaults.cdo)) {
+                return;
+            }
+            wildRatCdoDefaults.cdo.add(OFFSETS.APawn_AutoPossessAI).writeU8(wildRatCdoDefaults.autoPossess);
+            wildRatCdoDefaults.cdo.add(OFFSETS.ADH_Character_TeamID).writeU8(wildRatCdoDefaults.teamId);
+            wildRatCdoDefaults.cdo.add(OFFSETS.APawn_AIControllerClass).writePointer(wildRatCdoDefaults.aiControllerClass);
+        } catch (e) {}
+    }
+
+    function captureExplosionCdoDefaultsOnce(expCdo) {
+        if (origExplosionCdoDefaults !== null || !expCdo || expCdo.isNull() || isPendingKill(expCdo)) {
+            return;
+        }
+        origExplosionCdoDefaults = {
+            cdo: expCdo,
+            damage: expCdo.add(OFFSETS.ADH_ExplosionActor_Damage).readFloat(),
+            innerRadius: expCdo.add(OFFSETS.ADH_ExplosionActor_InnerRadius).readFloat(),
+            outerRadius: expCdo.add(OFFSETS.ADH_ExplosionActor_OuterRadius).readFloat(),
+            bDamageOnSpawn: expCdo.add(OFFSETS.ADH_ExplosionActor_bDamageOnSpawn).readU8(),
+            damageType: expCdo.add(OFFSETS.ADH_ExplosionActor_DamageType).readPointer()
+        };
+    }
+
+    function restoreExplosionCdoDefaults(expCdo) {
+        if (!origExplosionCdoDefaults || !expCdo || expCdo.isNull() || isPendingKill(expCdo)) {
+            return;
+        }
+        expCdo.add(OFFSETS.ADH_ExplosionActor_Damage).writeFloat(origExplosionCdoDefaults.damage);
+        expCdo.add(OFFSETS.ADH_ExplosionActor_InnerRadius).writeFloat(origExplosionCdoDefaults.innerRadius);
+        expCdo.add(OFFSETS.ADH_ExplosionActor_OuterRadius).writeFloat(origExplosionCdoDefaults.outerRadius);
+        expCdo.add(OFFSETS.ADH_ExplosionActor_bDamageOnSpawn).writeU8(origExplosionCdoDefaults.bDamageOnSpawn);
+        expCdo.add(OFFSETS.ADH_ExplosionActor_DamageType).writePointer(origExplosionCdoDefaults.damageType);
+    }
+
+    function buildBombMouseIdentity(ratPtr) {
+        var ptrKey = ratPtr.toString();
+        var internalIndex = ratPtr.add(OFFSETS.UObject_InternalIndex).readS32();
+        var nameRaw = ratPtr.add(OFFSETS.UObject_NamePrivate).readU64();
+        return {
+            ptrKey: ptrKey,
+            internalIndex: internalIndex,
+            nameRaw: nameRaw,
+            identityKey: ptrKey + ':' + internalIndex + ':' + nameRaw.toString()
+        };
+    }
+
+    // ポインタ + InternalIndex + 64bit FName（インスタンス番号含む）の3点完全一致で検証し、
+    // 野生ネズミへのヒープ再利用誤爆を 100% 遮断する
+    function getTrackedBombMouse(ratPtr) {
+        if (!ratPtr || ratPtr.isNull() || isPendingKill(ratPtr)) {
+            return null;
+        }
+        var ptrKey = ratPtr.toString();
+        var entry = trackedBombMice[ptrKey];
+        if (!entry) {
+            return null;
+        }
+        if (entry.detonated) {
+            delete trackedBombMice[ptrKey];
+            return null;
+        }
+        try {
+            var curIdx = ratPtr.add(OFFSETS.UObject_InternalIndex).readS32();
+            var curNameRaw = ratPtr.add(OFFSETS.UObject_NamePrivate).readU64();
+            if (curIdx !== entry.internalIndex || !curNameRaw.equals(entry.nameRaw)) {
+                // 別オブジェクト（野生ネズミ等）が同じメモリアドレスを再利用した
+                delete trackedBombMice[ptrKey];
+                return null;
+            }
+        } catch (e) {
+            delete trackedBombMice[ptrKey];
+            return null;
+        }
+        return entry;
+    }
+
     function configureSpawnedBombMouse(ratPtr) {
         if (!ratPtr || ratPtr.isNull() || isPendingKill(ratPtr)) {
             return;
@@ -1553,8 +1645,52 @@
         }
     }
 
-    function detonateBombMouse(ratKey, entry) {
-        delete trackedBombMice[ratKey];
+    function registerSummonedBombMouse(ratPtr, spellKey, instigatorHuman, preferredTarget, nowTimeSec, explorerTargets) {
+        if (!ratPtr || ratPtr.isNull() || isPendingKill(ratPtr)) {
+            return false;
+        }
+        if ((ADH_Character_IsAlive(ratPtr) & 1) === 0) {
+            return false;
+        }
+        var ident = buildBombMouseIdentity(ratPtr);
+        if (finishedBombMouseIds[ident.identityKey]) {
+            return false;
+        }
+        var existing = getTrackedBombMouse(ratPtr);
+        if (existing) {
+            return false;
+        }
+        // 二重安全確認: 野生ネズミ(BP_PreyController_C / TeamID=2)は絶対に登録しない
+        var ctrl = ratPtr.add(OFFSETS.APawn_Controller).readPointer();
+        var ctrlName = (!ctrl.isNull() && !isPendingKill(ctrl)) ? readObjectClassName(ctrl) : 'null';
+        var teamId = ratPtr.add(OFFSETS.ADH_Character_TeamID).readU8();
+        if (ctrlName === 'BP_PreyController_C' || (teamId !== 3 && ctrlName !== 'BP_CannibalController_C')) {
+            log('[TS_BombMice] 野生ネズミ誤登録防止スキップ rat=' + ratPtr + ' ctrl=' + ctrlName + ' team=' + teamId);
+            return false;
+        }
+
+        configureSpawnedBombMouse(ratPtr);
+        var assigned = assignBombMouseThreatTarget(ratPtr, preferredTarget, explorerTargets);
+        trackedBombMice[ident.ptrKey] = {
+            rat: ratPtr,
+            ptrKey: ident.ptrKey,
+            internalIndex: ident.internalIndex,
+            nameRaw: ident.nameRaw,
+            identityKey: ident.identityKey,
+            spellKey: spellKey,
+            instigatorHuman: instigatorHuman,
+            preferredTarget: preferredTarget,
+            fusing: false,
+            fuseAt: 0.0,
+            detonated: false,
+            nextAggroAt: nowTimeSec + CONFIG.bombMiceReaggroIntervalSec
+        };
+        log('[TS_BombMice] 個体登録完了 id=' + ident.identityKey + ' ctrl=' + ctrlName +
+            ' target=' + (assigned.isNull() ? 'none' : assigned));
+        return true;
+    }
+
+    function executeBombMouseDetonation(entry) {
         if (!entry || !entry.rat || entry.rat.isNull() || isPendingKill(entry.rat)) {
             return;
         }
@@ -1568,19 +1704,8 @@
 
         if (loc && !expCls.isNull()) {
             var expCdo = expCls.add(OFFSETS.UClass_ClassDefaultObject).readPointer();
-            var savedDmg = 0.0;
-            var savedInner = 0.0;
-            var savedOuter = 0.0;
-            var savedOnSpawn = 1;
-            var savedDt = ptr(0);
-
-            if (!expCdo.isNull()) {
-                savedDmg = expCdo.add(OFFSETS.ADH_ExplosionActor_Damage).readFloat();
-                savedInner = expCdo.add(OFFSETS.ADH_ExplosionActor_InnerRadius).readFloat();
-                savedOuter = expCdo.add(OFFSETS.ADH_ExplosionActor_OuterRadius).readFloat();
-                savedOnSpawn = expCdo.add(OFFSETS.ADH_ExplosionActor_bDamageOnSpawn).readU8();
-                savedDt = expCdo.add(OFFSETS.ADH_ExplosionActor_DamageType).readPointer();
-
+            if (!expCdo.isNull() && !isPendingKill(expCdo)) {
+                captureExplosionCdoDefaultsOnce(expCdo);
                 expCdo.add(OFFSETS.ADH_ExplosionActor_Damage).writeFloat(CONFIG.bombMiceExplosionDamage);
                 expCdo.add(OFFSETS.ADH_ExplosionActor_InnerRadius).writeFloat(CONFIG.bombMiceExplosionInnerRadius);
                 expCdo.add(OFFSETS.ADH_ExplosionActor_OuterRadius).writeFloat(CONFIG.bombMiceExplosionOuterRadius);
@@ -1590,6 +1715,7 @@
                 }
             }
 
+            inBombMouseDetonation++;
             try {
                 // FTransform (48B, 16-byte aligned: Quat(0,0,0,1), Trans(x,y,z,0), Scale(1,1,1,0))
                 var rawBuf = Memory.alloc(64);
@@ -1607,15 +1733,16 @@
                 spawnParams.add(0x28).writeU8(1);               // AlwaysSpawn
 
                 UWorld_SpawnActor(wt.world, expCls, xform, spawnParams);
-                log('[TS_BombMice] 爆弾ネズミ起爆 rat=' + entry.rat +
+                log('[TS_BombMice] 爆弾ネズミ単独起爆 id=' + entry.identityKey +
+                    ' t=' + wt.timeSeconds.toFixed(2) +
                     ' loc=(' + loc.x.toFixed(0) + ',' + loc.y.toFixed(0) + ',' + loc.z.toFixed(0) + ')');
             } finally {
                 if (!expCdo.isNull()) {
-                    expCdo.add(OFFSETS.ADH_ExplosionActor_Damage).writeFloat(savedDmg);
-                    expCdo.add(OFFSETS.ADH_ExplosionActor_InnerRadius).writeFloat(savedInner);
-                    expCdo.add(OFFSETS.ADH_ExplosionActor_OuterRadius).writeFloat(savedOuter);
-                    expCdo.add(OFFSETS.ADH_ExplosionActor_bDamageOnSpawn).writeU8(savedOnSpawn);
-                    expCdo.add(OFFSETS.ADH_ExplosionActor_DamageType).writePointer(savedDt);
+                    restoreExplosionCdoDefaults(expCdo);
+                }
+                inBombMouseDetonation--;
+                if (inBombMouseDetonation < 0) {
+                    inBombMouseDetonation = 0;
                 }
             }
         }
@@ -1625,7 +1752,35 @@
         }
     }
 
+    function detonateBombMouse(entry) {
+        if (!entry || entry.detonated) {
+            return;
+        }
+        entry.detonated = true;
+        finishedBombMouseIds[entry.identityKey] = true;
+        delete trackedBombMice[entry.ptrKey];
+
+        // 再入防止：他個体の起爆処理中に呼ばれた場合はキューへ積み、CDO 復元後に順次処理する
+        if (inBombMouseDetonation > 0) {
+            pendingBombMouseDetonations.push(entry);
+            return;
+        }
+
+        executeBombMouseDetonation(entry);
+        while (pendingBombMouseDetonations.length > 0) {
+            var nextEntry = pendingBombMouseDetonations.shift();
+            if (nextEntry) {
+                executeBombMouseDetonation(nextEntry);
+            }
+        }
+    }
+
     function tickBombMice(wt) {
+        // 防御的整合チェック：SpawnAI 外で BP_Prey_Rat CDO が汚染されたままにならないよう常に原版へ復元
+        if (ratCdoSwapDepth === 0) {
+            restoreWildRatCdoDefaults();
+        }
+
         var explorerTargets = null;
         function getExplorers() {
             if (explorerTargets === null) {
@@ -1634,7 +1789,7 @@
             return explorerTargets;
         }
 
-        // 1) アクティブな TS_BombMice_C スペルから新規召喚ネズミを捕捉・強化・食人鬼AI追尾開始
+        // 1) アクティブな TS_BombMice_C の SummonedAIs に未登録個体があれば補完登録（主登録は SpawnAI onLeave）
         var sKeys = Object.keys(activeBombMiceSpells);
         for (var i = 0; i < sKeys.length; i++) {
             var sk = sKeys[i];
@@ -1653,24 +1808,7 @@
                     if (rat.isNull() || isPendingKill(rat)) {
                         continue;
                     }
-                    var rk = rat.toString();
-                    if (!trackedBombMice[rk]) {
-                        configureSpawnedBombMouse(rat);
-                        var ctrl = rat.add(OFFSETS.APawn_Controller).readPointer();
-                        var ctrlName = ctrl.isNull() ? 'null' : readObjectClassName(ctrl);
-                        var assigned = assignBombMouseThreatTarget(rat, preferredTarget, getExplorers());
-                        trackedBombMice[rk] = {
-                            rat: rat,
-                            spellKey: sk,
-                            instigatorHuman: sEntry.instigatorHuman,
-                            preferredTarget: preferredTarget,
-                            fusing: false,
-                            fuseAt: 0.0,
-                            nextAggroAt: wt.timeSeconds + CONFIG.bombMiceReaggroIntervalSec
-                        };
-                        log('[TS_BombMice] ネズミ召喚完了 rat=' + rat + ' ctrl=' + ctrlName +
-                            ' target=' + (assigned.isNull() ? 'none' : assigned));
-                    }
+                    registerSummonedBombMouse(rat, sk, sEntry.instigatorHuman, preferredTarget, wt.timeSeconds, getExplorers());
                 }
             }
         }
@@ -1680,21 +1818,25 @@
             return;
         }
 
+        // 2) 各爆弾ネズミを 1 体ずつ完全独立に判定（個体別の接近検知・個体別の 0.4s 引火タイマー・個体別の起爆）
         var explorers = getExplorers();
         for (var k = 0; k < rKeys.length; k++) {
             var rk2 = rKeys[k];
-            var mEntry = trackedBombMice[rk2];
-            if (!mEntry || !mEntry.rat || mEntry.rat.isNull() || isPendingKill(mEntry.rat)) {
-                delete trackedBombMice[rk2];
+            var rawEntry = trackedBombMice[rk2];
+            if (!rawEntry) {
+                continue;
+            }
+            var mEntry = getTrackedBombMouse(rawEntry.rat);
+            if (!mEntry) {
                 continue;
             }
             if ((ADH_Character_IsAlive(mEntry.rat) & 1) === 0) {
-                detonateBombMouse(rk2, mEntry);
+                detonateBombMouse(mEntry);
                 continue;
             }
             if (mEntry.fusing) {
                 if (wt.timeSeconds >= mEntry.fuseAt) {
-                    detonateBombMouse(rk2, mEntry);
+                    detonateBombMouse(mEntry);
                 }
                 continue;
             }
@@ -1713,6 +1855,8 @@
                 if (distance3D(rLoc, explorers[c].loc) <= CONFIG.bombMiceTriggerRadiusUU) {
                     mEntry.fusing = true;
                     mEntry.fuseAt = wt.timeSeconds + CONFIG.bombMiceFuseSec;
+                    log('[TS_BombMice] 個体引火開始 id=' + mEntry.identityKey +
+                        ' t=' + wt.timeSeconds.toFixed(2) + ' fuseAt=' + mEntry.fuseAt.toFixed(2));
                     break;
                 }
             }
@@ -2070,15 +2214,7 @@
         ADH_SpellManager_ModifySpellChargeLevel(allySM, delta);
         var afterCharge = allySM.add(OFFSETS.ADH_SpellManager_SpellChargeLevel).readFloat();
 
-        sendThrallNotice(
-            getControllerFromPlayerState(casterPS),
-            '仲間の傀儡へエネルギーを譲渡した（段階' + tierDisplay + '）'
-        );
-        sendThrallNotice(
-            getControllerFromPlayerState(allyPS),
-            '仲間からエネルギーを受け取った（段階' + tierDisplay + '）'
-        );
-
+        // 通知なし（クライアント側 Transfer_cast 効果音のみ再生）
         log('[TS_Transfer] 段階' + tierDisplay + ' (+' + delta.toFixed(3) + ') 味方チャージ: ' +
             beforeCharge.toFixed(3) + ' -> ' + afterCharge.toFixed(3));
         return true;
@@ -2197,12 +2333,15 @@
                     return;
                 }
                 if (clsName === 'TS_BombMice_C') {
-                    // 持続終了で消滅するネズミは爆発させずに追跡解除
+                    // 持続終了で消滅するネズミは爆発させずに追跡解除＆完了マーク
                     var expSpellKey = spellPtr.toString();
                     delete activeBombMiceSpells[expSpellKey];
                     var rKeys = Object.keys(trackedBombMice);
                     for (var i = 0; i < rKeys.length; i++) {
-                        if (trackedBombMice[rKeys[i]] && trackedBombMice[rKeys[i]].spellKey === expSpellKey) {
+                        var expEntry = trackedBombMice[rKeys[i]];
+                        if (expEntry && expEntry.spellKey === expSpellKey) {
+                            expEntry.detonated = true;
+                            finishedBombMouseIds[expEntry.identityKey] = true;
                             delete trackedBombMice[rKeys[i]];
                         }
                     }
@@ -2220,14 +2359,13 @@
 
         // 9-5. UDH_TotemSpell_Summoning::SpawnAI（爆弾ネズミ召喚時のみ BP_Prey_Rat CDO の AIControllerClass /
         //      AutoPossessAI / TeamID を一時的に食人鬼 AI(BP_CannibalController_C) へ切替え、
-        //      逃走型 BP_PreyController ではなく食人鬼のネイティブ NavMesh 追尾 AI を確実に憑依させる）
+        //      onLeave で即座に不変スナップショット(wildRatCdoDefaults)へ復元し、新規生成個体のみを独立登録）
         //      ※ 0xE84190 上で唯一のフック（onLeave 計 1 <= 2）
         Interceptor.attach(moduleBase.add(RVA.UDH_TotemSpell_Summoning_SpawnAI), {
             onEnter: function (args) {
-                this.ratCdo = ptr(0);
-                this.savedAutoPossess = 3;
-                this.savedTeamId = 2;
-                this.savedAiControllerClass = ptr(0);
+                this.didSwap = false;
+                this.spellPtr = ptr(0);
+                this.prevAiCount = 0;
                 try {
                     var spellPtr = args[0];
                     if (readObjectClassName(spellPtr) !== 'TS_BombMice_C') {
@@ -2241,47 +2379,115 @@
                     if (ratCls.isNull()) {
                         return;
                     }
+                    captureWildRatCdoDefaultsOnce(ratCls);
                     var ratCdo = ratCls.add(OFFSETS.UClass_ClassDefaultObject).readPointer();
                     if (ratCdo.isNull() || isPendingKill(ratCdo)) {
                         return;
                     }
                     var desiredCtrlCls = spellPtr.add(OFFSETS.UDH_TotemSpell_Summoning_AIControllerClass).readPointer();
-                    this.ratCdo = ratCdo;
-                    this.savedAutoPossess = ratCdo.add(OFFSETS.APawn_AutoPossessAI).readU8();
-                    this.savedTeamId = ratCdo.add(OFFSETS.ADH_Character_TeamID).readU8();
-                    this.savedAiControllerClass = ratCdo.add(OFFSETS.APawn_AIControllerClass).readPointer();
+                    this.spellPtr = spellPtr;
+                    var aiArr = spellPtr.add(OFFSETS.UDH_TotemSpell_Summoning_SummonedAIs);
+                    var aiNum = aiArr.add(8).readS32();
+                    this.prevAiCount = (aiNum >= 0 && aiNum <= 64) ? aiNum : 0;
+
+                    ratCdoSwapDepth++;
+                    this.didSwap = true;
                     ratCdo.add(OFFSETS.APawn_AutoPossessAI).writeU8(1); // PlacedInWorld のみ（SpawnDefaultController に委譲）
                     ratCdo.add(OFFSETS.ADH_Character_TeamID).writeU8(3); // 食人鬼陣営
                     if (!desiredCtrlCls.isNull() && !isPendingKill(desiredCtrlCls)) {
                         ratCdo.add(OFFSETS.APawn_AIControllerClass).writePointer(desiredCtrlCls);
                     }
                 } catch (e) {
-                    this.ratCdo = ptr(0);
+                    if (this.didSwap) {
+                        ratCdoSwapDepth = Math.max(0, ratCdoSwapDepth - 1);
+                        if (ratCdoSwapDepth === 0) { restoreWildRatCdoDefaults(); }
+                        this.didSwap = false;
+                    }
                 }
             },
             onLeave: function () {
                 try {
-                    if (this.ratCdo && !this.ratCdo.isNull()) {
-                        this.ratCdo.add(OFFSETS.APawn_AutoPossessAI).writeU8(this.savedAutoPossess);
-                        this.ratCdo.add(OFFSETS.ADH_Character_TeamID).writeU8(this.savedTeamId);
-                        this.ratCdo.add(OFFSETS.APawn_AIControllerClass).writePointer(this.savedAiControllerClass);
+                    if (this.didSwap) {
+                        ratCdoSwapDepth = Math.max(0, ratCdoSwapDepth - 1);
+                        if (ratCdoSwapDepth === 0) {
+                            restoreWildRatCdoDefaults();
+                        }
+                    }
+                    if (this.spellPtr && !this.spellPtr.isNull() && !isPendingKill(this.spellPtr)) {
+                        var sk = this.spellPtr.toString();
+                        var sEntry = activeBombMiceSpells[sk];
+                        var instigatorHuman = sEntry ? sEntry.instigatorHuman : getHumanFromPlayerState(resolveCasterPlayerState(this.spellPtr, ptr(0)));
+                        var preferredTarget = this.spellPtr.add(OFFSETS.UDH_TotemSpell_Summoning_CurrentCastingTarget).readPointer();
+                        var aiArr = this.spellPtr.add(OFFSETS.UDH_TotemSpell_Summoning_SummonedAIs);
+                        var aiData = aiArr.readPointer();
+                        var aiNum = aiArr.add(8).readS32();
+                        var wt = getWorldAndTime();
+                        if (!aiData.isNull() && aiNum > this.prevAiCount && aiNum <= 64) {
+                            var explorers = collectLivingExplorerTargets();
+                            for (var j = this.prevAiCount; j < aiNum; j++) {
+                                var newRat = aiData.add(j * 8).readPointer();
+                                registerSummonedBombMouse(newRat, sk, instigatorHuman, preferredTarget, wt.timeSeconds, explorers);
+                            }
+                        }
                     }
                 } catch (e) {}
             }
         });
 
-        // 9-6. ADH_Character::OnDied（爆弾ネズミ撃破時即爆発・onEnter のみ）
+        // 9-6. ADH_AnimalCharacter::TakeDamage（爆弾ネズミ同士の爆風連鎖を 100% 遮断・onLeave 消費 0）
+        //      原版 BP_SummonedMice の DamageResistances[DT_CannibalBite_C] = 100.0 と同等の爆風耐性を付与し、
+        //      さらに野生ネズミ（追跡外）には一切干渉しない
+        var origAnimalTakeDamage = null;
+        var animalTakeDamageCb = new NativeCallback(function (animalPtr, damageAmount, damageEventPtr, instigatorPtr, damageCauserPtr) {
+            try {
+                var bombEntry = getTrackedBombMouse(animalPtr);
+                if (bombEntry) {
+                    // 他の爆弾ネズミの起爆中（inBombMouseDetonation > 0）、または DT_CannibalBite_C 由来ダメージを完全無効化
+                    if (inBombMouseDetonation > 0) {
+                        return 0.0;
+                    }
+                    if (damageEventPtr && !damageEventPtr.isNull()) {
+                        var dtCls = getDtCannibalBiteClass();
+                        var dmgTypePtr = damageEventPtr.add(0x08).readPointer();
+                        if (!dtCls.isNull() && !dmgTypePtr.isNull() && dmgTypePtr.equals(dtCls)) {
+                            return 0.0;
+                        }
+                    }
+                }
+            } catch (e) {}
+            return origAnimalTakeDamage
+                ? origAnimalTakeDamage(animalPtr, damageAmount, damageEventPtr, instigatorPtr, damageCauserPtr)
+                : 0.0;
+        }, 'float', ['pointer', 'float', 'pointer', 'pointer', 'pointer'], 'win64');
+        pinnedCallbacks.push(animalTakeDamageCb);
+        origAnimalTakeDamage = new NativeFunction(
+            Interceptor.replaceFast(moduleBase.add(RVA.ADH_AnimalCharacter_TakeDamage), animalTakeDamageCb),
+            'float', ['pointer', 'float', 'pointer', 'pointer', 'pointer'], 'win64'
+        );
+
+        // 9-7. ADH_AnimalCharacter::Destroyed（アクタ破棄時に即座に追跡解除し、ヒープ再利用での野生ネズミ誤爆を根絶・onEnter のみ）
+        Interceptor.attach(moduleBase.add(RVA.ADH_AnimalCharacter_Destroyed), {
+            onEnter: function (args) {
+                try {
+                    var animalPtr = args[0];
+                    var entry = getTrackedBombMouse(animalPtr);
+                    if (entry) {
+                        entry.detonated = true;
+                        finishedBombMouseIds[entry.identityKey] = true;
+                        delete trackedBombMice[entry.ptrKey];
+                    }
+                } catch (e) {}
+            }
+        });
+
+        // 9-8. ADH_Character::OnDied（追跡中の爆弾ネズミ個体のみ撃破時即爆発・野生ネズミは完全除外・onEnter のみ）
         Interceptor.attach(moduleBase.add(RVA.ADH_Character_OnDied), {
             onEnter: function (args) {
                 try {
                     var charPtr = args[0];
-                    if (!charPtr || charPtr.isNull()) {
-                        return;
-                    }
-                    var rk = charPtr.toString();
-                    var entry = trackedBombMice[rk];
+                    var entry = getTrackedBombMouse(charPtr);
                     if (entry) {
-                        detonateBombMouse(rk, entry);
+                        detonateBombMouse(entry);
                     }
                 } catch (e) {}
             }
