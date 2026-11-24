@@ -88,7 +88,7 @@ Languages included:
 
 1. 不受版权保护的客观范围
    依据各法域通行著作权法原则——包括思想与表达二分法、独创性要件及非法演绎排除规则（例如美国《版权法》17 U.S.C. § 102(b) 与 § 103(a)）——以下内容本身不产生独立且受法律保护的知识产权，任何社区、团队或个人均不得对其主张版权或独占权：
-   - 《Dread Hunger》游戏本体及全部原生资产；
+   - 未经游戏版权方授权的《Dread Hunger》游戏本体及全部原生资产；
    - 未经游戏版权方（Digital Confectioners Ltd.）授权，基于游戏原生文件修改、提取、重打包或与原生资产不可分离的各类社区派生文件；
    - 围绕该游戏产生的功能构想、玩法机制、内存偏移与参数定义、公开通信格式及通用互操作接口。
 
@@ -203,7 +203,7 @@ Languages included:
 
 1. 著作権保護の対象外となる客観的範囲
    各法域の著作権法に共通する原則——アイデア・表現二分論、創作性の要件、および違法な二次的著作物の保護除外（米国著作権法 17 U.S.C. § 102(b) および § 103(a) 等）——に基づき、以下の事項自体には独立して法的に保護される知的財産権は生じず、いかなるコミュニティ、チーム、個人もこれらに対する著作権や独占権を主張できません。
-   - 『Dread Hunger』ゲーム本体およびすべてのオリジナル資産。
+   - ゲーム著作権者の許諾を得ていない『Dread Hunger』ゲーム本体およびすべてのオリジナル資産。
    - ゲーム著作権者（Digital Confectioners Ltd.）の許諾なく、ゲームのオリジナルファイルを改変・抽出・再パッケージ化して作成された、またはオリジナル資産と不可分な各種コミュニティ派生ファイル。
    - 同ゲームに関連する機能構想、ゲームプレイの仕組み、メモリオフセットおよびパラメータ定義、公開通信形式、ならびに汎用的な相互運用インターフェース。
 
@@ -320,7 +320,7 @@ Article 4 | Rights Boundaries, Interoperability, and Takedown Standards
 
 1. Objective Scope Excluded from Copyright Protection
    Under widely recognized copyright principles across jurisdictions — including the idea-expression dichotomy, originality requirements, and exclusion of unlawful derivatives (such as 17 U.S.C. § 102(b) and § 103(a)) — the following do not give rise to independent, legally protected intellectual property rights, and no community, team, or individual may claim copyright or exclusive control over them:
-   - The game "Dread Hunger" and all of its original assets;
+   - Unauthorized copies or uses of the game "Dread Hunger" and all of its original assets;
    - Community-derived files created without authorization from the Game Copyright Holder (Digital Confectioners Ltd.) by modifying, extracting, or repacking original game files, or otherwise inseparable from original game assets; and
    - Feature ideas, gameplay mechanics, memory offsets and parameter definitions, public communication formats, and general interoperability interfaces related to the game.
 
