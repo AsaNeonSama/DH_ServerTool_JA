@@ -40,7 +40,7 @@ Languages included:
    本项目是玩家社区开发的非官方辅助工具，仅供技术交流与学习参考。鉴于官方已公开专用服务端（Dedicated Server）并停止维护运营，本工具仅面向自建专用服务端环境设计。您需自行评估并承担使用本工具的一切运行与合规风险。
 
 3. 官方专属下架通道
-   如本项目无意中侵犯游戏版权方的合法权益，请通过本协议头部载明的联系邮箱，以官方域名邮箱、官方认证渠道或有效授权文件联系维护者。身份核验通过后，维护者将立即清理并下架相关内容。
+   如本项目无意中侵犯游戏版权方的合法权益，请通过本协议头部载明的联系方式，以官方域名邮箱、官方认证渠道或有效授权文件联系维护者。身份核验通过后，维护者将立即清理并下架相关内容。
 
 --------------------------------------------------------------------------------
 第二条｜授权范围、源码公开义务与社区贡献
@@ -155,7 +155,7 @@ Languages included:
    本プロジェクトは、技術交流および学習を目的としてプレイヤーコミュニティが開発した非公式の補助ツールです。公式による専用サーバー（Dedicated Server）の公開および公式運営の終了を踏まえ、自己ホスト型専用サーバー環境向けに設計されています。利用に伴う運用上・法令上のリスクは、利用者ご自身の責任で判断・負担してください。
 
 3. 公式専用の削除窓口
-   万が一、本プロジェクトがゲーム著作権者の合法的な権利を侵害している場合は、本ライセンス冒頭に記載の連絡先メールアドレス宛に、公式ドメインのメールアドレス、公式認証チャネル、または有効な委任証明を通じてメンテナーへご連絡ください。本人確認の完了後、直ちに該当内容を削除・公開停止します。
+   万が一、本プロジェクトがゲーム著作権者の合法的な権利を侵害している場合は、本ライセンス冒頭に記載の連絡先を通じて、公式ドメインのメールアドレス、公式認証チャネル、または有効な委任証明によりメンテナーへご連絡ください。本人確認の完了後、直ちに該当内容を削除・公開停止します。
 
 --------------------------------------------------------------------------------
 第2条｜許諾の範囲、ソース公開義務およびコミュニティ貢献
@@ -272,7 +272,7 @@ Article 1 | Game Copyright Ownership and Official Takedown Channel
    This project is an unofficial community utility built strictly for technical exchange and learning. Because the official Dedicated Server has been publicly released and official live operations have ended, this tool is designed exclusively for self-hosted dedicated server environments. You assume all operational and legal compliance risks from using it.
 
 3. Official Takedown Channel
-   If any part of this project inadvertently infringes the legitimate rights of the Game Copyright Holder, please contact the maintainer at the email listed in the header via an official domain email, verified official channel, or valid proof of authorization. Once verified, the relevant content will be removed promptly.
+   If any part of this project inadvertently infringes the legitimate rights of the Game Copyright Holder, please contact the maintainer through the contact link listed in the header via an official domain email, verified official channel, or valid proof of authorization. Once verified, the relevant content will be removed promptly.
 
 --------------------------------------------------------------------------------
 Article 2 | License Grant, Source Disclosure, and Community Contributions
