@@ -51,6 +51,8 @@ Languages included:
 
    在遵守本许可证全部条款的前提下，您可出于个人或非商业目的，在全球范围内免费、非独占、不可转让地使用、复制、修改、集成与再分发上述维护者保留著作权的独立原创部分。当您向第三方再分发上述部分或其衍生作品时，接收方直接依据本许可证自动获得授权。持续合规期间本授权不可撤销；一旦违约，则按第五条自动终止。
 
+   对于本项目中为实现兼容与互操作而涉及、引用或配套分发的《Dread Hunger》公开可获取资产及其相关适配文件，维护者既不主张著作权或独占权，也不对其作超出原权利方权限的转授权；在维护者权限范围内，不就您将其与本项目一并用于个人或非商业目的的使用、适配与同步分发增设额外限制。该类文件的原始权属与合法使用边界仍受第一条所述相应合法权利方权利及适用法律约束，相关合规责任由使用者自行承担；与本项目一并分发时，亦须遵守本许可证的非商业化、反独占及权利方下架条款。
+
 2. 二次开发必须同时满足的三项条件
    除游戏版权方（Digital Confectioners Ltd.）外，任何个人、团队或组织基于本项目进行修改、重构、集成、分发或衍生创作时，均须同时满足：
    - 公开完整源码：以公开、免费且易于获取的方式，完整发布衍生作品的源代码（Source-Available）；
@@ -165,6 +167,8 @@ Languages included:
    本プロジェクトは、『Dread Hunger』およびその派生エコシステムに対して、いかなる排他的・商業的権利、またはゲーム著作権者および関連する原アセット権利者に対抗する権利も主張しません。メンテナーは、独自に記述し、かつ原ゲームおよび関連商用資産から分離可能なソースコード、スクリプト、およびドキュメントについてのみ、法令に基づき著作権を留保します。本ライセンスの制限は、クローズド化・営利転売・独占を防止する防御的目的のためにのみ設けられています。
 
    本ライセンスの全条項を遵守することを条件として、個人または非営利の目的に限り、世界的・非独占的・無償・譲渡不可で、上記のメンテナーが著作権を留保する独自オリジナル部分を使用、複製、改変、統合、および再配布できます。当該部分またはその派生物を第三者へ再配布する場合、受領者は本ライセンスの条項に基づき自動的に直接許諾を受けます。条項を遵守している限り本許諾は撤回されず、違反があった場合は第5条に従い自動的に終了します。
+
+   本プロジェクトにおいて互換性および相互運用性の確保のために言及、参照、または付随して配布される『Dread Hunger』の公開取得可能なアセットおよび関連適合ファイルについて、メンテナーは著作権や独占権を主張せず、原権利者の権限を超える再許諾も行いません。メンテナーの権限の範囲内において、これらを本プロジェクトと併せて個人または非営利目的で使用、適合、および同時配布することに対し追加の制限を課すことはありません。ただし、当該ファイルの元の権利帰属および適法な利用範囲は、引き続き第1条に記載する該当する適法な権利者の権利および適用法令に従うものとし、関連する法令遵守の責任は利用者ご自身が負います。また、本プロジェクトと併せて配布する場合も、本ライセンスの非営利・独占禁止および権利者削除窓口に関する条項を遵守する必要があります。
 
 2. 二次開発で満たすべき3つの条件
    ゲーム著作権者（Digital Confectioners Ltd.）を除き、本プロジェクトを基に改変、再構築、統合、再配布、または派生物を制作する場合は、以下のすべてを同時に満たす必要があります。
@@ -283,6 +287,8 @@ Article 2 | License Grant, Source Disclosure, and Community Contributions
    This project claims no exclusive, commercial, or adversarial rights over "Dread Hunger," its ecosystem, or against the Game Copyright Holder or relevant original asset rightsholders. Solely for source code, scripts, and documentation independently authored by the maintainer and separable from the Original Game and Related Commercial Assets, the maintainer retains copyright as provided by law. The restrictions in this License exist strictly for defensive purposes: preventing closed-source hoarding, monetization, and monopolization.
 
    Provided you comply with all terms of this License, you are granted a worldwide, non-exclusive, royalty-free, non-transferable right to use, copy, modify, integrate, and redistribute the independently authored portions in which the maintainer retains copyright as stated above, for personal or non-commercial purposes. Each time you redistribute such portions or a derivative work thereof, the recipient automatically receives a direct license under these terms. This grant is irrevocable while you remain in compliance and terminates automatically upon breach under Article 5.
+
+   With respect to publicly obtainable "Dread Hunger" assets and related compatibility files involved, referenced, or distributed alongside this project for compatibility and interoperability, the maintainer neither claims copyright or exclusive control over them nor purports to grant any sublicense exceeding the authority of the original rightsholders. Within the scope of the maintainer's authority, no additional restriction is imposed on your personal or non-commercial use, adaptation, or co-distribution of such files together with this project. However, their original ownership and lawful scope of use remain governed by the rights of the applicable lawful rightsholders described in Article 1 and applicable law, and all related compliance responsibilities rest solely with the user; co-distribution alongside this project must also comply with the non-commercial, anti-monopoly, and rightsholder takedown provisions of this License.
 
 2. Three Mandatory Conditions for Derivative Works
    Except for the Game Copyright Holder (Digital Confectioners Ltd.), anyone who modifies, refactors, integrates, redistributes, or builds derivative works from this project must simultaneously meet all three conditions:
