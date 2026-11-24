@@ -2,18 +2,18 @@
 var base = Module.findBaseAddress('DreadHungerServer-Win64-Shipping.exe');
 
 var ADH_BrigCell_AddPrisoner = base.add(0xE5D180);
-var ADH_BrigCell_FreePrisoner = new NativeFunction(base.add(0xE69380), 'pointer', ['pointer','pointer'], 'win64');
-var ADH_BrigDoor_BeginPlay = new NativeFunction(base.add(0xE5FE20), 'pointer', ['pointer'], 'win64');
-var UDH_DoorLockComponent_SetIsLocked = new NativeFunction(base.add(0xDE36B0), 'void', ['pointer','int8'], 'win64');
-var ADH_DoorActor_SetOpen = new NativeFunction(base.add(0xDE3A30), 'void', ['pointer','int8','pointer','int8'], 'win64');
-var ADH_BrigDoor_ADH_BrigDoor = new NativeFunction(base.add(0xE57C20), 'void', ['pointer','pointer'], 'win64');
-var AActor_SetLifeSpan = new NativeFunction(base.add(0x22E9780), 'void', ['pointer', 'float'], 'win64');
-var FName_GetPlainNameString = new NativeFunction(base.add(0x11604F0), 'void', ['pointer', 'pointer'], 'win64');
-var FActorSpawnParameters_FActorSpawnParameters = new NativeFunction(base.add(0x29584A0), 'void', ['pointer'], 'win64');
-var UWorld_SpawnActor = new NativeFunction(base.add(0x2624510), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer'], 'win64');
-var UObject_GetWorld = new NativeFunction(base.add(0x13075A0), 'pointer', ['pointer'], 'win64');
-var AActor_AttachToComponent = new NativeFunction(base.add(0x22CEF90), 'void', ['pointer', 'pointer', 'pointer', 'uint64'], 'win64');
-var AActor_SetActorRelativeTransform = new NativeFunction(base.add(0x22E8D50), 'void', ['pointer', 'pointer', 'int8', 'pointer', 'int8'], 'win64');
+var ADH_BrigCell_FreePrisoner = new NativeFunction(base.add(0xE69380), 'pointer', ['pointer','pointer'], { abi: 'win64', exceptions: 'propagate' });
+var ADH_BrigDoor_BeginPlay = new NativeFunction(base.add(0xE5FE20), 'pointer', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+var UDH_DoorLockComponent_SetIsLocked = new NativeFunction(base.add(0xDE36B0), 'void', ['pointer','int8'], { abi: 'win64', exceptions: 'propagate' });
+var ADH_DoorActor_SetOpen = new NativeFunction(base.add(0xDE3A30), 'void', ['pointer','int8','pointer','int8'], { abi: 'win64', exceptions: 'propagate' });
+var ADH_BrigDoor_ADH_BrigDoor = new NativeFunction(base.add(0xE57C20), 'void', ['pointer','pointer'], { abi: 'win64', exceptions: 'propagate' });
+var AActor_SetLifeSpan = new NativeFunction(base.add(0x22E9780), 'void', ['pointer', 'float'], { abi: 'win64', exceptions: 'propagate' });
+var FName_GetPlainNameString = new NativeFunction(base.add(0x11604F0), 'void', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var FActorSpawnParameters_FActorSpawnParameters = new NativeFunction(base.add(0x29584A0), 'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+var UWorld_SpawnActor = new NativeFunction(base.add(0x2624510), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var UObject_GetWorld = new NativeFunction(base.add(0x13075A0), 'pointer', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+var AActor_AttachToComponent = new NativeFunction(base.add(0x22CEF90), 'void', ['pointer', 'pointer', 'pointer', 'uint64'], { abi: 'win64', exceptions: 'propagate' });
+var AActor_SetActorRelativeTransform = new NativeFunction(base.add(0x22E8D50), 'void', ['pointer', 'pointer', 'int8', 'pointer', 'int8'], { abi: 'win64', exceptions: 'propagate' });
 var FTransform_Identity = base.add(0x455C4E0);
 var FAttachmentTransformRules_Snap = base.add(0x4318720);
 

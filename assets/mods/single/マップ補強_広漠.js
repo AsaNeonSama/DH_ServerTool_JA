@@ -3,15 +3,15 @@
 var base = Module.findBaseAddress('DreadHungerServer-Win64-Shipping.exe');
 
 var FTransform_Identity = base.add(0x455C4E0);
-var FActorSpawnParameters_FActorSpawnParameters = new NativeFunction(base.add(0x29584A0), 'void', ['pointer'], 'win64');
-var UWorld_SpawnActor = new NativeFunction(base.add(0x2624510), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer'], 'win64');
-var AActor_SetActorScale3D = new NativeFunction(base.add(0x22E8E90), 'void', ['pointer', 'pointer'], 'win64');
-var UObject_GetWorld = new NativeFunction(base.add(0x13075A0), 'pointer', ['pointer'], 'win64');
+var FActorSpawnParameters_FActorSpawnParameters = new NativeFunction(base.add(0x29584A0), 'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+var UWorld_SpawnActor = new NativeFunction(base.add(0x2624510), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var AActor_SetActorScale3D = new NativeFunction(base.add(0x22E8E90), 'void', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var UObject_GetWorld = new NativeFunction(base.add(0x13075A0), 'pointer', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
 
-var UClass_GetPrivateStaticClass = new NativeFunction(base.add(0x11F02E0), 'pointer', [], 'win64');
+var UClass_GetPrivateStaticClass = new NativeFunction(base.add(0x11F02E0), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
 
-var StaticLoadObject = new NativeFunction(base.add(0x137B290), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer', 'int32', 'pointer', 'int8', 'pointer'], 'win64');
-var StaticFindObject = new NativeFunction(base.add(0x137AAA0), 'pointer', ['pointer', 'pointer', 'pointer', 'int8'], 'win64');
+var StaticLoadObject = new NativeFunction(base.add(0x137B290), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer', 'int32', 'pointer', 'int8', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var StaticFindObject = new NativeFunction(base.add(0x137AAA0), 'pointer', ['pointer', 'pointer', 'pointer', 'int8'], { abi: 'win64', exceptions: 'propagate' });
 
 
 function logInfo(Info) {

@@ -132,7 +132,7 @@ origFindRangedWeapon = new NativeFunction(
     findRangedWeaponTrampoline,
     'pointer',
     ['pointer'],
-    'win64'
+    { abi: 'win64', exceptions: 'propagate' }
 );
 
 // 呼び出し元1: UDH_InventoryManager::AddInventory(this, InventoryClass, ...)

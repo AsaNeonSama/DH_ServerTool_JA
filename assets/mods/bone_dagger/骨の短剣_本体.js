@@ -5,12 +5,12 @@ var ADH_BoneDagger_Constructor_addr = base.add(0xE57AD0);
 var ADH_HumanCharacter_Died_addr = base.add(0xD50CB0);
 var ADH_HumanCharacter_TakeDamage_addr = base.add(0xD73DB0);
 
-var UClass_GetPrivateStaticClass = new NativeFunction(base.add(0x11F02E0), 'pointer', [], 'win64');
-var StaticFindObject = new NativeFunction(base.add(0x137AAA0), 'pointer', ['pointer', 'pointer', 'pointer', 'int8'], 'win64');
-var ADH_Character_IsAlive = new NativeFunction(base.add(0xD5C850), 'int8', ['pointer'], 'win64');
-var ADH_HumanCharacter_SetIsSpiritWalking = new NativeFunction(base.add(0xD70310), 'void', ['pointer', 'int8', 'float'], 'win64');
-var UDH_InventoryManager_AddInventory = new NativeFunction(UDH_InventoryManager_AddInventory_addr, 'pointer', ['pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'int8', 'pointer'], 'win64');
-var ADH_Inventory_DecreaseItemStack = new NativeFunction(base.add(0xDC56D0), 'void', ['pointer', 'int32', 'int8', 'int8'], 'win64');
+var UClass_GetPrivateStaticClass = new NativeFunction(base.add(0x11F02E0), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
+var StaticFindObject = new NativeFunction(base.add(0x137AAA0), 'pointer', ['pointer', 'pointer', 'pointer', 'int8'], { abi: 'win64', exceptions: 'propagate' });
+var ADH_Character_IsAlive = new NativeFunction(base.add(0xD5C850), 'int8', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+var ADH_HumanCharacter_SetIsSpiritWalking = new NativeFunction(base.add(0xD70310), 'void', ['pointer', 'int8', 'float'], { abi: 'win64', exceptions: 'propagate' });
+var UDH_InventoryManager_AddInventory = new NativeFunction(UDH_InventoryManager_AddInventory_addr, 'pointer', ['pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'int8', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var ADH_Inventory_DecreaseItemStack = new NativeFunction(base.add(0xDC56D0), 'void', ['pointer', 'int32', 'int8', 'int8'], { abi: 'win64', exceptions: 'propagate' });
 // 未使用: UClass::CreateDefaultObject (0x11EC670)
 
 function logInfo(Info) {

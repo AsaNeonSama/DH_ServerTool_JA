@@ -4,16 +4,16 @@
 
 var base = Module.findBaseAddress('DreadHungerServer-Win64-Shipping.exe');
 
-var ADH_Warship_SetEnableAutoMove = new NativeFunction(base.add(0xE81E50), 'void', ['pointer', 'int8'], 'win64');
-var ADH_Warship_FuelBoiler = new NativeFunction(base.add(0xE69750), 'void', ['pointer', 'float'], 'win64');
-var AActor_execK2_GetActorRotation = new NativeFunction(base.add(0x2988EF0), 'void', ['pointer', 'pointer', 'pointer'], 'win64');
-var AActor_SetActorRotation = new NativeFunction(base.add(0x22E1260), 'void', ['pointer', 'pointer', 'int32'], 'win64');
-var UWorld_SpawnActor = new NativeFunction(base.add(0x26254A0), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer', 'pointer'], 'win64');
-var FActorSpawnParameters_ctor = new NativeFunction(base.add(0x29584A0), 'void', ['pointer'], 'win64');
-var StaticFindObject = new NativeFunction(base.add(0x137AAA0), 'pointer', ['pointer', 'pointer', 'pointer', 'int8'], 'win64');
-var StaticLoadObject = new NativeFunction(base.add(0x137B290), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer', 'int32', 'pointer', 'int8', 'pointer'], 'win64');
-var UClass_GetPrivateStaticClass = new NativeFunction(base.add(0x11F02E0), 'pointer', [], 'win64');
-var FName_GetPlainNameString = new NativeFunction(base.add(0x11604F0), 'void', ['pointer', 'pointer'], 'win64');
+var ADH_Warship_SetEnableAutoMove = new NativeFunction(base.add(0xE81E50), 'void', ['pointer', 'int8'], { abi: 'win64', exceptions: 'propagate' });
+var ADH_Warship_FuelBoiler = new NativeFunction(base.add(0xE69750), 'void', ['pointer', 'float'], { abi: 'win64', exceptions: 'propagate' });
+var AActor_execK2_GetActorRotation = new NativeFunction(base.add(0x2988EF0), 'void', ['pointer', 'pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var AActor_SetActorRotation = new NativeFunction(base.add(0x22E1260), 'void', ['pointer', 'pointer', 'int32'], { abi: 'win64', exceptions: 'propagate' });
+var UWorld_SpawnActor = new NativeFunction(base.add(0x26254A0), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var FActorSpawnParameters_ctor = new NativeFunction(base.add(0x29584A0), 'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+var StaticFindObject = new NativeFunction(base.add(0x137AAA0), 'pointer', ['pointer', 'pointer', 'pointer', 'int8'], { abi: 'win64', exceptions: 'propagate' });
+var StaticLoadObject = new NativeFunction(base.add(0x137B290), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer', 'int32', 'pointer', 'int8', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var UClass_GetPrivateStaticClass = new NativeFunction(base.add(0x11F02E0), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
+var FName_GetPlainNameString = new NativeFunction(base.add(0x11604F0), 'void', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
 
 var GWorld = base.add(0x46ED420);
 var ADH_GameState_HandleMatchHasStarted_addr = base.add(0xD99080);

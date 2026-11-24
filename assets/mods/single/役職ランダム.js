@@ -9,7 +9,7 @@ var activeWorldKey = null;
 var roles = [1, 2, 3, 4, 5, 6, 7, 8];
 
 var ADH_PlayerState_SetPlayerRole = base.add(0xE4F390);
-var UDH_PlayerRoleData_FindByType = new NativeFunction(base.add(0xE33300), "pointer", ["char", "pointer"], 'win64');
+var UDH_PlayerRoleData_FindByType = new NativeFunction(base.add(0xE33300), "pointer", ["char", "pointer"], { abi: 'win64', exceptions: 'propagate' });
 var ADH_PlayerState_SetPlayerRole_Interceptor = Interceptor.attach(ADH_PlayerState_SetPlayerRole, {
     onEnter : function (args) {
         try {

@@ -4,7 +4,7 @@
 
 var base = Module.findBaseAddress('DreadHungerServer-Win64-Shipping.exe');
 var UDH_ArmoryLockComponent_HasCorrectCombination_addr = base.add(0xE73240);
-var UObject_GetWorld = new NativeFunction(base.add(0x13075A0), 'pointer', ['pointer'], 'win64');
+var UObject_GetWorld = new NativeFunction(base.add(0x13075A0), 'pointer', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
 var GWorld = base.add(0x46ED420);
 
 var OFF_UWORLD_GAMESTATE = 0x120;

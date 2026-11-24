@@ -6,19 +6,19 @@ var ADH_GameState_HandleMatchHasStarted_addr = base.add(0xD99080);
 var ADH_GameState_Tick_addr = base.add(0xDAD420);
 var ADH_QuestState_OnCompletedChanged_addr = base.add(0xE42EF0);
 
-var ADH_GameState_GiveQuest = new NativeFunction(base.add(0xD973E0), 'void', ['pointer', 'pointer'], 'win64');
-var ADH_Character_IsAlive = new NativeFunction(base.add(0xD5C850), 'int8', ['pointer'], 'win64');
-var UDH_InventoryManager_AddInventory = new NativeFunction(base.add(0xDBC040), 'void', ['pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'int8', 'pointer'], 'win64');
-var ADH_PlayerController_ReceiveThrallMessage = new NativeFunction(base.add(0xEE7810), 'void', ['pointer', 'pointer', 'pointer'], 'win64');
-var UWorld_SpawnActor = new NativeFunction(base.add(0x2624510), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer'], 'win64');
-var FActorSpawnParameters_FActorSpawnParameters = new NativeFunction(base.add(0x29584A0), 'void', ['pointer'], 'win64');
+var ADH_GameState_GiveQuest = new NativeFunction(base.add(0xD973E0), 'void', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var ADH_Character_IsAlive = new NativeFunction(base.add(0xD5C850), 'int8', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+var UDH_InventoryManager_AddInventory = new NativeFunction(base.add(0xDBC040), 'void', ['pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'int8', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var ADH_PlayerController_ReceiveThrallMessage = new NativeFunction(base.add(0xEE7810), 'void', ['pointer', 'pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var UWorld_SpawnActor = new NativeFunction(base.add(0x2624510), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var FActorSpawnParameters_FActorSpawnParameters = new NativeFunction(base.add(0x29584A0), 'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
 
-var UClass_GetPrivateStaticClass = new NativeFunction(base.add(0x11F02E0), 'pointer', [], 'win64');
-var StaticLoadObject = new NativeFunction(base.add(0x137B290), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer', 'int32', 'pointer', 'int8', 'pointer'], 'win64');
-var StaticFindObject = new NativeFunction(base.add(0x137AAA0), 'pointer', ['pointer', 'pointer', 'pointer', 'int8'], 'win64');
+var UClass_GetPrivateStaticClass = new NativeFunction(base.add(0x11F02E0), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
+var StaticLoadObject = new NativeFunction(base.add(0x137B290), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer', 'int32', 'pointer', 'int8', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var StaticFindObject = new NativeFunction(base.add(0x137AAA0), 'pointer', ['pointer', 'pointer', 'pointer', 'int8'], { abi: 'win64', exceptions: 'propagate' });
 // FString&&ムーブ版(0x10963B0)によるRPC UAF文字化け防止のため、const FString&版(0x10964E0)でFMemoryへコピー
-var FText_FromString = new NativeFunction(base.add(0x10964E0), 'pointer', ['pointer', 'pointer'], 'win64');
-var FText_Dtor = new NativeFunction(base.add(0x75CB30), 'void', ['pointer'], 'win64');
+var FText_FromString = new NativeFunction(base.add(0x10964E0), 'pointer', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var FText_Dtor = new NativeFunction(base.add(0x75CB30), 'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
 
 // クエスト完了時のランダム報酬プール (1つをランダム配布)
 var REWARD_POOL = [

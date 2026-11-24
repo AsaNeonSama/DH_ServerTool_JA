@@ -7,44 +7,44 @@ var MAX_PENDING_COMMANDS = 100;
 // UE4 ネイティブ関数バインディング・フックアドレス
 // ============================================================================
 // FString&&ムーブ版(0x10963B0)によるRPC UAF文字化け防止のため、const FString&版(0x10964E0)でFMemoryへコピー
-var FText_FromString = new NativeFunction(moduleBase.add(0x10964E0), 'pointer', ['pointer', 'pointer'], 'win64');
-var FText_Dtor = new NativeFunction(moduleBase.add(0x75CB30), 'void', ['pointer'], 'win64');
-var FName_GetPlainNameString = new NativeFunction(moduleBase.add(0x11604F0), 'void', ['pointer', 'pointer'], 'win64');
-var FMemory_Free = new NativeFunction(moduleBase.add(0x105DD50), 'void', ['pointer'], 'win64');
+var FText_FromString = new NativeFunction(moduleBase.add(0x10964E0), 'pointer', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var FText_Dtor = new NativeFunction(moduleBase.add(0x75CB30), 'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+var FName_GetPlainNameString = new NativeFunction(moduleBase.add(0x11604F0), 'void', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var FMemory_Free = new NativeFunction(moduleBase.add(0x105DD50), 'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
 
-var UClass_GetPrivateStaticClass = new NativeFunction(moduleBase.add(0x11F02E0), 'pointer', [], 'win64');
-var ADH_Character_GetPrivateStaticClass = new NativeFunction(moduleBase.add(0xEA0F90), 'pointer', [], 'win64');
-var ADH_PlayerState_GetPrivateStaticClass = new NativeFunction(moduleBase.add(0xEED6B0), 'pointer', [], 'win64');
-var APlayerController_GetPrivateStaticClass = new NativeFunction(moduleBase.add(0x2AA84E0), 'pointer', [], 'win64');
+var UClass_GetPrivateStaticClass = new NativeFunction(moduleBase.add(0x11F02E0), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
+var ADH_Character_GetPrivateStaticClass = new NativeFunction(moduleBase.add(0xEA0F90), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
+var ADH_PlayerState_GetPrivateStaticClass = new NativeFunction(moduleBase.add(0xEED6B0), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
+var APlayerController_GetPrivateStaticClass = new NativeFunction(moduleBase.add(0x2AA84E0), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
 var GWorld_ptr = moduleBase.add(0x46ED420);
 var GUObjectArray_ptr = moduleBase.add(0x45C40C8);
 var cachedDHCharacterClass = ptr(0);
 var cachedPlayerControllerClass = ptr(0);
-var StaticLoadObject = new NativeFunction(moduleBase.add(0x137B290), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer', 'int32', 'pointer', 'int8', 'pointer'], 'win64');
-var StaticFindObject = new NativeFunction(moduleBase.add(0x137AAA0), 'pointer', ['pointer', 'pointer', 'pointer', 'int8'], 'win64');
-var UWorld_SpawnActor = new NativeFunction(moduleBase.add(0x2624510), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer'], 'win64');
-var FActorSpawnParameters_Ctor = new NativeFunction(moduleBase.add(0x29584A0), 'void', ['pointer'], 'win64');
-var UGameplayStatics_BeginDeferredActorSpawnFromClass = new NativeFunction(moduleBase.add(0x25570C0), 'pointer', ['pointer', 'pointer', 'pointer', 'uint8', 'pointer'], 'win64');
-var UGameplayStatics_FinishSpawningActor = new NativeFunction(moduleBase.add(0x255FCF0), 'pointer', ['pointer', 'pointer'], 'win64');
-var APawn_SetPlayerState = new NativeFunction(moduleBase.add(0x2752480), 'void', ['pointer', 'pointer'], 'win64');
-var ADH_HumanCharacter_InitFromPlayerState = new NativeFunction(moduleBase.add(0xD5AA60), 'void', ['pointer', 'pointer', 'int8'], 'win64');
-var ADH_GameState_SetMatchResult = new NativeFunction(moduleBase.add(0xDA9C30), 'void', ['pointer', 'uint8', 'uint8'], 'win64');
-var TArray_Ptr_AddUnique = new NativeFunction(moduleBase.add(0x769CC0), 'int32', ['pointer', 'pointer'], 'win64');
+var StaticLoadObject = new NativeFunction(moduleBase.add(0x137B290), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer', 'int32', 'pointer', 'int8', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var StaticFindObject = new NativeFunction(moduleBase.add(0x137AAA0), 'pointer', ['pointer', 'pointer', 'pointer', 'int8'], { abi: 'win64', exceptions: 'propagate' });
+var UWorld_SpawnActor = new NativeFunction(moduleBase.add(0x2624510), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var FActorSpawnParameters_Ctor = new NativeFunction(moduleBase.add(0x29584A0), 'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+var UGameplayStatics_BeginDeferredActorSpawnFromClass = new NativeFunction(moduleBase.add(0x25570C0), 'pointer', ['pointer', 'pointer', 'pointer', 'uint8', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var UGameplayStatics_FinishSpawningActor = new NativeFunction(moduleBase.add(0x255FCF0), 'pointer', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var APawn_SetPlayerState = new NativeFunction(moduleBase.add(0x2752480), 'void', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var ADH_HumanCharacter_InitFromPlayerState = new NativeFunction(moduleBase.add(0xD5AA60), 'void', ['pointer', 'pointer', 'int8'], { abi: 'win64', exceptions: 'propagate' });
+var ADH_GameState_SetMatchResult = new NativeFunction(moduleBase.add(0xDA9C30), 'void', ['pointer', 'uint8', 'uint8'], { abi: 'win64', exceptions: 'propagate' });
+var TArray_Ptr_AddUnique = new NativeFunction(moduleBase.add(0x769CC0), 'int32', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
 
-var UDH_InventoryManager_AddInventory = new NativeFunction(moduleBase.add(0xDBC040), 'void', ['pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'int8', 'pointer'], 'win64');
-var UDH_InventoryManager_SetStorageLimit = new NativeFunction(moduleBase.add(0xDE3DA0), 'void', ['pointer', 'int32'], 'win64');
-var AGameSession_KickPlayer = new NativeFunction(moduleBase.add(0x256B770), 'void', ['pointer', 'pointer', 'pointer']);
-var ADH_PlayerController_ReceiveThrallMessage = new NativeFunction(moduleBase.add(0xEE7810), 'void', ['pointer', 'pointer', 'pointer']);
-var ADH_PlayerController_AddCheats = new NativeFunction(moduleBase.add(0xE2B7E0), 'void', ['pointer', 'int8'], 'win64');
-var ADH_PlayerController_SetDesiresThrallVision_Impl = new NativeFunction(moduleBase.add(0xE4D980), 'void', ['pointer', 'int8'], 'win64');
-var ADH_PlayerState_SetIsThrall = new NativeFunction(moduleBase.add(0xE4E880), 'void', ['pointer', 'int8'], 'win64');
-var ADH_SpellManager_SetEquippedSpells = new NativeFunction(moduleBase.add(0xE81F00), 'void', ['pointer', 'pointer'], 'win64');
-var ADH_SpellManager_SetSpellChargeLevel = new NativeFunction(moduleBase.add(0xE82CC0), 'void', ['pointer', 'float'], 'win64');
-var ADH_HumanCharacter_SetIsSpiritWalking = new NativeFunction(moduleBase.add(0xD70310), 'void', ['pointer', 'int8', 'float'], 'win64');
-var AActor_GetWorldTimerManager = new NativeFunction(moduleBase.add(0x22DDC30), 'pointer', ['pointer'], 'win64');
-var FTimerManager_FindTimer = new NativeFunction(moduleBase.add(0x28F2D80), 'pointer', ['pointer', 'pointer'], 'win64');
-var FTimerManager_InternalClearTimer = new NativeFunction(moduleBase.add(0x28F6A00), 'void', ['pointer', 'uint64'], 'win64');
-var UKismetSystemLibrary_ExecuteConsoleCommand = new NativeFunction(moduleBase.add(0x25EFC50), 'void', ['pointer', 'pointer', 'pointer'], 'win64');
+var UDH_InventoryManager_AddInventory = new NativeFunction(moduleBase.add(0xDBC040), 'void', ['pointer', 'pointer', 'pointer', 'pointer', 'pointer', 'int8', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var UDH_InventoryManager_SetStorageLimit = new NativeFunction(moduleBase.add(0xDE3DA0), 'void', ['pointer', 'int32'], { abi: 'win64', exceptions: 'propagate' });
+var AGameSession_KickPlayer = new NativeFunction(moduleBase.add(0x256B770), 'void', ['pointer', 'pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var ADH_PlayerController_ReceiveThrallMessage = new NativeFunction(moduleBase.add(0xEE7810), 'void', ['pointer', 'pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var ADH_PlayerController_AddCheats = new NativeFunction(moduleBase.add(0xE2B7E0), 'void', ['pointer', 'int8'], { abi: 'win64', exceptions: 'propagate' });
+var ADH_PlayerController_SetDesiresThrallVision_Impl = new NativeFunction(moduleBase.add(0xE4D980), 'void', ['pointer', 'int8'], { abi: 'win64', exceptions: 'propagate' });
+var ADH_PlayerState_SetIsThrall = new NativeFunction(moduleBase.add(0xE4E880), 'void', ['pointer', 'int8'], { abi: 'win64', exceptions: 'propagate' });
+var ADH_SpellManager_SetEquippedSpells = new NativeFunction(moduleBase.add(0xE81F00), 'void', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var ADH_SpellManager_SetSpellChargeLevel = new NativeFunction(moduleBase.add(0xE82CC0), 'void', ['pointer', 'float'], { abi: 'win64', exceptions: 'propagate' });
+var ADH_HumanCharacter_SetIsSpiritWalking = new NativeFunction(moduleBase.add(0xD70310), 'void', ['pointer', 'int8', 'float'], { abi: 'win64', exceptions: 'propagate' });
+var AActor_GetWorldTimerManager = new NativeFunction(moduleBase.add(0x22DDC30), 'pointer', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+var FTimerManager_FindTimer = new NativeFunction(moduleBase.add(0x28F2D80), 'pointer', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var FTimerManager_InternalClearTimer = new NativeFunction(moduleBase.add(0x28F6A00), 'void', ['pointer', 'uint64'], { abi: 'win64', exceptions: 'propagate' });
+var UKismetSystemLibrary_ExecuteConsoleCommand = new NativeFunction(moduleBase.add(0x25EFC50), 'void', ['pointer', 'pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
 
 var APlayerController_BeginPlay_addr = moduleBase.add(0xE2DBC0);
 var ADH_GameState_Tick_addr = moduleBase.add(0xDAD420);
@@ -353,7 +353,7 @@ function destroyActorSafe(actorPtr) {
     if (fnPtr.isNull()) {
         return;
     }
-    var k2DestroyActor = new NativeFunction(fnPtr, 'void', ['pointer'], 'win64');
+    var k2DestroyActor = new NativeFunction(fnPtr, 'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
     k2DestroyActor(actorPtr);
 }
 
@@ -624,7 +624,7 @@ function endMatchWithWinner(gameStatePtr, explorersWin) {
     if (endMatchFnPtr.isNull()) {
         return;
     }
-    var endMatchFn = new NativeFunction(endMatchFnPtr, 'void', ['pointer'], 'win64');
+    var endMatchFn = new NativeFunction(endMatchFnPtr, 'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
     endMatchFn(gameModePtr);
 }
 

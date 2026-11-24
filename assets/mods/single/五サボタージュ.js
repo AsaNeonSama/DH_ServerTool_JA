@@ -24,7 +24,7 @@ SpellSelection (呪文ID):
 // SpellManager フック対象
 var ADH_SpellManager_SetEquippedSpells_addr = base.add(0xE81F00);
 
-var UDH_GameInstance_GetInstance = new NativeFunction(base.add(0xD93240), 'pointer', ['pointer'], 'win64');
+var UDH_GameInstance_GetInstance = new NativeFunction(base.add(0xD93240), 'pointer', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
 
 function getArraySize(TArray){
     if (TArray.isNull()) {

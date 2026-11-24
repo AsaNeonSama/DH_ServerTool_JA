@@ -356,67 +356,67 @@
     }
 
     var GUObjectArray_ptr = moduleBase.add(RVA.GUObjectArray);
-    var FMemory_Realloc = new NativeFunction(moduleBase.add(RVA.FMemory_Realloc), 'pointer', ['pointer', 'uint64', 'uint32'], 'win64');
-    var FMemory_Free = new NativeFunction(moduleBase.add(RVA.FMemory_Free), 'void', ['pointer'], 'win64');
-    var FName_CtorWchar = new NativeFunction(moduleBase.add(RVA.FName_CtorWchar), 'void', ['pointer', 'pointer', 'int32'], 'win64');
-    var FName_GetPlainNameString = new NativeFunction(moduleBase.add(RVA.FName_GetPlainNameString), 'void', ['pointer', 'pointer'], 'win64');
-    var FText_FromString = new NativeFunction(moduleBase.add(RVA.FText_FromString), 'pointer', ['pointer', 'pointer'], 'win64');
-    var FText_Dtor = new NativeFunction(moduleBase.add(RVA.FText_Dtor), 'void', ['pointer'], 'win64');
+    var FMemory_Realloc = new NativeFunction(moduleBase.add(RVA.FMemory_Realloc), 'pointer', ['pointer', 'uint64', 'uint32'], { abi: 'win64', exceptions: 'propagate' });
+    var FMemory_Free = new NativeFunction(moduleBase.add(RVA.FMemory_Free), 'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+    var FName_CtorWchar = new NativeFunction(moduleBase.add(RVA.FName_CtorWchar), 'void', ['pointer', 'pointer', 'int32'], { abi: 'win64', exceptions: 'propagate' });
+    var FName_GetPlainNameString = new NativeFunction(moduleBase.add(RVA.FName_GetPlainNameString), 'void', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+    var FText_FromString = new NativeFunction(moduleBase.add(RVA.FText_FromString), 'pointer', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+    var FText_Dtor = new NativeFunction(moduleBase.add(RVA.FText_Dtor), 'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
 
-    var CreatePackage = new NativeFunction(moduleBase.add(RVA.CreatePackage), 'pointer', ['pointer'], 'win64');
-    var FStaticConstructObjectParameters_Ctor = new NativeFunction(moduleBase.add(RVA.FStaticConstructObjectParameters_Ctor), 'void', ['pointer', 'pointer'], 'win64');
-    var StaticConstructObject_Internal = new NativeFunction(moduleBase.add(RVA.StaticConstructObject_Internal), 'pointer', ['pointer'], 'win64');
-    var StaticFindObject = new NativeFunction(moduleBase.add(RVA.StaticFindObject), 'pointer', ['pointer', 'pointer', 'pointer', 'int8'], 'win64');
-    var StaticLoadObject = new NativeFunction(moduleBase.add(RVA.StaticLoadObject), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer', 'int32', 'pointer', 'int8', 'pointer'], 'win64');
-    var UObject_GetPrivateStaticClass = new NativeFunction(moduleBase.add(RVA.UObject_GetPrivateStaticClass), 'pointer', [], 'win64');
-    var UClass_GetPrivateStaticClass = new NativeFunction(moduleBase.add(RVA.UClass_GetPrivateStaticClass), 'pointer', [], 'win64');
-    var UBlueprintGeneratedClass_GetPrivateStaticClass = new NativeFunction(moduleBase.add(RVA.UBlueprintGeneratedClass_GetPrivateStaticClass), 'pointer', [], 'win64');
-    var UClass_SetSuperStruct = new NativeFunction(moduleBase.add(RVA.UClass_SetSuperStruct), 'void', ['pointer', 'pointer'], 'win64');
-    var UClass_Bind = new NativeFunction(moduleBase.add(RVA.UClass_Bind), 'void', ['pointer'], 'win64');
-    var UStruct_StaticLink = new NativeFunction(moduleBase.add(RVA.UStruct_StaticLink), 'void', ['pointer', 'uint8'], 'win64');
-    var UClass_CreateDefaultObject = new NativeFunction(moduleBase.add(RVA.UClass_CreateDefaultObject), 'pointer', ['pointer'], 'win64');
-    var UClass_AssembleReferenceTokenStream = new NativeFunction(moduleBase.add(RVA.UClass_AssembleReferenceTokenStream), 'void', ['pointer', 'uint8'], 'win64');
-    var UClass_SetUpRuntimeReplicationData = new NativeFunction(moduleBase.add(RVA.UClass_SetUpRuntimeReplicationData), 'void', ['pointer'], 'win64');
+    var CreatePackage = new NativeFunction(moduleBase.add(RVA.CreatePackage), 'pointer', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+    var FStaticConstructObjectParameters_Ctor = new NativeFunction(moduleBase.add(RVA.FStaticConstructObjectParameters_Ctor), 'void', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+    var StaticConstructObject_Internal = new NativeFunction(moduleBase.add(RVA.StaticConstructObject_Internal), 'pointer', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+    var StaticFindObject = new NativeFunction(moduleBase.add(RVA.StaticFindObject), 'pointer', ['pointer', 'pointer', 'pointer', 'int8'], { abi: 'win64', exceptions: 'propagate' });
+    var StaticLoadObject = new NativeFunction(moduleBase.add(RVA.StaticLoadObject), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer', 'int32', 'pointer', 'int8', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+    var UObject_GetPrivateStaticClass = new NativeFunction(moduleBase.add(RVA.UObject_GetPrivateStaticClass), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
+    var UClass_GetPrivateStaticClass = new NativeFunction(moduleBase.add(RVA.UClass_GetPrivateStaticClass), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
+    var UBlueprintGeneratedClass_GetPrivateStaticClass = new NativeFunction(moduleBase.add(RVA.UBlueprintGeneratedClass_GetPrivateStaticClass), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
+    var UClass_SetSuperStruct = new NativeFunction(moduleBase.add(RVA.UClass_SetSuperStruct), 'void', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+    var UClass_Bind = new NativeFunction(moduleBase.add(RVA.UClass_Bind), 'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+    var UStruct_StaticLink = new NativeFunction(moduleBase.add(RVA.UStruct_StaticLink), 'void', ['pointer', 'uint8'], { abi: 'win64', exceptions: 'propagate' });
+    var UClass_CreateDefaultObject = new NativeFunction(moduleBase.add(RVA.UClass_CreateDefaultObject), 'pointer', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+    var UClass_AssembleReferenceTokenStream = new NativeFunction(moduleBase.add(RVA.UClass_AssembleReferenceTokenStream), 'void', ['pointer', 'uint8'], { abi: 'win64', exceptions: 'propagate' });
+    var UClass_SetUpRuntimeReplicationData = new NativeFunction(moduleBase.add(RVA.UClass_SetUpRuntimeReplicationData), 'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
     var UBlueprintGeneratedClass_UpdateCustomPropertyListForPostConstruction = new NativeFunction(
         moduleBase.add(RVA.UBlueprintGeneratedClass_UpdateCustomPropertyListForPostConstruction),
-        'void', ['pointer'], 'win64'
+        'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' }
     );
 
-    var UDH_TotemSpell_StaticClass = new NativeFunction(moduleBase.add(RVA.UDH_TotemSpell_StaticClass), 'pointer', [], 'win64');
-    var UDH_TotemSpell_Summoning_StaticClass = new NativeFunction(moduleBase.add(RVA.UDH_TotemSpell_Summoning_StaticClass), 'pointer', [], 'win64');
-    var ADH_HumanCharacter_GetPrivateStaticClass = new NativeFunction(moduleBase.add(RVA.ADH_HumanCharacter_GetPrivateStaticClass), 'pointer', [], 'win64');
-    var ADH_PlayerState_GetPrivateStaticClass = new NativeFunction(moduleBase.add(RVA.ADH_PlayerState_GetPrivateStaticClass), 'pointer', [], 'win64');
-    var ADH_PlayerController_GetPrivateStaticClass = new NativeFunction(moduleBase.add(RVA.ADH_PlayerController_GetPrivateStaticClass), 'pointer', [], 'win64');
-    var ADH_ThrallTotem_GetPrivateStaticClass = new NativeFunction(moduleBase.add(RVA.ADH_ThrallTotem_GetPrivateStaticClass), 'pointer', [], 'win64');
-    var ADH_PrisonerPawn_GetPrivateStaticClass = new NativeFunction(moduleBase.add(RVA.ADH_PrisonerPawn_GetPrivateStaticClass), 'pointer', [], 'win64');
-    var ADH_NitroInventory_GetPrivateStaticClass = new NativeFunction(moduleBase.add(RVA.ADH_NitroInventory_GetPrivateStaticClass), 'pointer', [], 'win64');
-    var APawn_GetPrivateStaticClass = new NativeFunction(moduleBase.add(RVA.APawn_GetPrivateStaticClass), 'pointer', [], 'win64');
+    var UDH_TotemSpell_StaticClass = new NativeFunction(moduleBase.add(RVA.UDH_TotemSpell_StaticClass), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
+    var UDH_TotemSpell_Summoning_StaticClass = new NativeFunction(moduleBase.add(RVA.UDH_TotemSpell_Summoning_StaticClass), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
+    var ADH_HumanCharacter_GetPrivateStaticClass = new NativeFunction(moduleBase.add(RVA.ADH_HumanCharacter_GetPrivateStaticClass), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
+    var ADH_PlayerState_GetPrivateStaticClass = new NativeFunction(moduleBase.add(RVA.ADH_PlayerState_GetPrivateStaticClass), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
+    var ADH_PlayerController_GetPrivateStaticClass = new NativeFunction(moduleBase.add(RVA.ADH_PlayerController_GetPrivateStaticClass), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
+    var ADH_ThrallTotem_GetPrivateStaticClass = new NativeFunction(moduleBase.add(RVA.ADH_ThrallTotem_GetPrivateStaticClass), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
+    var ADH_PrisonerPawn_GetPrivateStaticClass = new NativeFunction(moduleBase.add(RVA.ADH_PrisonerPawn_GetPrivateStaticClass), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
+    var ADH_NitroInventory_GetPrivateStaticClass = new NativeFunction(moduleBase.add(RVA.ADH_NitroInventory_GetPrivateStaticClass), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
+    var APawn_GetPrivateStaticClass = new NativeFunction(moduleBase.add(RVA.APawn_GetPrivateStaticClass), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
 
-    var UDH_TotemSpell_GetPlayerCaster = new NativeFunction(moduleBase.add(RVA.UDH_TotemSpell_GetPlayerCaster), 'pointer', ['pointer'], 'win64');
-    var ADH_SpellManager_ModifySpellChargeLevel = new NativeFunction(moduleBase.add(RVA.ADH_SpellManager_ModifySpellChargeLevel), 'void', ['pointer', 'float'], 'win64');
+    var UDH_TotemSpell_GetPlayerCaster = new NativeFunction(moduleBase.add(RVA.UDH_TotemSpell_GetPlayerCaster), 'pointer', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+    var ADH_SpellManager_ModifySpellChargeLevel = new NativeFunction(moduleBase.add(RVA.ADH_SpellManager_ModifySpellChargeLevel), 'void', ['pointer', 'float'], { abi: 'win64', exceptions: 'propagate' });
 
-    var UDH_GameplayStatics_GetWarship = new NativeFunction(moduleBase.add(RVA.UDH_GameplayStatics_GetWarship), 'pointer', ['pointer'], 'win64');
-    var ADH_Warship_SpawnBreaches = new NativeFunction(moduleBase.add(RVA.ADH_Warship_SpawnBreaches), 'void', ['pointer', 'pointer', 'int32', 'pointer', 'float'], 'win64');
+    var UDH_GameplayStatics_GetWarship = new NativeFunction(moduleBase.add(RVA.UDH_GameplayStatics_GetWarship), 'pointer', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+    var ADH_Warship_SpawnBreaches = new NativeFunction(moduleBase.add(RVA.ADH_Warship_SpawnBreaches), 'void', ['pointer', 'pointer', 'int32', 'pointer', 'float'], { abi: 'win64', exceptions: 'propagate' });
 
-    var AActor_K2_TeleportTo = new NativeFunction(moduleBase.add(RVA.AActor_K2_TeleportTo), 'uint8', ['pointer', 'pointer', 'pointer'], 'win64');
-    var ADH_PrisonerPawn_GetBrig = new NativeFunction(moduleBase.add(RVA.ADH_PrisonerPawn_GetBrig), 'pointer', ['pointer'], 'win64');
-    var ADH_BrigCell_FreePrisoner = new NativeFunction(moduleBase.add(RVA.ADH_BrigCell_FreePrisoner), 'uint8', ['pointer', 'pointer'], 'win64');
-    var ADH_DestructibleActor_BreakApart = new NativeFunction(moduleBase.add(RVA.ADH_DestructibleActor_BreakApart), 'void', ['pointer', 'uint8'], 'win64');
-    var ADH_HumanCharacter_GetSelectedInventory = new NativeFunction(moduleBase.add(RVA.ADH_HumanCharacter_GetSelectedInventory), 'pointer', ['pointer'], 'win64');
-    var ADH_Inventory_SetDurability = new NativeFunction(moduleBase.add(RVA.ADH_Inventory_SetDurability), 'void', ['pointer', 'float'], 'win64');
-    var ADH_Inventory_DecreaseItemStack = new NativeFunction(moduleBase.add(RVA.ADH_Inventory_DecreaseItemStack), 'void', ['pointer', 'int32', 'uint8', 'uint8'], 'win64');
-    var ADH_Character_SetCurrentHealth = new NativeFunction(moduleBase.add(RVA.ADH_Character_SetCurrentHealth), 'void', ['pointer', 'float'], 'win64');
+    var AActor_K2_TeleportTo = new NativeFunction(moduleBase.add(RVA.AActor_K2_TeleportTo), 'uint8', ['pointer', 'pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+    var ADH_PrisonerPawn_GetBrig = new NativeFunction(moduleBase.add(RVA.ADH_PrisonerPawn_GetBrig), 'pointer', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+    var ADH_BrigCell_FreePrisoner = new NativeFunction(moduleBase.add(RVA.ADH_BrigCell_FreePrisoner), 'uint8', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+    var ADH_DestructibleActor_BreakApart = new NativeFunction(moduleBase.add(RVA.ADH_DestructibleActor_BreakApart), 'void', ['pointer', 'uint8'], { abi: 'win64', exceptions: 'propagate' });
+    var ADH_HumanCharacter_GetSelectedInventory = new NativeFunction(moduleBase.add(RVA.ADH_HumanCharacter_GetSelectedInventory), 'pointer', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+    var ADH_Inventory_SetDurability = new NativeFunction(moduleBase.add(RVA.ADH_Inventory_SetDurability), 'void', ['pointer', 'float'], { abi: 'win64', exceptions: 'propagate' });
+    var ADH_Inventory_DecreaseItemStack = new NativeFunction(moduleBase.add(RVA.ADH_Inventory_DecreaseItemStack), 'void', ['pointer', 'int32', 'uint8', 'uint8'], { abi: 'win64', exceptions: 'propagate' });
+    var ADH_Character_SetCurrentHealth = new NativeFunction(moduleBase.add(RVA.ADH_Character_SetCurrentHealth), 'void', ['pointer', 'float'], { abi: 'win64', exceptions: 'propagate' });
 
-    var ADH_AIController_AddTargetToThreatTable = new NativeFunction(moduleBase.add(RVA.ADH_AIController_AddTargetToThreatTable), 'void', ['pointer', 'pointer', 'float'], 'win64');
-    var FActorSpawnParameters_Ctor = new NativeFunction(moduleBase.add(RVA.FActorSpawnParameters_Ctor), 'void', ['pointer'], 'win64');
-    var UWorld_SpawnActor = new NativeFunction(moduleBase.add(RVA.UWorld_SpawnActor), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer'], 'win64');
-    var UWorld_DestroyActor = new NativeFunction(moduleBase.add(RVA.UWorld_DestroyActor), 'uint8', ['pointer', 'pointer', 'uint8', 'uint8'], 'win64');
+    var ADH_AIController_AddTargetToThreatTable = new NativeFunction(moduleBase.add(RVA.ADH_AIController_AddTargetToThreatTable), 'void', ['pointer', 'pointer', 'float'], { abi: 'win64', exceptions: 'propagate' });
+    var FActorSpawnParameters_Ctor = new NativeFunction(moduleBase.add(RVA.FActorSpawnParameters_Ctor), 'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+    var UWorld_SpawnActor = new NativeFunction(moduleBase.add(RVA.UWorld_SpawnActor), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+    var UWorld_DestroyActor = new NativeFunction(moduleBase.add(RVA.UWorld_DestroyActor), 'uint8', ['pointer', 'pointer', 'uint8', 'uint8'], { abi: 'win64', exceptions: 'propagate' });
 
-    var ADH_Character_IsAlive = new NativeFunction(moduleBase.add(RVA.ADH_Character_IsAlive), 'uint8', ['pointer'], 'win64');
-    var ADH_HumanCharacter_SetIsSpiritWalking = new NativeFunction(moduleBase.add(RVA.ADH_HumanCharacter_SetIsSpiritWalking), 'void', ['pointer', 'int8', 'float'], 'win64');
-    var AActor_GetWorldTimerManager = new NativeFunction(moduleBase.add(RVA.AActor_GetWorldTimerManager), 'pointer', ['pointer'], 'win64');
-    var FTimerManager_FindTimer = new NativeFunction(moduleBase.add(RVA.FTimerManager_FindTimer), 'pointer', ['pointer', 'pointer'], 'win64');
-    var FTimerManager_InternalClearTimer = new NativeFunction(moduleBase.add(RVA.FTimerManager_InternalClearTimer), 'void', ['pointer', 'uint64'], 'win64');
+    var ADH_Character_IsAlive = new NativeFunction(moduleBase.add(RVA.ADH_Character_IsAlive), 'uint8', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+    var ADH_HumanCharacter_SetIsSpiritWalking = new NativeFunction(moduleBase.add(RVA.ADH_HumanCharacter_SetIsSpiritWalking), 'void', ['pointer', 'int8', 'float'], { abi: 'win64', exceptions: 'propagate' });
+    var AActor_GetWorldTimerManager = new NativeFunction(moduleBase.add(RVA.AActor_GetWorldTimerManager), 'pointer', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+    var FTimerManager_FindTimer = new NativeFunction(moduleBase.add(RVA.FTimerManager_FindTimer), 'pointer', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+    var FTimerManager_InternalClearTimer = new NativeFunction(moduleBase.add(RVA.FTimerManager_InternalClearTimer), 'void', ['pointer', 'uint64'], { abi: 'win64', exceptions: 'propagate' });
 
     // GC 防止用トップレベル配列（すべての NativeCallback を常駐保持）
     var pinnedCallbacks = [];
@@ -1346,7 +1346,7 @@
         pinnedCallbacks.push(holsterCb);
         origHolsterInventory = new NativeFunction(
             Interceptor.replaceFast(moduleBase.add(RVA.UDH_InventoryManager_HolsterInventory_Impl), holsterCb),
-            'void', ['pointer', 'uint8'], 'win64'
+            'void', ['pointer', 'uint8'], { abi: 'win64', exceptions: 'propagate' }
         );
 
         var selectCb = new NativeCallback(function (invMgr, invSelectionPtr) {
@@ -1361,7 +1361,7 @@
         pinnedCallbacks.push(selectCb);
         origSelectInventory = new NativeFunction(
             Interceptor.replaceFast(moduleBase.add(RVA.UDH_InventoryManager_SelectInventory_Impl), selectCb),
-            'void', ['pointer', 'pointer'], 'win64'
+            'void', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' }
         );
 
         var useCb = new NativeCallback(function (invMgr, transformPtr, useStatePtr) {
@@ -1376,7 +1376,7 @@
         pinnedCallbacks.push(useCb);
         origUseInventory = new NativeFunction(
             Interceptor.replaceFast(moduleBase.add(RVA.UDH_InventoryManager_UseInventory_Impl), useCb),
-            'void', ['pointer', 'pointer', 'pointer'], 'win64'
+            'void', ['pointer', 'pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' }
         );
 
         var aimCb = new NativeCallback(function (invMgr, bWantsToAim) {
@@ -1390,7 +1390,7 @@
         pinnedCallbacks.push(aimCb);
         origAimInventory = new NativeFunction(
             Interceptor.replaceFast(moduleBase.add(RVA.UDH_InventoryManager_AimInventory_Impl), aimCb),
-            'void', ['pointer', 'uint8'], 'win64'
+            'void', ['pointer', 'uint8'], { abi: 'win64', exceptions: 'propagate' }
         );
 
         var reloadCb = new NativeCallback(function (invMgr) {
@@ -1404,7 +1404,7 @@
         pinnedCallbacks.push(reloadCb);
         origReloadInventory = new NativeFunction(
             Interceptor.replaceFast(moduleBase.add(RVA.UDH_InventoryManager_ReloadInventory_Impl), reloadCb),
-            'void', ['pointer'], 'win64'
+            'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' }
         );
     }
 
@@ -2243,7 +2243,7 @@
         pinnedCallbacks.push(validTargetCb);
         origIsValidCastingTarget = new NativeFunction(
             Interceptor.replaceFast(moduleBase.add(RVA.UDH_TotemSpell_IsValidCastingTarget), validTargetCb),
-            'uint8', ['pointer', 'pointer'], 'win64'
+            'uint8', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' }
         );
 
         // 9-1. UDH_TotemSpell::CanCast(this, AActor const* InCaster) -> uint8
@@ -2262,7 +2262,7 @@
         pinnedCallbacks.push(canCastCb);
         origCanCast = new NativeFunction(
             Interceptor.replaceFast(moduleBase.add(RVA.UDH_TotemSpell_CanCast), canCastCb),
-            'uint8', ['pointer', 'pointer'], 'win64'
+            'uint8', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' }
         );
 
         // 9-2. UDH_TotemSpell::DoSpellEffects(this, AActor* SpellTarget) -> uint8
@@ -2301,7 +2301,7 @@
         pinnedCallbacks.push(doEffectsCb);
         origDoSpellEffects = new NativeFunction(
             Interceptor.replaceFast(moduleBase.add(RVA.UDH_TotemSpell_DoSpellEffects), doEffectsCb),
-            'uint8', ['pointer', 'pointer'], 'win64'
+            'uint8', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' }
         );
 
         // 9-3. UDH_TotemSpell::OnCast(this, AActor const* WorldContext) -> void
@@ -2317,7 +2317,7 @@
         pinnedCallbacks.push(onCastCb);
         origOnCast = new NativeFunction(
             Interceptor.replaceFast(moduleBase.add(RVA.UDH_TotemSpell_OnCast), onCastCb),
-            'void', ['pointer', 'pointer'], 'win64'
+            'void', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' }
         );
 
         // 9-4. UDH_TotemSpell::OnExpired(this, AActor const* WorldContext) -> void
@@ -2354,7 +2354,7 @@
         pinnedCallbacks.push(onExpiredCb);
         origOnExpired = new NativeFunction(
             Interceptor.replaceFast(moduleBase.add(RVA.UDH_TotemSpell_OnExpired), onExpiredCb),
-            'void', ['pointer', 'pointer'], 'win64'
+            'void', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' }
         );
 
         // 9-5. UDH_TotemSpell_Summoning::SpawnAI（爆弾ネズミ召喚時のみ BP_Prey_Rat CDO の AIControllerClass /
@@ -2462,7 +2462,7 @@
         pinnedCallbacks.push(animalTakeDamageCb);
         origAnimalTakeDamage = new NativeFunction(
             Interceptor.replaceFast(moduleBase.add(RVA.ADH_AnimalCharacter_TakeDamage), animalTakeDamageCb),
-            'float', ['pointer', 'float', 'pointer', 'pointer', 'pointer'], 'win64'
+            'float', ['pointer', 'float', 'pointer', 'pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' }
         );
 
         // 9-7. ADH_AnimalCharacter::Destroyed（アクタ破棄時に即座に追跡解除し、ヒープ再利用での野生ネズミ誤爆を根絶・onEnter のみ）

@@ -14,10 +14,10 @@ var ADH_Weapon_Ranged_Reload_addr = moduleBase.add(0xE0E600);
 var ADH_InventoryPickup_Launch_addr = moduleBase.add(0xDD40A0);
 var ADH_InventoryPickup_ApplyThrownDamage_addr = moduleBase.add(0xDC4CE0);
 
-var UClass_GetPrivateStaticClass = new NativeFunction(moduleBase.add(0x11F02E0), 'pointer', [], 'win64');
-var StaticFindObject = new NativeFunction(moduleBase.add(0x137AAA0), 'pointer', ['pointer', 'pointer', 'pointer', 'int8'], 'win64');
-var ADH_Weapon_Ranged_ReloadingConsumesAmmo = new NativeFunction(moduleBase.add(0xF0AEF0), 'uint8', ['pointer'], 'win64');
-var UDH_InventoryManager_FindInventory = new NativeFunction(moduleBase.add(0xDC8730), 'pointer', ['pointer', 'pointer', 'int32'], 'win64');
+var UClass_GetPrivateStaticClass = new NativeFunction(moduleBase.add(0x11F02E0), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
+var StaticFindObject = new NativeFunction(moduleBase.add(0x137AAA0), 'pointer', ['pointer', 'pointer', 'pointer', 'int8'], { abi: 'win64', exceptions: 'propagate' });
+var ADH_Weapon_Ranged_ReloadingConsumesAmmo = new NativeFunction(moduleBase.add(0xF0AEF0), 'uint8', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+var UDH_InventoryManager_FindInventory = new NativeFunction(moduleBase.add(0xDC8730), 'pointer', ['pointer', 'pointer', 'int32'], { abi: 'win64', exceptions: 'propagate' });
 
 var origWeaponGetDamage = null;
 var origApplyThrownDamage = null;
@@ -227,7 +227,7 @@ origWeaponGetDamage = new NativeFunction(
     weaponGetDamageTrampoline,
     'float',
     ['pointer', 'pointer'],
-    'win64'
+    { abi: 'win64', exceptions: 'propagate' }
 );
 
 // ============================================================================
@@ -370,5 +370,5 @@ origApplyThrownDamage = new NativeFunction(
     applyThrownDamageTrampoline,
     'void',
     ['pointer', 'pointer', 'float', 'pointer', 'pointer', 'uint8'],
-    'win64'
+    { abi: 'win64', exceptions: 'propagate' }
 );

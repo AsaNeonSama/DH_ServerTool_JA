@@ -102,24 +102,24 @@ var MatchState_WaitingToStart_ptr = moduleBase.add(RVA.MatchState_WaitingToStart
 var MatchState_PokerGame_ptr = moduleBase.add(RVA.MatchState_PokerGame);
 var MatchState_InProgress_ptr = moduleBase.add(RVA.MatchState_InProgress);
 
-// ネイティブ関数バインディング (前処理で exceptions: 'propagate' を適用済み)
-var UNetConnection_CleanUp = new NativeFunction(moduleBase.add(RVA.UNetConnection_CleanUp), 'void', ['pointer'], 'win64');
-var FUniqueNetIdWrapper_ToString = new NativeFunction(moduleBase.add(RVA.FUniqueNetIdWrapper_ToString), 'pointer', ['pointer', 'pointer'], 'win64');
-var FMemory_Free = new NativeFunction(moduleBase.add(RVA.FMemory_Free), 'void', ['pointer'], 'win64');
-var FMemory_Realloc = new NativeFunction(moduleBase.add(RVA.FMemory_Realloc), 'pointer', ['pointer', 'uint64', 'uint32'], 'win64');
-var AActor_GetWorldTimerManager = new NativeFunction(moduleBase.add(RVA.AActor_GetWorldTimerManager), 'pointer', ['pointer'], 'win64');
-var FTimerManager_FindTimer = new NativeFunction(moduleBase.add(RVA.FTimerManager_FindTimer), 'pointer', ['pointer', 'pointer'], 'win64');
-var FTimerManager_InternalClearTimer = new NativeFunction(moduleBase.add(RVA.FTimerManager_InternalClearTimer), 'void', ['pointer', 'uint64'], 'win64');
-var AGameMode_HasMatchEnded = new NativeFunction(moduleBase.add(RVA.AGameMode_HasMatchEnded), 'uint8', ['pointer'], 'win64');
-var AGameModeBase_MustSpectate = new NativeFunction(moduleBase.add(RVA.AGameModeBase_MustSpectate), 'uint8', ['pointer', 'pointer'], 'win64');
-var APlayerState_GetPlayerName = new NativeFunction(moduleBase.add(RVA.APlayerState_GetPlayerName), 'pointer', ['pointer', 'pointer'], 'win64');
-var AActor_Destroy = new NativeFunction(moduleBase.add(RVA.AActor_Destroy), 'uint8', ['pointer', 'uint8', 'uint8'], 'win64');
+// ネイティブ関数バインディング (単独 Frida 16 互換のため exceptions: 'propagate' 明示)
+var UNetConnection_CleanUp = new NativeFunction(moduleBase.add(RVA.UNetConnection_CleanUp), 'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+var FUniqueNetIdWrapper_ToString = new NativeFunction(moduleBase.add(RVA.FUniqueNetIdWrapper_ToString), 'pointer', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var FMemory_Free = new NativeFunction(moduleBase.add(RVA.FMemory_Free), 'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+var FMemory_Realloc = new NativeFunction(moduleBase.add(RVA.FMemory_Realloc), 'pointer', ['pointer', 'uint64', 'uint32'], { abi: 'win64', exceptions: 'propagate' });
+var AActor_GetWorldTimerManager = new NativeFunction(moduleBase.add(RVA.AActor_GetWorldTimerManager), 'pointer', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+var FTimerManager_FindTimer = new NativeFunction(moduleBase.add(RVA.FTimerManager_FindTimer), 'pointer', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var FTimerManager_InternalClearTimer = new NativeFunction(moduleBase.add(RVA.FTimerManager_InternalClearTimer), 'void', ['pointer', 'uint64'], { abi: 'win64', exceptions: 'propagate' });
+var AGameMode_HasMatchEnded = new NativeFunction(moduleBase.add(RVA.AGameMode_HasMatchEnded), 'uint8', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+var AGameModeBase_MustSpectate = new NativeFunction(moduleBase.add(RVA.AGameModeBase_MustSpectate), 'uint8', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var APlayerState_GetPlayerName = new NativeFunction(moduleBase.add(RVA.APlayerState_GetPlayerName), 'pointer', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var AActor_Destroy = new NativeFunction(moduleBase.add(RVA.AActor_Destroy), 'uint8', ['pointer', 'uint8', 'uint8'], { abi: 'win64', exceptions: 'propagate' });
 
-var ADH_GameMode_StaticClass = new NativeFunction(moduleBase.add(RVA.ADH_GameMode_GetPrivateStaticClass), 'pointer', [], 'win64');
-var ADH_GameState_StaticClass = new NativeFunction(moduleBase.add(RVA.ADH_GameState_StaticClass), 'pointer', [], 'win64');
-var ADH_PlayerState_StaticClass = new NativeFunction(moduleBase.add(RVA.ADH_PlayerState_GetPrivateStaticClass), 'pointer', [], 'win64');
-var APlayerController_StaticClass = new NativeFunction(moduleBase.add(RVA.APlayerController_GetPrivateStaticClass), 'pointer', [], 'win64');
-var ADH_PlayerController_StaticClass = new NativeFunction(moduleBase.add(RVA.ADH_PlayerController_GetPrivateStaticClass), 'pointer', [], 'win64');
+var ADH_GameMode_StaticClass = new NativeFunction(moduleBase.add(RVA.ADH_GameMode_GetPrivateStaticClass), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
+var ADH_GameState_StaticClass = new NativeFunction(moduleBase.add(RVA.ADH_GameState_StaticClass), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
+var ADH_PlayerState_StaticClass = new NativeFunction(moduleBase.add(RVA.ADH_PlayerState_GetPrivateStaticClass), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
+var APlayerController_StaticClass = new NativeFunction(moduleBase.add(RVA.APlayerController_GetPrivateStaticClass), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
+var ADH_PlayerController_StaticClass = new NativeFunction(moduleBase.add(RVA.ADH_PlayerController_GetPrivateStaticClass), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
 
 // 再利用スクラッチバッファ (ゲームスレッド専用)
 var scratchFStringBuf = Memory.alloc(16);
@@ -1213,4 +1213,4 @@ var closeServerWrapper = new NativeCallback(function (gameModePtr) {
 }, 'void', ['pointer'], 'win64');
 
 closeServerTrampoline = Interceptor.replaceFast(closeServerAddr, closeServerWrapper);
-closeServerOrig = new NativeFunction(closeServerTrampoline, 'void', ['pointer'], 'win64');
+closeServerOrig = new NativeFunction(closeServerTrampoline, 'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' });

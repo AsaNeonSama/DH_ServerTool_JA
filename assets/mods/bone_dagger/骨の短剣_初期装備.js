@@ -3,11 +3,11 @@ var base = Module.findBaseAddress('DreadHungerServer-Win64-Shipping.exe');
 
 var ADH_GameMode_InitGame_addr = base.add(0xD9B220);
 
-var UDH_GameInstance_GetInstance = new NativeFunction(base.add(0xD93240), 'pointer', ['pointer'], 'win64');
-var AActor_GetPrivateStaticClass = new NativeFunction(base.add(0x2984D50), 'pointer', [], 'win64');
-var StaticLoadClass = new NativeFunction(base.add(0x137AB40), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer', 'int32', 'pointer'], 'win64');
-var FName_GetPlainNameString = new NativeFunction(base.add(0x11604F0), 'void', ['pointer', 'pointer'], 'win64');
-var FMemory_Realloc = new NativeFunction(base.add(0x106C3D0), 'pointer', ['pointer', 'int64', 'int32'], 'win64');
+var UDH_GameInstance_GetInstance = new NativeFunction(base.add(0xD93240), 'pointer', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+var AActor_GetPrivateStaticClass = new NativeFunction(base.add(0x2984D50), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
+var StaticLoadClass = new NativeFunction(base.add(0x137AB40), 'pointer', ['pointer', 'pointer', 'pointer', 'pointer', 'int32', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var FName_GetPlainNameString = new NativeFunction(base.add(0x11604F0), 'void', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var FMemory_Realloc = new NativeFunction(base.add(0x106C3D0), 'pointer', ['pointer', 'int64', 'int32'], { abi: 'win64', exceptions: 'propagate' });
 
 function logInfo(Info) {
     try {

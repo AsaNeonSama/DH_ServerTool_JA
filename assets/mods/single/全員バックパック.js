@@ -1,7 +1,7 @@
 // 全役職のインベントリ上限を10枠に設定
 var base = Module.findBaseAddress('DreadHungerServer-Win64-Shipping.exe');
 var ADH_HumanCharacter_AddStartingInventory_addr = base.add(0xD46F10);
-var UDH_InventoryManager_SetStorageLimit = new NativeFunction(base.add(0xDE3DA0), 'void', ['pointer', 'int32'], 'win64');
+var UDH_InventoryManager_SetStorageLimit = new NativeFunction(base.add(0xDE3DA0), 'void', ['pointer', 'int32'], { abi: 'win64', exceptions: 'propagate' });
 
 var StorageLimit = new Map([
     ['Captain', 10],

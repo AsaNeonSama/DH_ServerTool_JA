@@ -1,10 +1,10 @@
 var base = Module.findBaseAddress('DreadHungerServer-Win64-Shipping.exe');
 // FNamePool汚染・FString&&ムーブ由来のUAF(0x10963B0)・リーク防止のため、
 // const FString&版(0x10964E0)と FText::~FText(0x75CB30)を使用
-var FText_FromString = new NativeFunction(base.add(0x10964E0), "pointer", ["pointer", "pointer"], "win64");
-var FText_Dtor = new NativeFunction(base.add(0x75CB30), "void", ["pointer"], "win64");
-var ADH_PlayerController_ReceiveThrallMessage = new NativeFunction(base.add(0xEE7810), "void", ["pointer", "pointer", "pointer"], "win64");
-var APlayerController_GetPrivateStaticClass = new NativeFunction(base.add(0x2AA84E0), "pointer", [], "win64");
+var FText_FromString = new NativeFunction(base.add(0x10964E0), "pointer", ["pointer", "pointer"], { abi: "win64", exceptions: "propagate" });
+var FText_Dtor = new NativeFunction(base.add(0x75CB30), "void", ["pointer"], { abi: "win64", exceptions: "propagate" });
+var ADH_PlayerController_ReceiveThrallMessage = new NativeFunction(base.add(0xEE7810), "void", ["pointer", "pointer", "pointer"], { abi: "win64", exceptions: "propagate" });
+var APlayerController_GetPrivateStaticClass = new NativeFunction(base.add(0x2AA84E0), "pointer", [], { abi: "win64", exceptions: "propagate" });
 var ADH_PlayerState_SetIsDead_addr = base.add(0xE4E700);
 var ADH_PlayerState_SetIsDisconnected = base.add(0xE4E770);
 var GWorld = base.add(0x46ED420);

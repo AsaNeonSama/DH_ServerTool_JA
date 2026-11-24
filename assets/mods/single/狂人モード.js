@@ -72,17 +72,17 @@ var SpellManagerInit_addr = base.add(0xE58AC0);
 var ADH_SpellManager_SetEquippedSpells_addr = base.add(0xE81F00);
 var ADH_SpellManager_CastSpell_addr = base.add(0xE634F0);
 
-var UDH_PlayerRoleData_FindByType = new NativeFunction(base.add(0xE33300), 'pointer', ['char', 'pointer'], 'win64');
-var UClass_GetPrivateStaticClass = new NativeFunction(base.add(0x11F02E0), 'pointer', [], 'win64');
-var StaticFindObject = new NativeFunction(base.add(0x137AAA0), 'pointer', ['pointer', 'pointer', 'pointer', 'int8'], 'win64');
-var UDH_GameInstance_GetInstance = new NativeFunction(base.add(0xD93240), 'pointer', ['pointer'], 'win64');
-var UDH_InventoryManager_SetStorageLimit = new NativeFunction(base.add(0xDE3DA0), 'void', ['pointer', 'int32'], 'win64');
-var ADH_PlayerState_GetOwningController = new NativeFunction(base.add(0xE39820), 'pointer', ['pointer'], 'win64');
+var UDH_PlayerRoleData_FindByType = new NativeFunction(base.add(0xE33300), 'pointer', ['char', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var UClass_GetPrivateStaticClass = new NativeFunction(base.add(0x11F02E0), 'pointer', [], { abi: 'win64', exceptions: 'propagate' });
+var StaticFindObject = new NativeFunction(base.add(0x137AAA0), 'pointer', ['pointer', 'pointer', 'pointer', 'int8'], { abi: 'win64', exceptions: 'propagate' });
+var UDH_GameInstance_GetInstance = new NativeFunction(base.add(0xD93240), 'pointer', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+var UDH_InventoryManager_SetStorageLimit = new NativeFunction(base.add(0xDE3DA0), 'void', ['pointer', 'int32'], { abi: 'win64', exceptions: 'propagate' });
+var ADH_PlayerState_GetOwningController = new NativeFunction(base.add(0xE39820), 'pointer', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
 // FNamePool汚染・FString&&ムーブ由来のUAF(0x10963B0)・リーク防止のため、
 // const FString&版(0x10964E0)と FText::~FText(0x75CB30)を使用
-var FText_FromString = new NativeFunction(base.add(0x10964E0), 'pointer', ['pointer', 'pointer'], 'win64');
-var FText_Dtor = new NativeFunction(base.add(0x75CB30), 'void', ['pointer'], 'win64');
-var ADH_PlayerController_ReceiveThrallMessage = new NativeFunction(base.add(0xEE7810), 'void', ['pointer', 'pointer', 'pointer'], 'win64');
+var FText_FromString = new NativeFunction(base.add(0x10964E0), 'pointer', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var FText_Dtor = new NativeFunction(base.add(0x75CB30), 'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+var ADH_PlayerController_ReceiveThrallMessage = new NativeFunction(base.add(0xEE7810), 'void', ['pointer', 'pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
 
 // ============================================================================
 // 試合ごとの可変状態 (GWorld 切替時に自動リセット)
