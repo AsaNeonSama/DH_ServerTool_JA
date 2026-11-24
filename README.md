@@ -7,7 +7,7 @@ Dread Hunger Windows Dedicated Server（原生未改造サーバー）用の統�
 ## 特徴
 - **超軽量・単一実行ファイル (`dist/DH_ServerTool_JA.exe` / 約 12 MB)**:
   - Rust ネイティブ実装 + 静的 CRT リンク (`+crt-static`) により、`VCRUNTIME140.dll` などの外部ランタイム不要で単独動作します。
-  - 全 28 件の修復済み MOD パッチ (`.js`)、事前圧縮済み Web コンソール HTML (`br`/`gzip`)、アプリアイコン、zstd 圧縮済み `frida-gadget-17.27.4-windows-x86_64.dll` を内蔵（完全相対パス動作・原生サーバーバイナリ無改造・`frida.dll` や `.stub` 配置不要）。
+  - 修復済みサーバー MOD・コンテンツ MOD 用スクリプト (`.js`)、事前圧縮済み Web コンソール HTML (`br`/`gzip`)、アプリアイコン、zstd 圧縮済み `frida-gadget-17.27.4-windows-x86_64.dll` を内蔵（完全相対パス動作・原生サーバーバイナリ無改造・`frida.dll` や `.stub` 配置不要）。
   - デフォルト設定をバイナリに内蔵しており、初回起動時に `./config.json` を自動生成します（`config.example.json` の同梱は不要）。
 - **原生サーバー OEP 早注入 (`dh-gadget-injector`) & 連動終了 (`dh-win32`)**:
   - `DreadHungerServer-Win64-Shipping.exe` を一時停止 (`CREATE_SUSPENDED | CREATE_NEW_CONSOLE`) で直接起動し、OEP ガイドスタブ経由で `frida-gadget-17.27.4` をロード・全選択 MOD を 0 秒入口で適用してから実行を再開します（`UObject::Serialize` / `UClass::SerializeDefaultObject` 系の早注入 MOD も確実に動作）。
@@ -21,7 +21,9 @@ Dread Hunger Windows Dedicated Server（原生未改造サーバー）用の統�
 - **JS パッチ実行ログのファイル出力 (`./patch_runtime.log`)**:
   - Frida JS パッチのランタイムログおよびエラーは、ループバック NDJSON チャンネル経由で `DH_ServerTool_JA.exe` と同階層の `./patch_runtime.log` に集約出力されます（サーバータブ `[2]` には各 MOD の注入完了進捗のみ表示）。
   - 試合開始ごとに上書きされ、常に最新 1 試合分のみ保持されます。
-- **個別選択 MOD (`1〜22`)**:
+- **コンテンツ MOD（クライアント `.pak` 併用・サーバー側ゼロ資産）**:
+  - `1: カスタムスペル(新呪文5種)`（サーバー側は純 JS でランタイム合成、クライアント配布用 `.pak` / `.sig` は `assets/content_mods/client/paked/totem_spells/` に格納）
+- **個別選択 MOD (`1〜22`・サーバー単体動作)**:
   - `1: 役職ランダム` (`single/役職ランダム.js`)
   - `2: 開幕沈黙` (`single/開幕沈黙.js`)
   - `3: マップ補強(山頂)` (`single/マップ補強_山頂.js` / `21` と排他)
@@ -53,6 +55,7 @@ Dread Hunger Windows Dedicated Server（原生未改造サーバー）用の統�
 ## 使い方 (Windows Server)
 1. `dist/DH_ServerTool_JA.exe` のみを原生 `WindowsServer` フォルダ（`DreadHunger\Binaries\Win64\DreadHungerServer-Win64-Shipping.exe` の上位階層）に配置します。
 2. `DH_ServerTool_JA.exe` を実行すると初回起動時にデフォルト設定の `./config.json` が自動作成されます。`[Webコンソール設定]` -> `[サーバー・試合設定]` の順に設定してください（ポート項目は `Enter` でデフォルト値を使用できます）。
+3. コンテンツ MOD（`カスタムスペル` など）を有効化する場合は、参加クライアント側で `assets/content_mods/client/paked/` 配下の対応 `.pak` / `.sig` を `DreadHunger/Content/Paks/~mods/` に配置してください（サーバー側への `.pak` 配置は不要です）。
 
 ## `config.json` 設定項目 (自動生成デフォルト)
 ```json
@@ -69,16 +72,21 @@ Dread Hunger Windows Dedicated Server（原生未改造サーバー）用の統�
 }
 ```
 
-## ワークスペース構成
+## ワークスペース・資産構成
 - `crates/dh-win32/`: Win32 API ラッパー（Job Object・プロセス制御・PEB/OEP 読み取り・UDP/TCP テーブル・コンソール／クリップボード）
 - `crates/dh-gadget-injector/`: 独立再利用可能な Frida Gadget 17.27.4 OEP 早注入・キャッシュ管理・16→17 互換 Prelude・ループバック NDJSON ログチャンネル
 - `crates/dh-server-tool/`: メイン実行ファイル (`DH_ServerTool_JA.exe`)（設定・AES-256-GCM・Web コンソール・双タブ TUI・CLI・MOD レジストリ・Supervisor）
+- `assets/mods/`: デフォルト自動注入・サーバー単体 MOD スクリプト (`.js`)
+- `assets/content_mods/server/`: コンテンツ MOD 用サーバー側スクリプト (`.js`)
+- `assets/content_mods/client/paked/`: コンテンツ MOD 用クライアント配布 `.pak` / `.sig`
+- `assets/content_mods/client/source/`: クライアント `.pak` 展開済みソース資産
+- `assets/console/`・`assets/languages/`: Web コンソールテンプレートおよび言語ファイル
 
 ## 開発・ビルド
-> **注意**: `.cargo/config.toml`（静的 CRT `+crt-static` 設定）を確実に適用するため、すべての `cargo` コマンドは **`controller/` ディレクトリ内** で実行してください。
+> **注意**: `.cargo/config.toml`（静的 CRT `+crt-static` 設定）を確実に適用するため、すべての `cargo` コマンドは **リポジトリルート（Cargo Workspace ルート）** で実行してください。
 
 ```bash
-cd controller
+cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo build --release
@@ -88,7 +96,7 @@ cargo build --release
 
 ## ライセンス / License
 
-本プロジェクトは **[DH_ServerTool_JA Custom Source-Available Non-Commercial License (Version 1.2)](./LICENSE)**（日本語・简体中文・English の 3 言語を収録。解釈に相違がある場合は簡体字中国語版を基準とします）の下で公開されています。
+本プロジェクトは **[DH_ServerTool_JA Custom Source-Available Non-Commercial License](./LICENSE)**（日本語・简体中文・English の 3 言語を収録。解釈に相違がある場合は簡体字中国語版を基準とします）の下で公開されています。
 
 - **著作権帰属**: ゲーム『Dread Hunger』本体およびすべてのオリジナル資産の知的財産権は、ニュージーランドの **Digital Confectioners Ltd.** に帰属します。本プロジェクトは自己ホスト専用サーバー向けの非公式コミュニティツールであり、無保証（AS IS）で提供されます。
 - **許可**: 個人または非営利目的での学習、技術交流、自己ホスト運用、改変、および共有は無料で行えます。
