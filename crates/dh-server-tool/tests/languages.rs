@@ -1,8 +1,11 @@
+use dh_server_tool::colors;
 use dh_server_tool::consts::web_console::PLAYER_NAME_LIST;
 use dh_server_tool::languages::{
-    actor_display_name, api_text, player_role_name, render_app, render_cli, render_server,
+    actor_display_name, api_text, app_text, player_role_name, render_app, render_cli, render_server,
 };
-use dh_server_tool::structs::languages::{ApiCode, AppMsg, CliMsg, ConfigSummaryParams, ServerMsg};
+use dh_server_tool::structs::languages::{
+    ApiCode, AppMsg, AppMsgCode, CliMsg, ConfigSummaryParams, ServerMsg,
+};
 use serde_json::Value;
 
 #[test]
@@ -123,4 +126,10 @@ fn renders_japanese_port_switching_and_fixed_port_messages() {
         switch_port_on_restart: false,
     });
     assert!(notice_fixed.contains("同ポートで再試行"));
+
+    assert_eq!(app_text(AppMsgCode::UsageNoticeLabel), "使用上の注意:");
+    assert_eq!(
+        colors::APP_LICENSE_URL,
+        "https://github.com/AsaNeonSama/DH_ServerTool_JA/blob/main/LICENSE"
+    );
 }

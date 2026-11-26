@@ -1,4 +1,6 @@
 pub const APP_CONSOLE_TITLE: &str = "DH_Server_Tool_JA";
+pub const APP_LICENSE_URL: &str =
+    "https://github.com/AsaNeonSama/DH_ServerTool_JA/blob/main/LICENSE";
 
 pub const RESET: &str = "\x1b[0m";
 pub const RED: &str = "\x1b[31m";

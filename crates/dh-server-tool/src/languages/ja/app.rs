@@ -8,6 +8,7 @@ pub fn text(code: AppMsgCode) -> &'static str {
         AppMsgCode::BrandBuild => "Build",
         AppMsgCode::BrandWith => "With",
         AppMsgCode::BrandAntigravity => "Antigravity",
+        AppMsgCode::UsageNoticeLabel => "使用上の注意:",
         AppMsgCode::MissingServerDirError => {
             "本ソフトをサーバーのフォルダの下に入れた後で再起動してください!"
         }

@@ -138,6 +138,13 @@ async fn run_app() -> ExitCode {
         colors::LIGHT_BLUE,
         languages::app_text(AppMsgCode::BrandAntigravity),
     ));
+    terminal.println(&format!(
+        "{} * {} {}{}",
+        colors::LIGHT_BLUE,
+        languages::app_text(AppMsgCode::UsageNoticeLabel),
+        colors::LIGHT_BLACK,
+        colors::APP_LICENSE_URL,
+    ));
 
     // Ensure working directory contains the server binary (relative paths only)
     let default_cfg: AppConfig = AppConfig::default();

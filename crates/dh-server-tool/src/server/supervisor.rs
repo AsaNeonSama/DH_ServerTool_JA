@@ -24,8 +24,7 @@ use crate::mods::{
     prepare_injection_plan, ModGroup, PatchScript, ResolvedPatchScript, DEFAULT_PATCH_SCRIPTS,
 };
 use crate::server::patch_logger::{
-    append_patch_runtime_log, reset_patch_runtime_log, PatchLogLevel,
-    PATCH_RUNTIME_LOG_RELATIVE_PATH,
+    append_patch_runtime_log_at, start_patch_runtime_log, PatchLogLevel,
 };
 use crate::structs::languages::{AppMsgCode, ServerMsg, ServerMsgCode};
 use crate::terminal::{wait_for_post_match_decision, PostMatchAction, Terminal};
@@ -229,8 +228,8 @@ async fn spawn_and_inject_round(
         return Err(InjectorError::Cancelled);
     }
 
-    // Overwrite ./patch_runtime.log at the start of every match round.
-    reset_patch_runtime_log(port, patches);
+    // Create a launch-timestamped patch runtime log and keep only the newest 3 matches.
+    let log_path: PathBuf = start_patch_runtime_log(port, patches);
 
     terminal.println(&format!(
         "{} * {}",
@@ -261,6 +260,7 @@ async fn spawn_and_inject_round(
     let meta_arc: Arc<HashMap<String, (usize, String, ModGroup)>> = Arc::new(mod_meta);
     let loaded_counter: Arc<AtomicUsize> = Arc::new(AtomicUsize::new(0));
     let term_for_cb: Terminal = terminal.clone();
+    let log_path_for_cb: Arc<PathBuf> = Arc::new(log_path.clone());
 
     let on_event: EventCallback = Arc::new(move |event: InjectorEvent| match event {
         InjectorEvent::ModLoaded { file_name } => {
@@ -280,11 +280,21 @@ async fn spawn_and_inject_round(
             file_name,
             message,
         } => {
-            // Runtime JS patch logs go exclusively to ./patch_runtime.log (never Tab 2).
-            append_patch_runtime_log(map_injector_log_level(level), &file_name, &message);
+            // Runtime JS patch logs go exclusively to the round's timestamped log file (never Tab 2).
+            append_patch_runtime_log_at(
+                &log_path_for_cb,
+                map_injector_log_level(level),
+                &file_name,
+                &message,
+            );
         }
         InjectorEvent::InitError { file_name, message } => {
-            append_patch_runtime_log(PatchLogLevel::Error, &file_name, &message);
+            append_patch_runtime_log_at(
+                &log_path_for_cb,
+                PatchLogLevel::Error,
+                &file_name,
+                &message,
+            );
             term_for_cb.println(&format!(
                 "{}   {}",
                 colors::RED,
@@ -311,7 +321,7 @@ async fn spawn_and_inject_round(
 
     let mut request: InjectLaunchRequest = InjectLaunchRequest::new(exe_path, args, injector_mods);
     request.cwd = cwd;
-    request.patch_log_path = PathBuf::from(PATCH_RUNTIME_LOG_RELATIVE_PATH);
+    request.patch_log_path = log_path;
     request.round = round;
     request.init_timeout = Duration::from_secs(INJECTION_INIT_TIMEOUT_SECS);
     request.on_event = Some(on_event);

@@ -1,4 +1,6 @@
-pub const PATCH_RUNTIME_LOG_RELATIVE_PATH: &str = "./patch_runtime.log";
+pub const PATCH_RUNTIME_LOG_PREFIX: &str = "patch_runtime_";
+pub const PATCH_RUNTIME_LOG_EXTENSION: &str = ".log";
+pub const MAX_PATCH_RUNTIME_LOG_FILES: usize = 3;
 pub const UE_PROJECT_NAME: &str = "DreadHunger";
 pub const LEGACY_GADGET_DLL_FILENAME: &str = "frida.dll";
 pub const STARTUP_RETRY_DELAY_MS: u64 = 5_000;

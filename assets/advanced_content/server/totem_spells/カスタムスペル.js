@@ -111,13 +111,19 @@
         teleportSpiritWalkFallbackSec: 2.6,
         teleportSpiritWalkExitDelaySec: 0.15,
 
-        // 威嚇 (TS_Intimidate): 通知なし・効果音のみ・霊界同等の即発動(STS_CASTER) / 半径 50m (5000 UU) / 暗視野 + スタミナ枯渇
+        // 威嚇 (TS_Intimidate): 通知なし・効果音のみ・霊界同等の即発動(STS_CASTER) / 半径 50m (5000 UU) / 暗視野 + 段階別スタミナ回復遅延(0/3/5s)
         intimidateCooldownSec: 120.0,
         intimidateRadiusUU: 5000.0,
         intimidateDurationsByTier: { 2: 5.0, 3: 10.0, 4: 15.0 },
-        intimidateCameraFadeAlpha: 0.58,
+        intimidateStaminaRegenDelayByTier: { 2: 0.0, 3: 3.0, 4: 5.0 },
+        intimidateNativeStaminaDelaySec: 5.0, // ADH_HumanCharacter::Tick (0xD74F44) のネイティブ 5.0s 閾値
+        intimidateCameraFadeAlpha: 0.74,
         intimidateCameraFadeTimeSec: 0.45,
+        intimidateCameraFadeOutTimeSec: 0.35,
         intimidateCameraFadeColorBGRA: 0xFF000000,
+        intimidateCleanupRetryDelaysSec: [0.5, 1.5, 3.0],
+        intimidateCleanupRetryMaxWindowSec: 6.0,
+        intimidateCleanupNullPcPollSec: 0.5,
 
         // エネルギー譲渡 (TS_Transfer): 通知なし・効果音のみ・仲間の傀儡のみ指定可能
         transferCooldownSec: 90.0,
@@ -245,12 +251,16 @@
         FTimerManager_FindTimer: 0x28F2D80,
         FTimerManager_InternalClearTimer: 0x28F6A00,
 
-        // インベントリ強制丸腰制御（威嚇用）
+        // インベントリ強制丸腰・攻撃権威遮断（威嚇用）
+        FInventorySelection_GetInventory: 0xDCC660,
         UDH_InventoryManager_HolsterInventory_Impl: 0xDD2450,
         UDH_InventoryManager_SelectInventory_Impl: 0xDE20C0,
         UDH_InventoryManager_UseInventory_Impl: 0xDEABB0,
         UDH_InventoryManager_AimInventory_Impl: 0xDBD3D0,
-        UDH_InventoryManager_ReloadInventory_Impl: 0xDDE3A0
+        UDH_InventoryManager_ReloadInventory_Impl: 0xDDE3A0,
+        UDH_InventoryManager_DropInventory_Impl: 0xDC6540,
+        ADH_Weapon_Ranged_HitActor_Impl: 0xE04C50,
+        ADH_Weapon_Melee_ApplyMeleeDamage_Impl: 0xDF6710
     };
 
     var OFFSETS = {
@@ -349,10 +359,14 @@
         ADH_HumanCharacter_CurrentStamina: 0xA50,
         ADH_HumanCharacter_bSpiritWalking: 0xC71,
         ADH_HumanCharacter_SpiritWalkTimerHandle: 0xD50,
+        ADH_HumanCharacter_LastStaminaExhaustedTime: 0x102C, // UWorld::TimeSeconds 基準（0.0=遅延なし, TimeSeconds - val <= 5.0s の間回復停止）
 
         UDH_InventoryManager_HumanOwner: 0xD8,
         UDH_InventoryManager_SelectedInventory: 0xF8,
         UDH_InventoryManager_SelectedViewClass: 0x150,
+
+        ADH_Inventory_HumanOwner: 0x268,
+        ADH_Inventory_InventoryType: 0x290,
 
         ADH_SpellManager_SpellTierLevels: 0x230,
         ADH_SpellManager_SpellChargeLevel: 0x284,
@@ -586,6 +600,7 @@
     var AActor_GetWorldTimerManager = new NativeFunction(moduleBase.add(RVA.AActor_GetWorldTimerManager), 'pointer', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
     var FTimerManager_FindTimer = new NativeFunction(moduleBase.add(RVA.FTimerManager_FindTimer), 'pointer', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
     var FTimerManager_InternalClearTimer = new NativeFunction(moduleBase.add(RVA.FTimerManager_InternalClearTimer), 'void', ['pointer', 'uint64'], { abi: 'win64', exceptions: 'propagate' });
+    var FInventorySelection_GetInventory = new NativeFunction(moduleBase.add(RVA.FInventorySelection_GetInventory), 'pointer', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
 
     // GC 防止用トップレベル配列（すべての NativeCallback を常駐保持）
     var pinnedCallbacks = [];
@@ -1412,8 +1427,12 @@
     var trackedWorldKey = '';
     var currentGameState = ptr(0);
 
-    // 威嚇 (TS_Intimidate): humanKey -> { human, invMgr, expireTime }
+    // 威嚇 (TS_Intimidate):
+    //   - intimidatedHumans: humanKey -> { human, ps, pc, invMgr, expireTime, spellKeys }
+    //   - pendingIntimidateCleanups: retryKey -> { ps, pc, human, createdAt, expiresAt, nextRetryAt, completedValidRetries }
+    //     ※ サーバー側は発動呼出・終了/死亡コールバック・有界リトライ回収・RPC権威遮断のみ（毎フレームの武器監視/再収刀なし）
     var intimidatedHumans = {};
+    var pendingIntimidateCleanups = {};
 
     // テレポート (TS_Teleport): spellKey -> { totem, casterPS, castTier } / humanKey -> { human, exitAt }
     var activeTeleportTargets = {};
@@ -1454,9 +1473,7 @@
         if (!entry) {
             return ptr(0);
         }
-        if (entry.pc && !entry.pc.isNull() && !isPendingKill(entry.pc)) {
-            return entry.pc;
-        }
+        // 死亡・リスポーン・再接続後の最新コントローラを優先して解決
         if (entry.ps && !entry.ps.isNull() && !isPendingKill(entry.ps)) {
             var fromPs = getControllerFromPlayerState(entry.ps);
             if (!fromPs.isNull() && !isPendingKill(fromPs)) {
@@ -1469,10 +1486,36 @@
                 return ctrl;
             }
         }
+        if (entry.pc && !entry.pc.isNull() && !isPendingKill(entry.pc)) {
+            return entry.pc;
+        }
         return ptr(0);
     }
 
-    function applyIntimidateCameraFade(pcPtr, enableFading, toAlpha, holdWhenFinished) {
+    function resolveLiveHumanForIntimidate(entry, pcPtr) {
+        if (entry && entry.ps && !entry.ps.isNull() && !isPendingKill(entry.ps)) {
+            var fromPs = getHumanFromPlayerState(entry.ps);
+            if (!fromPs.isNull() && !isPendingKill(fromPs)) {
+                return fromPs;
+            }
+        }
+        if (pcPtr && !pcPtr.isNull() && !isPendingKill(pcPtr)) {
+            var ctrlHuman = pcPtr.add(OFFSETS.ADH_PlayerController_ControlledHuman).readPointer();
+            if (!ctrlHuman.isNull() && !isPendingKill(ctrlHuman) && isA(ctrlHuman, getHumanClass())) {
+                return ctrlHuman;
+            }
+            var pawn = pcPtr.add(OFFSETS.ADH_PlayerController_Pawn).readPointer();
+            if (!pawn.isNull() && !isPendingKill(pawn) && isA(pawn, getHumanClass())) {
+                return pawn;
+            }
+        }
+        if (entry && entry.human && !entry.human.isNull() && !isPendingKill(entry.human)) {
+            return entry.human;
+        }
+        return ptr(0);
+    }
+
+    function applyIntimidateCameraFade(pcPtr, enableFading, fromAlpha, toAlpha, fadeTimeSec, holdWhenFinished) {
         if (!pcPtr || pcPtr.isNull() || isPendingKill(pcPtr)) {
             return;
         }
@@ -1481,22 +1524,208 @@
                 pcPtr,
                 enableFading ? 1 : 0,
                 CONFIG.intimidateCameraFadeColorBGRA,
-                packFVector2D(-1.0, toAlpha),
-                CONFIG.intimidateCameraFadeTimeSec,
+                packFVector2D(fromAlpha, toAlpha),
+                fadeTimeSec,
                 0, // bFadeAudio = false
                 holdWhenFinished ? 1 : 0
             );
         } catch (e) {}
     }
 
-    function clearIntimidateEntry(hKey, entry) {
+    function tryUnholsterLiveHuman(liveHuman, fallbackInvMgr) {
+        if (!origHolsterInventory || !liveHuman || liveHuman.isNull() || !isHumanAlive(liveHuman)) {
+            return;
+        }
+        try {
+            var invMgr = liveHuman.add(OFFSETS.ADH_HumanCharacter_InventoryComponent).readPointer();
+            if (invMgr.isNull() || isPendingKill(invMgr)) {
+                invMgr = fallbackInvMgr || ptr(0);
+            }
+            if (!invMgr || invMgr.isNull() || isPendingKill(invMgr)) {
+                return;
+            }
+            var selectedInv = invMgr.add(OFFSETS.UDH_InventoryManager_SelectedInventory).readPointer();
+            var viewClass = invMgr.add(OFFSETS.UDH_InventoryManager_SelectedViewClass).readPointer();
+            if (!selectedInv.isNull() && !isPendingKill(selectedInv) && viewClass.isNull()) {
+                origHolsterInventory(invMgr, 0);
+            }
+        } catch (eUnholster) {}
+    }
+
+    function isPlayerCurrentlyIntimidated(psPtr, pcPtr, humanPtr) {
+        var keys = Object.keys(intimidatedHumans);
+        for (var i = 0; i < keys.length; i++) {
+            var e = intimidatedHumans[keys[i]];
+            if (!e) { continue; }
+            if (psPtr && !psPtr.isNull() && e.ps && !e.ps.isNull() && e.ps.equals(psPtr)) { return true; }
+            if (humanPtr && !humanPtr.isNull() && e.human && !e.human.isNull() && e.human.equals(humanPtr)) { return true; }
+            if (pcPtr && !pcPtr.isNull() && e.pc && !e.pc.isNull() && e.pc.equals(pcPtr)) { return true; }
+        }
+        return false;
+    }
+
+    function cancelIntimidateCleanupRetry(psPtr, pcPtr, humanPtr) {
+        var rKeys = Object.keys(pendingIntimidateCleanups);
+        for (var i = 0; i < rKeys.length; i++) {
+            var rk = rKeys[i];
+            var r = pendingIntimidateCleanups[rk];
+            if (!r) {
+                delete pendingIntimidateCleanups[rk];
+                continue;
+            }
+            var matchPs = psPtr && !psPtr.isNull() && r.ps && !r.ps.isNull() && r.ps.equals(psPtr);
+            var matchPc = pcPtr && !pcPtr.isNull() && r.pc && !r.pc.isNull() && r.pc.equals(pcPtr);
+            var matchHuman = humanPtr && !humanPtr.isNull() && r.human && !r.human.isNull() && r.human.equals(humanPtr);
+            if (matchPs || matchPc || matchHuman) {
+                delete pendingIntimidateCleanups[rk];
+            }
+        }
+    }
+
+    function enqueueIntimidateCleanupRetry(hKey, entry, nowTimeSec) {
+        if (!entry || !Number.isFinite(nowTimeSec)) {
+            return;
+        }
+        var hasPs = entry.ps && !entry.ps.isNull() && !isPendingKill(entry.ps);
+        var hasPc = entry.pc && !entry.pc.isNull() && !isPendingKill(entry.pc);
+        var hasHuman = entry.human && !entry.human.isNull() && !isPendingKill(entry.human);
+        if (!hasPs && !hasPc && !hasHuman) {
+            return;
+        }
+        // 既存リトライを重複排除してから再登録（PlayerState キー優先で死亡・リスポーンを跨いで追跡）
+        cancelIntimidateCleanupRetry(entry.ps, entry.pc, entry.human);
+        var retryKey = hasPs ? ('ps:' + entry.ps.toString()) : (hasPc ? ('pc:' + entry.pc.toString()) : ('h:' + hKey));
+        pendingIntimidateCleanups[retryKey] = {
+            ps: hasPs ? entry.ps : ptr(0),
+            pc: hasPc ? entry.pc : ptr(0),
+            human: hasHuman ? entry.human : ptr(0),
+            createdAt: nowTimeSec,
+            expiresAt: nowTimeSec + CONFIG.intimidateCleanupRetryMaxWindowSec,
+            nextRetryAt: nowTimeSec + CONFIG.intimidateCleanupRetryDelaysSec[0],
+            completedValidRetries: 0
+        };
+    }
+
+    function clearIntimidateEntry(hKey, entry, skipUnholster, enqueueRetries) {
         delete intimidatedHumans[hKey];
         if (!entry) {
             return;
         }
         var pc = resolvePlayerControllerForIntimidate(entry);
         if (!pc.isNull()) {
-            applyIntimidateCameraFade(pc, true, 0.0, false);
+            // 試行 #0: 0.74 -> 0.0 の滑らかなフェードアウト (0.35s, hold=0)
+            applyIntimidateCameraFade(pc, true, -1.0, 0.0, CONFIG.intimidateCameraFadeOutTimeSec, false);
+        }
+        if (!skipUnholster) {
+            var liveHuman = resolveLiveHumanForIntimidate(entry, pc);
+            tryUnholsterLiveHuman(liveHuman, entry.invMgr);
+        }
+        if (enqueueRetries) {
+            var wt = getWorldAndTime();
+            if (!wt.world.isNull() && wt.world.toString() === trackedWorldKey) {
+                enqueueIntimidateCleanupRetry(hKey, entry, wt.timeSeconds);
+            }
+        }
+    }
+
+    function handleIntimidateOnExpired(spellPtr) {
+        if (!spellPtr || spellPtr.isNull()) {
+            return;
+        }
+        var spellKey = spellPtr.toString();
+        var wt = getWorldAndTime();
+        var nowSec = wt.world.isNull() ? Infinity : wt.timeSeconds;
+        var intKeys = Object.keys(intimidatedHumans);
+        for (var i = 0; i < intKeys.length; i++) {
+            var ik = intKeys[i];
+            var entry = intimidatedHumans[ik];
+            if (!entry) {
+                delete intimidatedHumans[ik];
+                continue;
+            }
+            if (!entry.spellKeys || entry.spellKeys[spellKey] === undefined) {
+                continue;
+            }
+            delete entry.spellKeys[spellKey];
+            // 複数傀儡の重複威嚇時は、他の有効スペルが残っている間は解除しない
+            var remKeys = Object.keys(entry.spellKeys);
+            var maxRemaining = 0.0;
+            for (var j = 0; j < remKeys.length; j++) {
+                var expT = entry.spellKeys[remKeys[j]];
+                if (Number.isFinite(expT) && expT > nowSec && expT > maxRemaining) {
+                    maxRemaining = expT;
+                } else {
+                    delete entry.spellKeys[remKeys[j]];
+                }
+            }
+            if (maxRemaining <= 0.0) {
+                var alive = isHumanAlive(entry.human);
+                clearIntimidateEntry(ik, entry, !alive, true);
+            } else {
+                entry.expireTime = maxRemaining;
+            }
+        }
+    }
+
+    function tickPendingIntimidateCleanups(nowTimeSec) {
+        var rKeys = Object.keys(pendingIntimidateCleanups);
+        if (rKeys.length === 0) {
+            return;
+        }
+        var delays = CONFIG.intimidateCleanupRetryDelaysSec;
+        for (var i = 0; i < rKeys.length; i++) {
+            var rk = rKeys[i];
+            var r = pendingIntimidateCleanups[rk];
+            if (!r) {
+                delete pendingIntimidateCleanups[rk];
+                continue;
+            }
+            if (nowTimeSec < r.nextRetryAt) {
+                continue;
+            }
+            var psValid = r.ps && !r.ps.isNull() && !isPendingKill(r.ps);
+            var pcStoredValid = r.pc && !r.pc.isNull() && !isPendingKill(r.pc);
+            var humanValid = r.human && !r.human.isNull() && !isPendingKill(r.human);
+            if (!psValid && !pcStoredValid && !humanValid) {
+                delete pendingIntimidateCleanups[rk];
+                continue;
+            }
+            // 新規威嚇が再発動されている場合は即座にリトライを破棄し、新しい威嚇を絶対に上書きしない
+            var livePc = resolvePlayerControllerForIntimidate(r);
+            var liveHuman = resolveLiveHumanForIntimidate(r, livePc);
+            if (isPlayerCurrentlyIntimidated(psValid ? r.ps : ptr(0), livePc, liveHuman)) {
+                delete pendingIntimidateCleanups[rk];
+                continue;
+            }
+            if (!livePc.isNull() && !isPendingKill(livePc)) {
+                r.pc = livePc;
+                if (!psValid) {
+                    var refreshedPs = livePc.add(OFFSETS.ADH_PlayerController_PlayerState).readPointer();
+                    if (!refreshedPs.isNull() && !isPendingKill(refreshedPs) && isA(refreshedPs, getPlayerStateClass())) {
+                        r.ps = refreshedPs;
+                    }
+                }
+                // 冪等ハードクリア (enable=0, from=0, to=0, time=0.0, hold=0):
+                // 既に解除済みなら無害なノーオペ、試行 #0 欠損・死亡遷移中ロスト時は確実に暗視野を強制解除
+                applyIntimidateCameraFade(livePc, false, 0.0, 0.0, 0.0, false);
+                if (!liveHuman.isNull() && isHumanAlive(liveHuman)) {
+                    tryUnholsterLiveHuman(liveHuman, ptr(0));
+                }
+                r.completedValidRetries++;
+                if (r.completedValidRetries >= delays.length || nowTimeSec >= r.expiresAt) {
+                    delete pendingIntimidateCleanups[rk];
+                } else {
+                    var scheduledAt = r.createdAt + delays[r.completedValidRetries];
+                    r.nextRetryAt = Math.max(nowTimeSec + CONFIG.intimidateCleanupNullPcPollSec, scheduledAt);
+                }
+            } else {
+                // 切断・リスポーン遷移などで PC が一時的に null の場合は上限ウィンドウまで継続監視
+                if (nowTimeSec >= r.expiresAt) {
+                    delete pendingIntimidateCleanups[rk];
+                } else {
+                    r.nextRetryAt = nowTimeSec + CONFIG.intimidateCleanupNullPcPollSec;
+                }
+            }
         }
     }
 
@@ -1506,7 +1735,7 @@
             trackedWorldKey = key;
             var oldIntKeys = Object.keys(intimidatedHumans);
             for (var oi = 0; oi < oldIntKeys.length; oi++) {
-                clearIntimidateEntry(oldIntKeys[oi], intimidatedHumans[oldIntKeys[oi]]);
+                clearIntimidateEntry(oldIntKeys[oi], intimidatedHumans[oldIntKeys[oi]], true, false);
             }
             var oldMouseKeys = Object.keys(trackedBombMice);
             for (var om = 0; om < oldMouseKeys.length; om++) {
@@ -1516,6 +1745,7 @@
                 }
             }
             intimidatedHumans = {};
+            pendingIntimidateCleanups = {};
             activeTeleportTargets = {};
             teleportSpiritWalkMap = {};
             activeBombMiceSpells = {};
@@ -1566,30 +1796,57 @@
         }
         var wt = getWorldAndTime();
         if (wt.world.isNull() || wt.world.toString() !== trackedWorldKey) {
-            clearIntimidateEntry(key, entry);
+            clearIntimidateEntry(key, entry, true, false);
             return false;
         }
-        if (wt.timeSeconds >= entry.expireTime || isPendingKill(entry.human)) {
-            clearIntimidateEntry(key, entry);
+        var alive = isHumanAlive(entry.human);
+        if (wt.timeSeconds >= entry.expireTime || !alive) {
+            clearIntimidateEntry(key, entry, !alive, true);
             return false;
         }
         return true;
     }
 
     // ========================================================================
-    // 7. インベントリ強制丸腰フック（威嚇 TS_Intimidate 用）
+    // 7. インベントリ強制丸腰＆攻撃権威遮断フック（威嚇 TS_Intimidate 用）
     // ========================================================================
+    var INVENTORY_TYPE_FISTS = 35; // EInventoryType::CCT_FISTS (0x23)
     var origHolsterInventory = null;
     var origSelectInventory = null;
     var origUseInventory = null;
     var origAimInventory = null;
     var origReloadInventory = null;
+    var origDropInventory = null;
+    var origRangedHitActor = null;
+    var origMeleeApplyDamage = null;
 
     function getInvHumanOwner(invMgrPtr) {
         if (!invMgrPtr || invMgrPtr.isNull() || isPendingKill(invMgrPtr)) {
             return ptr(0);
         }
         return invMgrPtr.add(OFFSETS.UDH_InventoryManager_HumanOwner).readPointer();
+    }
+
+    function getInventoryHumanOwner(invPtr) {
+        if (!invPtr || invPtr.isNull() || isPendingKill(invPtr)) {
+            return ptr(0);
+        }
+        return invPtr.add(OFFSETS.ADH_Inventory_HumanOwner).readPointer();
+    }
+
+    function isFistsInventorySelection(invMgrPtr, invSelectionPtr) {
+        if (!invMgrPtr || invMgrPtr.isNull() || !invSelectionPtr || invSelectionPtr.isNull()) {
+            return false;
+        }
+        try {
+            var resolved = FInventorySelection_GetInventory(invSelectionPtr, invMgrPtr);
+            if (resolved.isNull() || isPendingKill(resolved)) {
+                return false;
+            }
+            return resolved.add(OFFSETS.ADH_Inventory_InventoryType).readU8() === INVENTORY_TYPE_FISTS;
+        } catch (e) {
+            return false;
+        }
     }
 
     function forceHolsterNow(invMgrPtr) {
@@ -1624,6 +1881,13 @@
         var selectCb = new NativeCallback(function (invMgr, invSelectionPtr) {
             try {
                 if (isHumanIntimidated(getInvHumanOwner(invMgr))) {
+                    // クライアント側 TS_Intimidate::OnCast による素手(BP_Fists_Inventory)強制切替は
+                    // サーバー側の SelectedInventory とも一致させ、解除後の武器再装備スタックを防止
+                    if (isFistsInventorySelection(invMgr, invSelectionPtr)) {
+                        if (origSelectInventory) { origSelectInventory(invMgr, invSelectionPtr); }
+                        forceHolsterNow(invMgr);
+                        return;
+                    }
                     forceHolsterNow(invMgr);
                     return;
                 }
@@ -1677,6 +1941,51 @@
         origReloadInventory = new NativeFunction(
             Interceptor.replaceFast(moduleBase.add(RVA.UDH_InventoryManager_ReloadInventory_Impl), reloadCb),
             'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' }
+        );
+
+        // 威嚇中の投擲攻撃（斧・包丁・ニトロ・手榴弾等）をサーバー権威で遮断（通常ドロップは許可）
+        var dropCb = new NativeCallback(function (invMgr, invSelectionPtr, offsetPtr, rotPtr, numToDrop, bThrow, dropMethod) {
+            try {
+                if ((bThrow & 1) !== 0 && isHumanIntimidated(getInvHumanOwner(invMgr))) {
+                    return;
+                }
+            } catch (e) {}
+            if (origDropInventory) { origDropInventory(invMgr, invSelectionPtr, offsetPtr, rotPtr, numToDrop, bThrow, dropMethod); }
+        }, 'void', ['pointer', 'pointer', 'pointer', 'pointer', 'int32', 'uint8', 'uint8'], 'win64');
+        pinnedCallbacks.push(dropCb);
+        origDropInventory = new NativeFunction(
+            Interceptor.replaceFast(moduleBase.add(RVA.UDH_InventoryManager_DropInventory_Impl), dropCb),
+            'void', ['pointer', 'pointer', 'pointer', 'pointer', 'int32', 'uint8', 'uint8'], { abi: 'win64', exceptions: 'propagate' }
+        );
+
+        // クライアント予測射撃（弓・銃）による HitActor RPC ダメージをサーバー権威で完全遮断
+        var rangedHitCb = new NativeCallback(function (weaponPtr, hitResultPtr) {
+            try {
+                if (isHumanIntimidated(getInventoryHumanOwner(weaponPtr))) {
+                    return;
+                }
+            } catch (e) {}
+            if (origRangedHitActor) { origRangedHitActor(weaponPtr, hitResultPtr); }
+        }, 'void', ['pointer', 'pointer'], 'win64');
+        pinnedCallbacks.push(rangedHitCb);
+        origRangedHitActor = new NativeFunction(
+            Interceptor.replaceFast(moduleBase.add(RVA.ADH_Weapon_Ranged_HitActor_Impl), rangedHitCb),
+            'void', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' }
+        );
+
+        // クライアント予測近接攻撃（武器・素手）による ApplyMeleeDamage RPC ダメージをサーバー権威で完全遮断
+        var meleeDamageCb = new NativeCallback(function (weaponPtr, hitsArrayPtr, attackStatePtr) {
+            try {
+                if (isHumanIntimidated(getInventoryHumanOwner(weaponPtr))) {
+                    return;
+                }
+            } catch (e) {}
+            if (origMeleeApplyDamage) { origMeleeApplyDamage(weaponPtr, hitsArrayPtr, attackStatePtr); }
+        }, 'void', ['pointer', 'pointer', 'pointer'], 'win64');
+        pinnedCallbacks.push(meleeDamageCb);
+        origMeleeApplyDamage = new NativeFunction(
+            Interceptor.replaceFast(moduleBase.add(RVA.ADH_Weapon_Melee_ApplyMeleeDamage_Impl), meleeDamageCb),
+            'void', ['pointer', 'pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' }
         );
     }
 
@@ -3407,6 +3716,8 @@
             return false;
         }
 
+        var spellKey = spellPtr.toString();
+        var staminaDelaySec = CONFIG.intimidateStaminaRegenDelayByTier[castTier] || 0.0;
         var expireAt = wt.timeSeconds + duration;
         var allPS = getAllPlayerStates();
         var hitCount = 0;
@@ -3430,33 +3741,56 @@
                     pc = pawnCtrl;
                 }
             }
+
+            // 前回威嚇の終了リトライが残っている場合は即時キャンセル（新規威嚇の上書き解除を防止）
+            cancelIntimidateCleanupRetry(ps, pc, human);
+
             var hKey = human.toString();
             var prev = intimidatedHumans[hKey];
             var nextExpire = prev ? Math.max(prev.expireTime, expireAt) : expireAt;
+            var spellKeys = (prev && prev.spellKeys) ? prev.spellKeys : {};
+            spellKeys[spellKey] = expireAt;
 
             intimidatedHumans[hKey] = {
                 human: human,
                 ps: ps,
                 pc: pc,
                 invMgr: invMgr,
-                expireTime: nextExpire
+                expireTime: nextExpire,
+                spellKeys: spellKeys
             };
 
+            // 発動時の初回収刀・照準解除のみ呼出（以降はクライアント毎フレーム収刀＋サーバー側 RPC 権威遮断に委譲）
             if (!invMgr.isNull() && !isPendingKill(invMgr)) {
                 if (origAimInventory) { origAimInventory(invMgr, 0); }
                 forceHolsterNow(invMgr);
             }
 
-            // 暗視野カメラフェード（ClientSetCameraFade: 行動阻害なし・現在値から滑らかに 0.58 黒フェード保持）
+            // 暗視野カメラフェード（ClientSetCameraFade: 行動阻害なし・現在値から滑らかに 0.74 黒フェード保持）
             if (!pc.isNull()) {
-                applyIntimidateCameraFade(pc, true, CONFIG.intimidateCameraFadeAlpha, true);
+                applyIntimidateCameraFade(pc, true, -1.0, CONFIG.intimidateCameraFadeAlpha, CONFIG.intimidateCameraFadeTimeSec, true);
             }
 
-            // スタミナをちょうど 0.0 まで清空（負の疲労値や強制5秒遅延を課さず、即座に通常どおり回復開始）
+            // スタミナを 0.0 まで清空 ＋ 段階別回復遅延（Tier1: 0s / Tier2: 3s / Tier3: 5s）
+            // ADH_HumanCharacter::Tick (0xD74F1E..0xD74F4B) は LastStaminaExhaustedTime (+0x102C) が非 0 のとき
+            // (UWorld::TimeSeconds - LastStaminaExhaustedTime) <= 5.0s の間 ModifyStamina(DeltaSeconds) をスキップする
             try {
                 var curStam = human.add(OFFSETS.ADH_HumanCharacter_CurrentStamina).readFloat();
                 if (Number.isFinite(curStam) && curStam > 0.0) {
                     ADH_HumanCharacter_ModifyStamina(human, -curStam);
+                }
+                if (staminaDelaySec > 0.0) {
+                    var targetStamp = wt.timeSeconds - (CONFIG.intimidateNativeStaminaDelaySec - staminaDelaySec);
+                    // 0.0f は Tick 上で「遅延なし」扱いのため微小値へ回避
+                    if (Math.abs(targetStamp) < 0.0001) {
+                        targetStamp = 0.0001;
+                    }
+                    var curStamp = human.add(OFFSETS.ADH_HumanCharacter_LastStaminaExhaustedTime).readFloat();
+                    var hasLongerActiveDelay = Number.isFinite(curStamp) && curStamp !== 0.0 &&
+                        curStamp <= wt.timeSeconds && curStamp >= targetStamp;
+                    if (!hasLongerActiveDelay) {
+                        human.add(OFFSETS.ADH_HumanCharacter_LastStaminaExhaustedTime).writeFloat(targetStamp);
+                    }
                 }
             } catch (eStam) {}
             hitCount++;
@@ -3464,7 +3798,7 @@
 
         // 通知なし（クライアント側 sfx_IntimidateCast 効果音のみ再生）
         log('[TS_Intimidate] 段階' + (castTier >= 2 ? (castTier - 1) : 0) +
-            ' 持続=' + duration + 's 半径=' + CONFIG.intimidateRadiusUU + 'UU 命中=' + hitCount + '人');
+            ' 持続=' + duration + 's スタミナ遅延=' + staminaDelaySec + 's 半径=' + CONFIG.intimidateRadiusUU + 'UU 命中=' + hitCount + '人');
         return true;
     }
 
@@ -3698,7 +4032,11 @@
                     handleTeleportOnExpired(spellPtr);
                     return;
                 }
-                if (clsName === 'TS_Transfer_C' || clsName === 'TS_Intimidate_C' || clsName === 'TS_BoomShip_C') {
+                if (clsName === 'TS_Intimidate_C') {
+                    handleIntimidateOnExpired(spellPtr);
+                    return;
+                }
+                if (clsName === 'TS_Transfer_C' || clsName === 'TS_BoomShip_C') {
                     return;
                 }
                 if (clsName === 'TS_BombMice_C') {
@@ -3867,7 +4205,7 @@
                     if (charPtr && !charPtr.isNull()) {
                         var intKey = charPtr.toString();
                         if (intimidatedHumans[intKey]) {
-                            clearIntimidateEntry(intKey, intimidatedHumans[intKey]);
+                            clearIntimidateEntry(intKey, intimidatedHumans[intKey], true, true);
                         }
                     }
                     var entry = getTrackedBombMouse(charPtr);
@@ -3916,7 +4254,7 @@
     }
 
     // ========================================================================
-    // 10. GameThread Tick（威嚇維持・テレポート霊界出現・爆弾ネズミ起爆）
+    // 10. GameThread Tick（威嚇期限フォールバック＆回収リトライ・テレポート霊界出現・爆弾ネズミ起爆）
     //     ※ onEnter のみ（Frida 16.7.19 の >=3 onLeave 回避）
     // ========================================================================
     function installGameStateTickHook() {
@@ -3931,17 +4269,18 @@
                     resetRuntimeStateIfWorldChanged(wt.world);
                     updateWarshipCache(currentGameState);
 
-                    // 1) 威嚇 (TS_Intimidate) 丸腰維持＆期限切れ/死亡時の暗視野フェード解除
+                    // 1) 威嚇 (TS_Intimidate) 期限切れ/死亡時の安全フォールバック回収＆有界リトライキュー駆動
+                    //    ※ 進行中の毎フレーム武器監視・再収刀は一切行わない（純粋な発動呼出＋終了/死亡コールバック設計）
                     var intKeys = Object.keys(intimidatedHumans);
                     for (var i = 0; i < intKeys.length; i++) {
                         var ik = intKeys[i];
                         var ie = intimidatedHumans[ik];
-                        if (!ie || wt.timeSeconds >= ie.expireTime || !isHumanAlive(ie.human)) {
-                            clearIntimidateEntry(ik, ie);
-                            continue;
+                        var ieAlive = ie ? isHumanAlive(ie.human) : false;
+                        if (!ie || wt.timeSeconds >= ie.expireTime || !ieAlive) {
+                            clearIntimidateEntry(ik, ie, !ieAlive, true);
                         }
-                        forceHolsterNow(ie.invMgr);
                     }
+                    tickPendingIntimidateCleanups(wt.timeSeconds);
 
                     // 2) テレポート (TS_Teleport) 霊界出現エフェクトの実行＆後処理
                     var tpKeys = Object.keys(teleportSpiritWalkMap);

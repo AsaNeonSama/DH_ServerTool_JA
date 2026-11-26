@@ -2,23 +2,31 @@
 use crate::consts::patch::ADD_LOBBY_ATTRIBUTE_PRIVATE_URI_TRAMPOLINE;
 use crate::consts::patch::{
     ADD_LOBBY_ATTRIBUTE_PRIVATE_URI_CHECK, ADD_LOBBY_ATTRIBUTE_PRIVATE_URI_TRAMPOLINE_LEN,
-    DEFAULT_ALLOC_GRANULARITY, DIRECT_PATCHES, OWNER_RESET_CHECK_OWNER, OWNER_RESET_EPILOGUE,
-    OWNER_RESET_PROLOGUE, OWNER_RESET_TRAMPOLINES, OWNER_RESET_TRAMPOLINE_LEN, PE_DOS_MAGIC,
-    PE_LFANEW_OFFSET, PE_MIN_DOS_BYTES, PE_MIN_NT_BYTES, PE_NT_SIGNATURE,
-    PE_OPTIONAL_HEADER_OFFSET, PE_OPT_MAGIC_PE32_PLUS, PE_SIZE_OF_IMAGE_OFFSET,
+    DEFAULT_ALLOC_GRANULARITY, DIRECT_PATCHES, ON_DESTROY_CLEAR_STARTED_PREFIX,
+    ON_DESTROY_CLEAR_STARTED_TRAMPOLINE, ON_DESTROY_CLEAR_STARTED_TRAMPOLINE_LEN,
+    ON_JOIN_RESET_URI_PROLOGUE, ON_JOIN_RESET_URI_RESTORE, ON_JOIN_RESET_URI_TRAMPOLINE,
+    ON_JOIN_RESET_URI_TRAMPOLINE_LEN, ON_PARTICIPANTS_KEEP_MEMBERS_CHECK,
+    ON_PARTICIPANTS_KEEP_MEMBERS_TRAMPOLINE, ON_PARTICIPANTS_KEEP_MEMBERS_TRAMPOLINE_LEN,
+    OWNER_RESET_CHECK_OWNER, OWNER_RESET_EPILOGUE, OWNER_RESET_PROLOGUE, OWNER_RESET_TRAMPOLINES,
+    OWNER_RESET_TRAMPOLINE_LEN, PE_DOS_MAGIC, PE_LFANEW_OFFSET, PE_MIN_DOS_BYTES, PE_MIN_NT_BYTES,
+    PE_NT_SIGNATURE, PE_OPTIONAL_HEADER_OFFSET, PE_OPT_MAGIC_PE32_PLUS, PE_SIZE_OF_IMAGE_OFFSET,
     POST_UPDATE_CHECK_EMPTY, POST_UPDATE_EMPTY_URI_RESET, POST_UPDATE_EPILOGUE,
     POST_UPDATE_PREP_GET_GI, POST_UPDATE_PROLOGUE, POST_UPDATE_TRAMPOLINE_LEN,
+    SET_LOBBY_ATTRIBUTES_MAX_LEN_TRAMPOLINE, SET_LOBBY_ATTR_MAX_LEN_BODY,
+    SET_LOBBY_ATTR_MAX_LEN_TRAMPOLINE_LEN, SET_LOBBY_ATTR_SITE_LEN,
     SET_URI_START_TIME_CONVERT_AND_STORE, SET_URI_START_TIME_EPILOGUE, SET_URI_START_TIME_PROLOGUE,
     SET_URI_START_TIME_TRAMPOLINE, SET_URI_START_TIME_TRAMPOLINE_LEN, TARGET_PROCESS_NAME,
     TOTAL_PATCH_COUNT, TRAMPOLINE_ALLOC_SIZE, TRAMPOLINE_CHECK_GI_NONNULL, TRAMPOLINE_MAX_DISTANCE,
     X64_CALL_MEM_REL32_LEN, X64_CALL_REL32_LEN, X64_CALL_REL32_OPCODE, X64_INT3_BYTE,
-    X64_JMP_MEM_REL32_OPCODES, X64_NOP_BYTE,
+    X64_JMP_MEM_REL32_OPCODES, X64_JMP_REL32_LEN, X64_JMP_REL32_OPCODE, X64_MOV_RCX_IMM64_PREFIX,
+    X64_NOP_BYTE,
 };
 #[cfg(all(windows, feature = "private-uri"))]
 use crate::structs::patch::AddLobbyAttributePrivateUriSpec;
 use crate::structs::patch::{
-    BytePatch, OwnerResetTrampolineSpec, PatchOutcome, PatchReport, PostUpdateUriResetSpec,
-    SetUriStartTimeTrampolineSpec, TrampolineError,
+    BytePatch, OnDestroyClearStartedSpec, OnJoinResetUriSpec, OnParticipantsKeepMembersSpec,
+    OwnerResetTrampolineSpec, PatchOutcome, PatchReport, PostUpdateUriResetSpec,
+    SetLobbyAttributesMaxLenSpec, SetUriStartTimeTrampolineSpec, TrampolineError,
 };
 
 #[cfg(windows)]
@@ -33,8 +41,9 @@ use windows::Win32::System::Diagnostics::Debug::FlushInstructionCache;
 use windows::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW};
 #[cfg(windows)]
 use windows::Win32::System::Memory::{
-    VirtualAlloc, VirtualProtect, VirtualQuery, MEMORY_BASIC_INFORMATION, MEM_COMMIT, MEM_FREE,
-    MEM_RESERVE, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE, PAGE_PROTECTION_FLAGS, PAGE_READWRITE,
+    VirtualAlloc, VirtualFree, VirtualProtect, VirtualQuery, MEMORY_BASIC_INFORMATION, MEM_COMMIT,
+    MEM_FREE, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE,
+    PAGE_PROTECTION_FLAGS, PAGE_READWRITE,
 };
 #[cfg(windows)]
 use windows::Win32::System::SystemInformation::{GetSystemInfo, SYSTEM_INFO};
@@ -104,7 +113,23 @@ pub fn encode_call_rel32(
     call_addr: usize,
     target_addr: usize,
 ) -> Result<[u8; X64_CALL_REL32_LEN], TrampolineError> {
-    let next_rip: usize = call_addr
+    encode_branch_rel32(X64_CALL_REL32_OPCODE, call_addr, target_addr)
+}
+
+/// Computes an x86-64 `jmp rel32` instruction (`E9 <rel32>`) from `jmp_addr` to `target_addr`.
+pub fn encode_jmp_rel32(
+    jmp_addr: usize,
+    target_addr: usize,
+) -> Result<[u8; X64_JMP_REL32_LEN], TrampolineError> {
+    encode_branch_rel32(X64_JMP_REL32_OPCODE, jmp_addr, target_addr)
+}
+
+fn encode_branch_rel32(
+    opcode: u8,
+    branch_addr: usize,
+    target_addr: usize,
+) -> Result<[u8; X64_CALL_REL32_LEN], TrampolineError> {
+    let next_rip: usize = branch_addr
         .checked_add(X64_CALL_REL32_LEN)
         .ok_or(TrampolineError::AddressOverflow)?;
     let delta: i128 = i128::try_from(target_addr)
@@ -115,7 +140,7 @@ pub fn encode_call_rel32(
         .map_err(|_err: std::num::TryFromIntError| TrampolineError::DisplacementOutOfRange)?;
     let rel_bytes: [u8; 4] = rel32.to_le_bytes();
     Ok([
-        X64_CALL_REL32_OPCODE,
+        opcode,
         rel_bytes[0],
         rel_bytes[1],
         rel_bytes[2],
@@ -190,13 +215,15 @@ pub fn encode_post_update_empty_uri_trampoline(
     Ok(stub)
 }
 
-/// Encodes the 41-byte `RX` trampoline executed from `UDH_OnlineSession::OnMatchEnded` (`0xE81B59`)
+/// Encodes the 53-byte `RX` trampoline executed from `UDH_OnlineSession::OnMatchEnded` (`0xE81B59`)
 /// and `UDH_OnlineSession::ResetCurrentData` (`0xE8B3A3`):
 ///
-/// Calls `UDH_OnlineSession::IsSessionOwner()`; when returning `true` (host resetting the lobby),
-/// calls `UDH_GameInstance::ResetURI` on `UDH_GameInstance::GetInstance(rdi)` and returns `true`.
-/// For non-host clients (`false`), returns `false` without prematurely clearing `+0x570` before
-/// the host's EOS update clears `SessionSettingURIName`.
+/// Clears `UDH_OnlineSession::bHasGameStarted` (`[rdi + 0x16E] = 0`) for both host and non-host
+/// when `rdi != NULL`, then calls `UDH_OnlineSession::IsSessionOwner()`; when returning `true`
+/// (host resetting the lobby), calls `UDH_GameInstance::ResetURI` on
+/// `UDH_GameInstance::GetInstance(rdi)` and returns `true`. For non-host clients (`false`),
+/// returns `false` without prematurely clearing `+0x570` before the host's EOS update clears
+/// `SessionSettingURIName`.
 pub fn encode_owner_reset_trampoline(
     trampoline_addr: usize,
     is_session_owner_addr: usize,
@@ -204,30 +231,30 @@ pub fn encode_owner_reset_trampoline(
     reset_uri_addr: usize,
 ) -> Result<[u8; OWNER_RESET_TRAMPOLINE_LEN], TrampolineError> {
     let call_owner_addr: usize = trampoline_addr
-        .checked_add(0x04)
+        .checked_add(0x10)
         .ok_or(TrampolineError::AddressOverflow)?;
     let call_owner: [u8; X64_CALL_REL32_LEN] =
         encode_call_rel32(call_owner_addr, is_session_owner_addr)?;
 
     let call_gi_addr: usize = trampoline_addr
-        .checked_add(0x10)
+        .checked_add(0x1C)
         .ok_or(TrampolineError::AddressOverflow)?;
     let call_gi: [u8; X64_CALL_REL32_LEN] =
         encode_call_rel32(call_gi_addr, get_game_instance_addr)?;
 
     let call_reset_addr: usize = trampoline_addr
-        .checked_add(0x1D)
+        .checked_add(0x29)
         .ok_or(TrampolineError::AddressOverflow)?;
     let call_reset: [u8; X64_CALL_REL32_LEN] = encode_call_rel32(call_reset_addr, reset_uri_addr)?;
 
     let mut stub: [u8; OWNER_RESET_TRAMPOLINE_LEN] = [X64_INT3_BYTE; OWNER_RESET_TRAMPOLINE_LEN];
-    stub[0x00..0x04].copy_from_slice(&OWNER_RESET_PROLOGUE);
-    stub[0x04..0x09].copy_from_slice(&call_owner);
-    stub[0x09..0x10].copy_from_slice(&OWNER_RESET_CHECK_OWNER);
-    stub[0x10..0x15].copy_from_slice(&call_gi);
-    stub[0x15..0x1D].copy_from_slice(&TRAMPOLINE_CHECK_GI_NONNULL);
-    stub[0x1D..0x22].copy_from_slice(&call_reset);
-    stub[0x22..0x29].copy_from_slice(&OWNER_RESET_EPILOGUE);
+    stub[0x00..0x10].copy_from_slice(&OWNER_RESET_PROLOGUE);
+    stub[0x10..0x15].copy_from_slice(&call_owner);
+    stub[0x15..0x1C].copy_from_slice(&OWNER_RESET_CHECK_OWNER);
+    stub[0x1C..0x21].copy_from_slice(&call_gi);
+    stub[0x21..0x29].copy_from_slice(&TRAMPOLINE_CHECK_GI_NONNULL);
+    stub[0x29..0x2E].copy_from_slice(&call_reset);
+    stub[0x2E..0x35].copy_from_slice(&OWNER_RESET_EPILOGUE);
     Ok(stub)
 }
 
@@ -289,6 +316,114 @@ pub fn encode_add_lobby_attribute_private_uri_trampoline(
         [X64_INT3_BYTE; ADD_LOBBY_ATTRIBUTE_PRIVATE_URI_TRAMPOLINE_LEN];
     stub[0x00..0x45].copy_from_slice(&ADD_LOBBY_ATTRIBUTE_PRIVATE_URI_CHECK);
     stub[0x45..0x4B].copy_from_slice(&tail_jmp);
+    Ok(stub)
+}
+
+/// Encodes the 98-byte `RX` trampoline replacing the 26-byte `strncpy(..., 0x101)` site inside
+/// `FOnlineSessionEOS::SetLobbyAttributes` (`0xA03820..0xA0383A`):
+///
+/// Loads `buffer_addr` (a separately allocated `PAGE_READWRITE` page) into `rcx`, updates
+/// `EOS_Lobby_AttributeData::Value.AsUtf8` at `[rbp + 0x80]`, copies up to `1000` UTF-8 bytes
+/// from `[rax + 0x88]` (`FTCHARToUTF8::Get()`) without splitting any multi-byte UTF-8 sequence,
+/// NUL-terminates the result, returns `buffer_addr` in `rax`, and returns to `0xA0383A`.
+pub fn encode_set_lobby_attributes_max_len_trampoline(
+    buffer_addr: usize,
+) -> Result<[u8; SET_LOBBY_ATTR_MAX_LEN_TRAMPOLINE_LEN], TrampolineError> {
+    if buffer_addr == 0 {
+        return Err(TrampolineError::AddressOverflow);
+    }
+    let buf_u64: u64 = u64::try_from(buffer_addr)
+        .map_err(|_err: std::num::TryFromIntError| TrampolineError::AddressOverflow)?;
+    let buf_bytes: [u8; 8] = buf_u64.to_le_bytes();
+
+    let mut stub: [u8; SET_LOBBY_ATTR_MAX_LEN_TRAMPOLINE_LEN] =
+        [X64_INT3_BYTE; SET_LOBBY_ATTR_MAX_LEN_TRAMPOLINE_LEN];
+    stub[0x00..0x02].copy_from_slice(&X64_MOV_RCX_IMM64_PREFIX);
+    stub[0x02..0x0A].copy_from_slice(&buf_bytes);
+    stub[0x0A..0x62].copy_from_slice(&SET_LOBBY_ATTR_MAX_LEN_BODY);
+    Ok(stub)
+}
+
+/// Encodes the 17-byte `RX` trampoline executed from `UDH_OnlineSession::OnDestroySessionComplete`
+/// (`0xE7EDC9`):
+///
+/// Clears `UDH_OnlineSession::bHasGameStarted` (`[rcx + 0x16E] = 0`) when `rcx != NULL`, then
+/// tail-jumps directly to `original_callee_addr` (`0xF072B0`).
+pub fn encode_on_destroy_clear_started_trampoline(
+    trampoline_addr: usize,
+    original_callee_addr: usize,
+) -> Result<[u8; ON_DESTROY_CLEAR_STARTED_TRAMPOLINE_LEN], TrampolineError> {
+    let jmp_addr: usize = trampoline_addr
+        .checked_add(0x0C)
+        .ok_or(TrampolineError::AddressOverflow)?;
+    let tail_jmp: [u8; X64_JMP_REL32_LEN] = encode_jmp_rel32(jmp_addr, original_callee_addr)?;
+
+    let mut stub: [u8; ON_DESTROY_CLEAR_STARTED_TRAMPOLINE_LEN] =
+        [X64_INT3_BYTE; ON_DESTROY_CLEAR_STARTED_TRAMPOLINE_LEN];
+    stub[0x00..0x0C].copy_from_slice(&ON_DESTROY_CLEAR_STARTED_PREFIX);
+    stub[0x0C..0x11].copy_from_slice(&tail_jmp);
+    Ok(stub)
+}
+
+/// Encodes the 41-byte `RX` trampoline executed from `UDH_OnlineSession::OnJoinSessionComplete`
+/// (`0xE815D7`):
+///
+/// Preserves `UDH_OnlineSession* this` (`rcx`), calls `UDH_GameInstance::GetInstance(this)` and
+/// `UDH_GameInstance::ResetURI(gi)` when non-null to clear stale `LastServerURI` (`+0x570`) once
+/// per successful join, restores `rcx` and stack alignment, and tail-jumps to
+/// `UDH_OnlineSession::Update(this)` (`0xE95760`).
+pub fn encode_on_join_reset_uri_trampoline(
+    trampoline_addr: usize,
+    get_game_instance_addr: usize,
+    reset_uri_addr: usize,
+    update_session_addr: usize,
+) -> Result<[u8; ON_JOIN_RESET_URI_TRAMPOLINE_LEN], TrampolineError> {
+    let call_gi_addr: usize = trampoline_addr
+        .checked_add(0x09)
+        .ok_or(TrampolineError::AddressOverflow)?;
+    let call_gi: [u8; X64_CALL_REL32_LEN] =
+        encode_call_rel32(call_gi_addr, get_game_instance_addr)?;
+
+    let call_reset_addr: usize = trampoline_addr
+        .checked_add(0x16)
+        .ok_or(TrampolineError::AddressOverflow)?;
+    let call_reset: [u8; X64_CALL_REL32_LEN] = encode_call_rel32(call_reset_addr, reset_uri_addr)?;
+
+    let jmp_update_addr: usize = trampoline_addr
+        .checked_add(0x24)
+        .ok_or(TrampolineError::AddressOverflow)?;
+    let tail_jmp: [u8; X64_JMP_REL32_LEN] = encode_jmp_rel32(jmp_update_addr, update_session_addr)?;
+
+    let mut stub: [u8; ON_JOIN_RESET_URI_TRAMPOLINE_LEN] =
+        [X64_INT3_BYTE; ON_JOIN_RESET_URI_TRAMPOLINE_LEN];
+    stub[0x00..0x09].copy_from_slice(&ON_JOIN_RESET_URI_PROLOGUE);
+    stub[0x09..0x0E].copy_from_slice(&call_gi);
+    stub[0x0E..0x16].copy_from_slice(&TRAMPOLINE_CHECK_GI_NONNULL);
+    stub[0x16..0x1B].copy_from_slice(&call_reset);
+    stub[0x1B..0x24].copy_from_slice(&ON_JOIN_RESET_URI_RESTORE);
+    stub[0x24..0x29].copy_from_slice(&tail_jmp);
+    Ok(stub)
+}
+
+/// Encodes the 20-byte `RX` trampoline executed from
+/// `UDH_OnlineSession::OnSessionParticipantsChange` (`0xE85B28`):
+///
+/// Inspects `UDH_OnlineSession::StartUTCDateTime` (`[rcx + 0x48]`). If non-zero (match already
+/// started), returns `false` (`al = 0`) so leaving players are NOT erased from EOS `MEMBERS`;
+/// otherwise tail-jumps to `IsLobbyMap(this)` (`0xF0AF50`).
+pub fn encode_on_participants_keep_members_trampoline(
+    trampoline_addr: usize,
+    is_lobby_map_addr: usize,
+) -> Result<[u8; ON_PARTICIPANTS_KEEP_MEMBERS_TRAMPOLINE_LEN], TrampolineError> {
+    let jmp_addr: usize = trampoline_addr
+        .checked_add(0x0F)
+        .ok_or(TrampolineError::AddressOverflow)?;
+    let tail_jmp: [u8; X64_JMP_REL32_LEN] = encode_jmp_rel32(jmp_addr, is_lobby_map_addr)?;
+
+    let mut stub: [u8; ON_PARTICIPANTS_KEEP_MEMBERS_TRAMPOLINE_LEN] =
+        [X64_INT3_BYTE; ON_PARTICIPANTS_KEEP_MEMBERS_TRAMPOLINE_LEN];
+    stub[0x00..0x0F].copy_from_slice(&ON_PARTICIPANTS_KEEP_MEMBERS_CHECK);
+    stub[0x0F..0x14].copy_from_slice(&tail_jmp);
     Ok(stub)
 }
 
@@ -413,6 +548,8 @@ pub fn apply_client_patches_if_target() -> PatchReport {
     );
     record_outcome(&mut report, set_uri_start_time_outcome);
 
+    apply_reconnect_trampolines(module_base, image_size, &mut report);
+
     #[cfg(feature = "private-uri")]
     {
         let private_uri_outcome: PatchOutcome =
@@ -425,6 +562,38 @@ pub fn apply_client_patches_if_target() -> PatchReport {
     }
 
     report
+}
+
+#[cfg(windows)]
+fn apply_reconnect_trampolines(module_base: usize, image_size: usize, report: &mut PatchReport) {
+    let members_max_len_outcome: PatchOutcome = apply_live_set_lobby_attributes_max_len_trampoline(
+        module_base,
+        image_size,
+        &SET_LOBBY_ATTRIBUTES_MAX_LEN_TRAMPOLINE,
+    );
+    record_outcome(report, members_max_len_outcome);
+
+    let destroy_clear_outcome: PatchOutcome = apply_live_on_destroy_clear_started_trampoline(
+        module_base,
+        image_size,
+        &ON_DESTROY_CLEAR_STARTED_TRAMPOLINE,
+    );
+    record_outcome(report, destroy_clear_outcome);
+
+    let join_reset_outcome: PatchOutcome = apply_live_on_join_reset_uri_trampoline(
+        module_base,
+        image_size,
+        &ON_JOIN_RESET_URI_TRAMPOLINE,
+    );
+    record_outcome(report, join_reset_outcome);
+
+    let participants_keep_outcome: PatchOutcome =
+        apply_live_on_participants_keep_members_trampoline(
+            module_base,
+            image_size,
+            &ON_PARTICIPANTS_KEEP_MEMBERS_TRAMPOLINE,
+        );
+    record_outcome(report, participants_keep_outcome);
 }
 
 /// Non-Windows stub returning an empty report.
@@ -730,7 +899,233 @@ fn apply_live_add_lobby_attribute_private_uri_trampoline(
         return PatchOutcome::MemoryError;
     };
 
-    install_rx_trampoline_and_patch_site(call_site_addr, trampoline_addr, &stub_bytes, true)
+    install_rx_trampoline_and_patch_site(
+        call_site_addr,
+        trampoline_addr,
+        &stub_bytes,
+        X64_CALL_MEM_REL32_LEN,
+    )
+}
+
+#[cfg(windows)]
+fn apply_live_set_lobby_attributes_max_len_trampoline(
+    module_base: usize,
+    image_size: usize,
+    spec: &SetLobbyAttributesMaxLenSpec,
+) -> PatchOutcome {
+    let Some(site_end_rva): Option<usize> = spec.site_rva.checked_add(SET_LOBBY_ATTR_SITE_LEN)
+    else {
+        return PatchOutcome::OutOfBounds;
+    };
+    if site_end_rva > image_size {
+        return PatchOutcome::OutOfBounds;
+    }
+
+    let Some(site_addr): Option<usize> = module_base.checked_add(spec.site_rva) else {
+        return PatchOutcome::OutOfBounds;
+    };
+
+    // SAFETY: `site_addr..site_addr + 26` is bounds-checked inside the mapped process image.
+    let current_site: &[u8] =
+        unsafe { std::slice::from_raw_parts(site_addr as *const u8, SET_LOBBY_ATTR_SITE_LEN) };
+    if current_site != spec.expected_site_bytes {
+        return PatchOutcome::SignatureMismatch;
+    }
+
+    // SAFETY: Requesting a dedicated private `PAGE_READWRITE` page (never marked executable) for
+    // the 1000-byte UTF-8 attribute copy buffer so the trampoline code page stays strictly `RX`.
+    let rw_buffer_ptr: *mut c_void = unsafe {
+        VirtualAlloc(
+            None,
+            TRAMPOLINE_ALLOC_SIZE,
+            MEM_COMMIT | MEM_RESERVE,
+            PAGE_READWRITE,
+        )
+    };
+    if rw_buffer_ptr.is_null() {
+        return PatchOutcome::MemoryError;
+    }
+    let rw_buffer_addr: usize = rw_buffer_ptr as usize;
+
+    let Some(trampoline_addr): Option<usize> =
+        allocate_nearby_rw_page(module_base, image_size, TRAMPOLINE_ALLOC_SIZE)
+    else {
+        // SAFETY: Releases the newly allocated private RW buffer on failure.
+        let _freed: Result<(), windows::core::Error> =
+            unsafe { VirtualFree(rw_buffer_ptr, 0, MEM_RELEASE) };
+        return PatchOutcome::MemoryError;
+    };
+
+    let Ok(stub_bytes): Result<[u8; SET_LOBBY_ATTR_MAX_LEN_TRAMPOLINE_LEN], TrampolineError> =
+        encode_set_lobby_attributes_max_len_trampoline(rw_buffer_addr)
+    else {
+        // SAFETY: Releases the newly allocated private RW buffer on encoding failure.
+        let _freed_buf: Result<(), windows::core::Error> =
+            unsafe { VirtualFree(rw_buffer_ptr, 0, MEM_RELEASE) };
+        // SAFETY: Releases the newly allocated nearby trampoline page on encoding failure.
+        let _freed_code: Result<(), windows::core::Error> =
+            unsafe { VirtualFree(trampoline_addr as *mut c_void, 0, MEM_RELEASE) };
+        return PatchOutcome::MemoryError;
+    };
+
+    let outcome: PatchOutcome = install_rx_trampoline_and_patch_site(
+        site_addr,
+        trampoline_addr,
+        &stub_bytes,
+        SET_LOBBY_ATTR_SITE_LEN,
+    );
+    if outcome != PatchOutcome::Applied {
+        // SAFETY: Releases the unused RW buffer if installing or patching the trampoline failed.
+        let _freed_buf: Result<(), windows::core::Error> =
+            unsafe { VirtualFree(rw_buffer_ptr, 0, MEM_RELEASE) };
+    }
+    outcome
+}
+
+#[cfg(windows)]
+fn apply_live_on_destroy_clear_started_trampoline(
+    module_base: usize,
+    image_size: usize,
+    spec: &OnDestroyClearStartedSpec,
+) -> PatchOutcome {
+    let Some(call_end_rva): Option<usize> = spec.call_site_rva.checked_add(X64_CALL_REL32_LEN)
+    else {
+        return PatchOutcome::OutOfBounds;
+    };
+    if call_end_rva > image_size || spec.original_callee_rva >= image_size {
+        return PatchOutcome::OutOfBounds;
+    }
+
+    let Some(call_site_addr): Option<usize> = module_base.checked_add(spec.call_site_rva) else {
+        return PatchOutcome::OutOfBounds;
+    };
+    let Some(callee_addr): Option<usize> = module_base.checked_add(spec.original_callee_rva) else {
+        return PatchOutcome::OutOfBounds;
+    };
+
+    // SAFETY: `call_site_addr..call_site_addr + 5` is bounds-checked inside the mapped image.
+    let current_call: &[u8] =
+        unsafe { std::slice::from_raw_parts(call_site_addr as *const u8, X64_CALL_REL32_LEN) };
+    if current_call != spec.expected_call_bytes {
+        return PatchOutcome::SignatureMismatch;
+    }
+
+    let Some(trampoline_addr): Option<usize> =
+        allocate_nearby_rw_page(module_base, image_size, TRAMPOLINE_ALLOC_SIZE)
+    else {
+        return PatchOutcome::MemoryError;
+    };
+
+    let Ok(stub_bytes): Result<[u8; ON_DESTROY_CLEAR_STARTED_TRAMPOLINE_LEN], TrampolineError> =
+        encode_on_destroy_clear_started_trampoline(trampoline_addr, callee_addr)
+    else {
+        return PatchOutcome::MemoryError;
+    };
+
+    install_rx_trampoline_and_patch_call(call_site_addr, trampoline_addr, &stub_bytes)
+}
+
+#[cfg(windows)]
+fn apply_live_on_join_reset_uri_trampoline(
+    module_base: usize,
+    image_size: usize,
+    spec: &OnJoinResetUriSpec,
+) -> PatchOutcome {
+    let Some(call_end_rva): Option<usize> = spec.call_site_rva.checked_add(X64_CALL_REL32_LEN)
+    else {
+        return PatchOutcome::OutOfBounds;
+    };
+    if call_end_rva > image_size
+        || spec.get_game_instance_rva >= image_size
+        || spec.reset_uri_rva >= image_size
+        || spec.update_session_rva >= image_size
+    {
+        return PatchOutcome::OutOfBounds;
+    }
+
+    let Some(call_site_addr): Option<usize> = module_base.checked_add(spec.call_site_rva) else {
+        return PatchOutcome::OutOfBounds;
+    };
+    let Some(get_gi_addr): Option<usize> = module_base.checked_add(spec.get_game_instance_rva)
+    else {
+        return PatchOutcome::OutOfBounds;
+    };
+    let Some(reset_uri_addr): Option<usize> = module_base.checked_add(spec.reset_uri_rva) else {
+        return PatchOutcome::OutOfBounds;
+    };
+    let Some(update_addr): Option<usize> = module_base.checked_add(spec.update_session_rva) else {
+        return PatchOutcome::OutOfBounds;
+    };
+
+    // SAFETY: `call_site_addr..call_site_addr + 5` is bounds-checked inside the mapped image.
+    let current_call: &[u8] =
+        unsafe { std::slice::from_raw_parts(call_site_addr as *const u8, X64_CALL_REL32_LEN) };
+    if current_call != spec.expected_call_bytes {
+        return PatchOutcome::SignatureMismatch;
+    }
+
+    let Some(trampoline_addr): Option<usize> =
+        allocate_nearby_rw_page(module_base, image_size, TRAMPOLINE_ALLOC_SIZE)
+    else {
+        return PatchOutcome::MemoryError;
+    };
+
+    let Ok(stub_bytes): Result<[u8; ON_JOIN_RESET_URI_TRAMPOLINE_LEN], TrampolineError> =
+        encode_on_join_reset_uri_trampoline(
+            trampoline_addr,
+            get_gi_addr,
+            reset_uri_addr,
+            update_addr,
+        )
+    else {
+        return PatchOutcome::MemoryError;
+    };
+
+    install_rx_trampoline_and_patch_call(call_site_addr, trampoline_addr, &stub_bytes)
+}
+
+#[cfg(windows)]
+fn apply_live_on_participants_keep_members_trampoline(
+    module_base: usize,
+    image_size: usize,
+    spec: &OnParticipantsKeepMembersSpec,
+) -> PatchOutcome {
+    let Some(call_end_rva): Option<usize> = spec.call_site_rva.checked_add(X64_CALL_REL32_LEN)
+    else {
+        return PatchOutcome::OutOfBounds;
+    };
+    if call_end_rva > image_size || spec.is_lobby_map_rva >= image_size {
+        return PatchOutcome::OutOfBounds;
+    }
+
+    let Some(call_site_addr): Option<usize> = module_base.checked_add(spec.call_site_rva) else {
+        return PatchOutcome::OutOfBounds;
+    };
+    let Some(is_lobby_map_addr): Option<usize> = module_base.checked_add(spec.is_lobby_map_rva)
+    else {
+        return PatchOutcome::OutOfBounds;
+    };
+
+    // SAFETY: `call_site_addr..call_site_addr + 5` is bounds-checked inside the mapped image.
+    let current_call: &[u8] =
+        unsafe { std::slice::from_raw_parts(call_site_addr as *const u8, X64_CALL_REL32_LEN) };
+    if current_call != spec.expected_call_bytes {
+        return PatchOutcome::SignatureMismatch;
+    }
+
+    let Some(trampoline_addr): Option<usize> =
+        allocate_nearby_rw_page(module_base, image_size, TRAMPOLINE_ALLOC_SIZE)
+    else {
+        return PatchOutcome::MemoryError;
+    };
+
+    let Ok(stub_bytes): Result<[u8; ON_PARTICIPANTS_KEEP_MEMBERS_TRAMPOLINE_LEN], TrampolineError> =
+        encode_on_participants_keep_members_trampoline(trampoline_addr, is_lobby_map_addr)
+    else {
+        return PatchOutcome::MemoryError;
+    };
+
+    install_rx_trampoline_and_patch_call(call_site_addr, trampoline_addr, &stub_bytes)
 }
 
 #[cfg(windows)]
@@ -739,7 +1134,12 @@ fn install_rx_trampoline_and_patch_call(
     trampoline_addr: usize,
     stub_bytes: &[u8],
 ) -> PatchOutcome {
-    install_rx_trampoline_and_patch_site(call_site_addr, trampoline_addr, stub_bytes, false)
+    install_rx_trampoline_and_patch_site(
+        call_site_addr,
+        trampoline_addr,
+        stub_bytes,
+        X64_CALL_REL32_LEN,
+    )
 }
 
 #[cfg(windows)]
@@ -747,9 +1147,11 @@ fn install_rx_trampoline_and_patch_site(
     call_site_addr: usize,
     trampoline_addr: usize,
     stub_bytes: &[u8],
-    pad_trailing_nop: bool,
+    site_len: usize,
 ) -> PatchOutcome {
-    if stub_bytes.len() > TRAMPOLINE_ALLOC_SIZE {
+    if stub_bytes.len() > TRAMPOLINE_ALLOC_SIZE
+        || !(X64_CALL_REL32_LEN..=SET_LOBBY_ATTR_SITE_LEN).contains(&site_len)
+    {
         return PatchOutcome::MemoryError;
     }
 
@@ -792,19 +1194,9 @@ fn install_rx_trampoline_and_patch_site(
         )
     };
 
-    if pad_trailing_nop {
-        let patched_site: [u8; X64_CALL_MEM_REL32_LEN] = [
-            patched_call[0],
-            patched_call[1],
-            patched_call[2],
-            patched_call[3],
-            patched_call[4],
-            X64_NOP_BYTE,
-        ];
-        write_protected_code(call_site_addr, &patched_site)
-    } else {
-        write_protected_code(call_site_addr, &patched_call)
-    }
+    let mut patched_site: [u8; SET_LOBBY_ATTR_SITE_LEN] = [X64_NOP_BYTE; SET_LOBBY_ATTR_SITE_LEN];
+    patched_site[..X64_CALL_REL32_LEN].copy_from_slice(&patched_call);
+    write_protected_code(call_site_addr, &patched_site[..site_len])
 }
 
 #[cfg(windows)]

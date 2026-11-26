@@ -26,6 +26,11 @@ pub mod format {
     }
 
     #[must_use]
+    pub fn format_log_filename_timestamp() -> String {
+        Local::now().format("%Y%m%d_%H%M%S").to_string()
+    }
+
+    #[must_use]
     pub fn format_seconds(ms: u64) -> String {
         if ms.is_multiple_of(1000) {
             return format!("{}s", ms / 1000);

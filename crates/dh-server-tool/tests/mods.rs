@@ -75,6 +75,16 @@ fn embeds_all_30_non_empty_unique_scripts_and_22_menu_options() {
 
     assert_eq!(total_scripts, 30);
 
+    let network_fix = &DEFAULT_PATCH_SCRIPTS[3];
+    assert_eq!(network_fix.id, "default:network_fix_win64");
+    assert_eq!(network_fix.file_name, "接続保護_乱入防止.js");
+    assert!(
+        network_fix.source.contains("isMatchPreStart")
+            && network_fix.source.contains("0x46CD148")
+            && network_fix.source.contains("preMatchSeenUids"),
+        "default network fix script must include EnteringMap pre-start guard (0x46CD148 / isMatchPreStart) and additive pre-match roster tracking (preMatchSeenUids)"
+    );
+
     let cannibal_climb = &DEFAULT_PATCH_SCRIPTS[4];
     assert_eq!(cannibal_climb.id, "default:cannibal_climb_win64");
     assert_eq!(cannibal_climb.file_name, "食人鬼登攀補強.js");
@@ -209,8 +219,12 @@ fn embeds_zero_asset_totem_spells_content_mod_and_orders_before_server_only_mods
         "TS_Intimidate radius must be 50m (5000.0 UU)"
     );
     assert!(
-        script.source.contains("0x2AA7C70") && script.source.contains("0xD5E0D0"),
-        "TS_Intimidate must bind ClientSetCameraFade (0x2AA7C70) and ModifyStamina (0xD5E0D0)"
+        script.source.contains("0x2AA7C70")
+            && script.source.contains("0xD5E0D0")
+            && script.source.contains("intimidateCameraFadeAlpha: 0.74")
+            && script.source.contains("intimidateStaminaRegenDelayByTier")
+            && script.source.contains("intimidateCleanupRetryDelaysSec"),
+        "TS_Intimidate must bind ClientSetCameraFade (0x2AA7C70, alpha 0.74), ModifyStamina (0xD5E0D0) with tiered regen delay, and bounded cleanup retries"
     );
     assert!(
         script.source.contains("bombMiceExplosionDamage: 7.0")

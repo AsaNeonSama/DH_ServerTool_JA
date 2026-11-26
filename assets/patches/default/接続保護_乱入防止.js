@@ -2,12 +2,17 @@
 
 // ============================================================================
 // サーバー接続保護・開局名簿ガード (デフォルトパッチ)
-//   1. 開局メンバーホワイトリスト(乱入防止): ポーカー完了/試合開始時に
-//      PlayerArray・接続中ClientConnections・ExpectedPlayerIDs を確定し、
-//      試合開始後の開局外プレイヤーの乱入を拒否する。
-//   2. ゾンビUNetConnection/旧Controller整理: PreLogin/Login時に同一UIDの
-//      古い接続を事前整理し、FindInactivePlayer入口で残存旧PC/接続を破棄して
-//      60秒タイムアウト遅延による誤切断を防ぐ。
+//   1. 開局メンバーホワイトリスト(乱入防止):
+//      - EnteringMap / WaitingToStart 中に認証成功した PreLogin/Login 参加者を
+//        開局前履歴(preMatchSeen*)へ継続記録し、ポーカー前の途中切断・再接続でも
+//        正規の開局メンバーを締め出さない。
+//      - RandomizeThralls および HandleMatchHasStarted (並びに MatchState 遷移
+//        フォールバック) で開局前履歴 + PlayerArray + ExpectedPlayerIDs +
+//        有効な ClientConnections を和集合統合して確定し、試合開始後の開局外
+//        プレイヤーの乱入を拒否する。
+//   2. ゾンビUNetConnection/旧Controller整理: PreLogin/Login時に同一UIDまたは
+//      同一IP再接続対象の古い接続を事前整理し、FindInactivePlayer入口で残存旧PC/
+//      接続を破棄して60秒タイムアウト遅延による誤切断を防ぐ。
 //   3. AGameSession::AtCapacity バイパス: 開局メンバー再接続時の満員拒否を回避。
 //   4. 10秒空室CloseServerタイマー(+0x478)解除とアクティブ接続存在時の終了抑止。
 // ============================================================================
@@ -18,9 +23,13 @@ var moduleBase = Module.findBaseAddress('DreadHungerServer-Win64-Shipping.exe');
 var RVA = {
     GWorld: 0x46ED420,
     GUObjectArray: 0x45C40C8,
+    MatchState_EnteringMap: 0x46CD148,
     MatchState_WaitingToStart: 0x46CD2A0,
     MatchState_PokerGame: 0x4500DB0,
     MatchState_InProgress: 0x46CD2A8,
+    MatchState_WaitingPostMatch: 0x46CD2B0,
+    MatchState_LeavingMap: 0x46CD2B8,
+    MatchState_Aborted: 0x46CD2C0,
 
     UWorld_NotifyControlMessage: 0x296D350,
     AGameModeBase_PreLogin: 0x25709B0,
@@ -93,14 +102,20 @@ var CLIENT_LOGIN_STATE_CLEANED_UP = 4;
 var PLAYER_STATE_INACTIVE_MASK = 0x20;
 var MAX_PLAYER_ARRAY = 64;
 var MAX_CLIENT_CONNECTIONS = 128;
+var MAX_PRELOGIN_ADDR_CACHE = 128;
+var MAX_ADDRS_PER_NAME = 8;
 var REJECT_MID_MATCH_MESSAGE = 'Match already in progress.';
 
 // グローバルポインタ
 var GWorld_ptr = moduleBase.add(RVA.GWorld);
 var GUObjectArray_ptr = moduleBase.add(RVA.GUObjectArray);
+var MatchState_EnteringMap_ptr = moduleBase.add(RVA.MatchState_EnteringMap);
 var MatchState_WaitingToStart_ptr = moduleBase.add(RVA.MatchState_WaitingToStart);
 var MatchState_PokerGame_ptr = moduleBase.add(RVA.MatchState_PokerGame);
 var MatchState_InProgress_ptr = moduleBase.add(RVA.MatchState_InProgress);
+var MatchState_WaitingPostMatch_ptr = moduleBase.add(RVA.MatchState_WaitingPostMatch);
+var MatchState_LeavingMap_ptr = moduleBase.add(RVA.MatchState_LeavingMap);
+var MatchState_Aborted_ptr = moduleBase.add(RVA.MatchState_Aborted);
 
 // ネイティブ関数バインディング (単独 Frida 16 互換のため exceptions: 'propagate' 明示)
 var UNetConnection_CleanUp = new NativeFunction(moduleBase.add(RVA.UNetConnection_CleanUp), 'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
@@ -137,11 +152,16 @@ var currentLoginConnection = ptr(0);
 var reconnectCapacityBypassDepth = 0;
 var isCleaningUpStaleConnection = false;
 
-// 開局名簿ホワイトリスト状態 (ADH_GameModeインスタンス単位でロック)
+// 開局名簿ホワイトリスト状態 (ADH_GameModeインスタンス単位で管理)
 var lockedRosterGameMode = ptr(0);
 var matchRosterLocked = false;
+var preMatchSeenUids = Object.create(null);
+var preMatchSeenNames = Object.create(null);
+var preMatchSeenAddrsByName = Object.create(null);
 var allowedUids = Object.create(null);
 var allowedNames = Object.create(null);
+var preLoginAddrByConn = Object.create(null);
+var preLoginAddrCacheCount = 0;
 
 function sanitizeLogValue(value) {
     if (!value || typeof value !== 'string') {
@@ -155,6 +175,72 @@ function sanitizeLogValue(value) {
         return cleaned.slice(0, 45) + '...';
     }
     return cleaned;
+}
+
+function fnv1a32Hex(str) {
+    var hash = 0x811c9dc5;
+    for (var i = 0; i < str.length; i++) {
+        hash ^= str.charCodeAt(i);
+        hash = (hash + ((hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24))) >>> 0;
+    }
+    var hex = hash.toString(16);
+    while (hex.length < 8) {
+        hex = '0' + hex;
+    }
+    return hex;
+}
+
+// 診断ログ用: 生のSteamID/EOS ID全文を出さずに一致・形式・有効性だけ判別可能にする
+function formatUidTag(normalizedUid) {
+    if (!normalizedUid || typeof normalizedUid !== 'string' || normalizedUid.length === 0) {
+        return 'empty';
+    }
+    var hasPipe = normalizedUid.indexOf('|') !== -1 ? 1 : 0;
+    return 'ok#' + fnv1a32Hex(normalizedUid) + '(len=' + normalizedUid.length + ',pipe=' + hasPipe + ')';
+}
+
+function normalizeAddress(rawAddr) {
+    if (!rawAddr || typeof rawAddr !== 'string') {
+        return '';
+    }
+    var s = rawAddr.trim().toLowerCase();
+    if (s.length === 0) {
+        return '';
+    }
+    if (s.charAt(0) === '[') {
+        var closeBracket = s.indexOf(']');
+        if (closeBracket > 1) {
+            return s.slice(1, closeBracket);
+        }
+    }
+    var firstColon = s.indexOf(':');
+    if (firstColon > 0 && s.indexOf(':', firstColon + 1) === -1) {
+        return s.slice(0, firstColon);
+    }
+    return s;
+}
+
+function cachePreLoginAddress(connPtr, normalizedAddr) {
+    if (connPtr.isNull() || normalizedAddr.length === 0) {
+        return;
+    }
+    var key = connPtr.toString();
+    if (preLoginAddrByConn[key] === undefined) {
+        if (preLoginAddrCacheCount >= MAX_PRELOGIN_ADDR_CACHE) {
+            preLoginAddrByConn = Object.create(null);
+            preLoginAddrCacheCount = 0;
+        }
+        preLoginAddrCacheCount += 1;
+    }
+    preLoginAddrByConn[key] = normalizedAddr;
+}
+
+function getCachedPreLoginAddress(connPtr) {
+    if (connPtr.isNull()) {
+        return '';
+    }
+    var val = preLoginAddrByConn[connPtr.toString()];
+    return typeof val === 'string' ? val : '';
 }
 
 function logEvent(message) {
@@ -360,13 +446,20 @@ function getNormalizedPlayerName(playerStatePtr) {
     return readAndFreeFString(scratchFStringBuf).trim().toLowerCase();
 }
 
-function isMatchWaitingToStart(gameModePtr) {
+// バニラ AGameMode::HasMatchStarted (0x25687E0) と同一判定:
+// EnteringMap と WaitingToStart の両方を開局前とみなし、EnteringMap で空名簿ロックしない
+function isMatchPreStart(gameModePtr) {
     if (gameModePtr.isNull()) {
         return true;
     }
     var currentMatchState = gameModePtr.add(OFF.gameModeMatchState).readU64();
-    var waitingToStart = MatchState_WaitingToStart_ptr.readU64();
-    return currentMatchState.equals(waitingToStart);
+    if (currentMatchState.equals(MatchState_EnteringMap_ptr.readU64())) {
+        return true;
+    }
+    if (currentMatchState.equals(MatchState_WaitingToStart_ptr.readU64())) {
+        return true;
+    }
+    return false;
 }
 
 function isMatchEnded(gameModePtr) {
@@ -380,10 +473,10 @@ function getMatchStateLabel(gameModePtr) {
     if (gameModePtr.isNull()) {
         return 'Unknown';
     }
-    if (isMatchEnded(gameModePtr)) {
-        return 'Ended';
-    }
     var current = gameModePtr.add(OFF.gameModeMatchState).readU64();
+    if (current.equals(MatchState_EnteringMap_ptr.readU64())) {
+        return 'EnteringMap';
+    }
     if (current.equals(MatchState_WaitingToStart_ptr.readU64())) {
         return 'WaitingToStart';
     }
@@ -393,14 +486,37 @@ function getMatchStateLabel(gameModePtr) {
     if (current.equals(MatchState_InProgress_ptr.readU64())) {
         return 'InProgress';
     }
+    if (current.equals(MatchState_WaitingPostMatch_ptr.readU64())) {
+        return 'WaitingPostMatch';
+    }
+    if (current.equals(MatchState_LeavingMap_ptr.readU64())) {
+        return 'LeavingMap';
+    }
+    if (current.equals(MatchState_Aborted_ptr.readU64())) {
+        return 'Aborted';
+    }
+    if (isMatchEnded(gameModePtr)) {
+        return 'Ended';
+    }
     return 'Other';
 }
 
 function resetRosterState(gameModePtr) {
     lockedRosterGameMode = gameModePtr;
     matchRosterLocked = false;
+    preMatchSeenUids = Object.create(null);
+    preMatchSeenNames = Object.create(null);
+    preMatchSeenAddrsByName = Object.create(null);
     allowedUids = Object.create(null);
     allowedNames = Object.create(null);
+    preLoginAddrByConn = Object.create(null);
+    preLoginAddrCacheCount = 0;
+}
+
+function ensureRosterGameMode(gameModePtr) {
+    if (!lockedRosterGameMode.equals(gameModePtr)) {
+        resetRosterState(gameModePtr);
+    }
 }
 
 function countObjectKeys(obj) {
@@ -413,17 +529,56 @@ function countObjectKeys(obj) {
     return count;
 }
 
+function recordPreMatchParticipant(gameModePtr, uid, name, normalizedAddr) {
+    if (gameModePtr.isNull() || isPendingKill(gameModePtr) || !isA(gameModePtr, getDHGameModeClass())) {
+        return;
+    }
+    ensureRosterGameMode(gameModePtr);
+    if (matchRosterLocked || !isMatchPreStart(gameModePtr)) {
+        return;
+    }
+    if (uid && uid.length > 0) {
+        preMatchSeenUids[uid] = true;
+    }
+    if (name && name.length > 0) {
+        preMatchSeenNames[name] = true;
+        if (normalizedAddr && normalizedAddr.length > 0) {
+            var addrSet = preMatchSeenAddrsByName[name];
+            if (!addrSet) {
+                addrSet = Object.create(null);
+                preMatchSeenAddrsByName[name] = addrSet;
+            }
+            if (addrSet[normalizedAddr] !== true && countObjectKeys(addrSet) < MAX_ADDRS_PER_NAME) {
+                addrSet[normalizedAddr] = true;
+            }
+        }
+    }
+}
+
 function lockMatchRoster(gameModePtr, reasonLabel) {
     if (gameModePtr.isNull() || isPendingKill(gameModePtr) || !isA(gameModePtr, getDHGameModeClass())) {
         return;
     }
-    if (matchRosterLocked && lockedRosterGameMode.equals(gameModePtr)) {
-        return;
-    }
-    resetRosterState(gameModePtr);
+    ensureRosterGameMode(gameModePtr);
+
+    var wasLocked = matchRosterLocked;
+    var prevUidTotal = countObjectKeys(allowedUids);
+    var prevNameTotal = countObjectKeys(allowedNames);
     matchRosterLocked = true;
 
-    // 1. GameState->PlayerArray の全 PlayerState を記録
+    // 1. 開局前(EnteringMap/WaitingToStart)に認証通過した全参加者を和集合統合
+    for (var preUid in preMatchSeenUids) {
+        if (preMatchSeenUids[preUid] === true) {
+            allowedUids[preUid] = true;
+        }
+    }
+    for (var preName in preMatchSeenNames) {
+        if (preMatchSeenNames[preName] === true) {
+            allowedNames[preName] = true;
+        }
+    }
+
+    // 2. GameState->PlayerArray の全 PlayerState を統合
     var gameState = gameModePtr.add(OFF.gameModeGameState).readPointer();
     if (!gameState.isNull() && !isPendingKill(gameState)) {
         var arrPtr = gameState.add(OFF.gameStatePlayerArray);
@@ -446,7 +601,7 @@ function lockMatchRoster(gameModePtr, reasonLabel) {
             }
         }
 
-        // 2. ADH_GameState::ExpectedPlayerIDs (+0x420) を記録
+        // 3. ADH_GameState::ExpectedPlayerIDs (+0x420) を統合
         if (isA(gameState, getDHGameStateClass())) {
             var expArrPtr = gameState.add(OFF.gameStateExpectedPlayerIds);
             var expData = expArrPtr.readPointer();
@@ -462,7 +617,7 @@ function lockMatchRoster(gameModePtr, reasonLabel) {
         }
     }
 
-    // 3. マップ読込中の有効な UNetConnection も記録
+    // 4. マップ読込中の有効な UNetConnection も統合
     var world = GWorld_ptr.readPointer();
     if (!world.isNull() && !isPendingKill(world)) {
         var netDriver = world.add(OFF.worldNetDriver).readPointer();
@@ -470,6 +625,7 @@ function lockMatchRoster(gameModePtr, reasonLabel) {
             var connsPtr = netDriver.add(OFF.netDriverClientConnections);
             var connData = connsPtr.readPointer();
             var connCount = connsPtr.add(8).readS32();
+            var pcClass = getPlayerControllerClass();
             if (!connData.isNull() && connCount > 0 && connCount <= MAX_CLIENT_CONNECTIONS) {
                 for (var c = 0; c < connCount; c++) {
                     var conn = connData.add(c * 8).readPointer();
@@ -485,6 +641,20 @@ function lockMatchRoster(gameModePtr, reasonLabel) {
                     if (connUid.length > 0) {
                         allowedUids[connUid] = true;
                     }
+                    var connPC = conn.add(OFF.netConnPlayerController).readPointer();
+                    if (!connPC.isNull() && !isPendingKill(connPC) && isA(connPC, pcClass)) {
+                        var connPS = connPC.add(OFF.controllerPlayerState).readPointer();
+                        if (!connPS.isNull() && !isPendingKill(connPS)) {
+                            var connPSUid = getNormalizedUniqueIdString(connPS.add(OFF.playerStateUniqueId));
+                            if (connPSUid.length > 0) {
+                                allowedUids[connPSUid] = true;
+                            }
+                            var connPSName = getNormalizedPlayerName(connPS);
+                            if (connPSName.length > 0) {
+                                allowedNames[connPSName] = true;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -492,83 +662,168 @@ function lockMatchRoster(gameModePtr, reasonLabel) {
 
     var uidTotal = countObjectKeys(allowedUids);
     var nameTotal = countObjectKeys(allowedNames);
-    logEvent(
-        '[開局ロック] ' + (reasonLabel || '試合開始') +
-        'により開局メンバーを確定しました (UID: ' + uidTotal + '件 / 名前: ' + nameTotal +
-        '件 / State: ' + getMatchStateLabel(gameModePtr) + ')'
-    );
+    var preUidTotal = countObjectKeys(preMatchSeenUids);
+    if (!wasLocked) {
+        logEvent(
+            '[開局ロック] ' + (reasonLabel || '試合開始') +
+            'により開局メンバーを確定しました (UID: ' + uidTotal + '件 / 名前: ' + nameTotal +
+            '件 / 開局前履歴UID: ' + preUidTotal + '件 / State: ' + getMatchStateLabel(gameModePtr) + ')'
+        );
+    } else if (uidTotal > prevUidTotal || nameTotal > prevNameTotal) {
+        logEvent(
+            '[開局名簿統合] ' + (reasonLabel || '試合開始') +
+            'で開局メンバーを補完しました (UID: ' + prevUidTotal + '->' + uidTotal +
+            '件 / 名前: ' + prevNameTotal + '->' + nameTotal +
+            '件 / State: ' + getMatchStateLabel(gameModePtr) + ')'
+        );
+    }
 }
 
 function isRosterEnforced(gameModePtr) {
     if (gameModePtr.isNull() || isPendingKill(gameModePtr) || !isA(gameModePtr, getDHGameModeClass())) {
         return false;
     }
-    if (!lockedRosterGameMode.equals(gameModePtr)) {
-        resetRosterState(gameModePtr);
-    }
+    ensureRosterGameMode(gameModePtr);
     if (matchRosterLocked) {
         return true;
     }
-    if (!isMatchWaitingToStart(gameModePtr)) {
+    if (!isMatchPreStart(gameModePtr)) {
         lockMatchRoster(gameModePtr, 'MatchState遷移');
         return true;
     }
     return false;
 }
 
-function hasUnambiguousDisconnectedPlayerByName(gameModePtr, normalizedName) {
+// 名前フォールバック時の再接続可否判定:
+//   - 別IPから同名プレイヤーが接続中の場合はなりすましとして拒否
+//   - 既に切断済み(Inactive/Disconnected)の1件一致 -> 許可 (name_disconnected)
+//   - 60秒ゾンビタイムアウト前でまだ Active 扱いだが SavedNetworkAddress が同一IPの1件一致 ->
+//     許可 (name_same_addr) + 対象 PlayerState の旧接続を事前整理
+//   - WaitingToStart 中に切断して PlayerState が破棄済みで、開局前履歴の同一IP一致 ->
+//     許可 (name_prematch_addr)
+function findReconnectCandidateByName(gameModePtr, normalizedName, normalizedAddr) {
     if (gameModePtr.isNull() || normalizedName.length === 0) {
-        return false;
+        return { allowed: false, matchedPS: ptr(0), reason: 'not_in_roster', needsZombieCleanup: false };
     }
     var gameState = gameModePtr.add(OFF.gameModeGameState).readPointer();
     if (gameState.isNull() || isPendingKill(gameState)) {
-        return false;
+        return { allowed: false, matchedPS: ptr(0), reason: 'not_in_roster', needsZombieCleanup: false };
     }
     var arrPtr = gameState.add(OFF.gameStatePlayerArray);
     var dataPtr = arrPtr.readPointer();
     var count = arrPtr.add(8).readS32();
-    if (dataPtr.isNull() || count <= 0 || count > MAX_PLAYER_ARRAY) {
-        return false;
-    }
     var dhPsClass = getDHPlayerStateClass();
-    var disconnectedMatchCount = 0;
-    for (var i = 0; i < count; i++) {
-        var ps = dataPtr.add(i * 8).readPointer();
-        if (ps.isNull() || isPendingKill(ps) || !isA(ps, dhPsClass)) {
-            continue;
+
+    var totalNameMatches = 0;
+    var disconnectedMatches = [];
+    var sameAddrActiveMatches = [];
+    var otherActiveMatches = 0;
+
+    if (!dataPtr.isNull() && count > 0 && count <= MAX_PLAYER_ARRAY) {
+        for (var i = 0; i < count; i++) {
+            var ps = dataPtr.add(i * 8).readPointer();
+            if (ps.isNull() || isPendingKill(ps) || !isA(ps, dhPsClass)) {
+                continue;
+            }
+            var psName = getNormalizedPlayerName(ps);
+            if (psName.length === 0 || psName !== normalizedName) {
+                continue;
+            }
+            totalNameMatches += 1;
+            var isInactive = (ps.add(OFF.playerStateFlags).readU8() & PLAYER_STATE_INACTIVE_MASK) !== 0;
+            var isDisc = ps.add(OFF.playerStateIsDisconnected).readU8() !== 0;
+            if (isInactive || isDisc) {
+                disconnectedMatches.push(ps);
+            } else {
+                var savedAddr = normalizeAddress(readFStringNonOwning(ps.add(OFF.playerStateSavedNetworkAddress)));
+                if (normalizedAddr.length > 0 && savedAddr.length > 0 && savedAddr === normalizedAddr) {
+                    sameAddrActiveMatches.push(ps);
+                } else {
+                    otherActiveMatches += 1;
+                }
+            }
         }
-        var psName = getNormalizedPlayerName(ps);
-        if (psName.length === 0 || psName !== normalizedName) {
-            continue;
-        }
-        var isInactive = (ps.add(OFF.playerStateFlags).readU8() & PLAYER_STATE_INACTIVE_MASK) !== 0;
-        var isDisc = ps.add(OFF.playerStateIsDisconnected).readU8() !== 0;
-        if (!isInactive && !isDisc) {
-            // 同名の開局プレイヤーが接続中のため、なりすましを拒否
-            return false;
-        }
-        disconnectedMatchCount += 1;
     }
-    return disconnectedMatchCount === 1;
+
+    if (otherActiveMatches > 0) {
+        return { allowed: false, matchedPS: ptr(0), reason: 'name_active_conflict', needsZombieCleanup: false };
+    }
+    if (disconnectedMatches.length === 1 && sameAddrActiveMatches.length === 0) {
+        return { allowed: true, matchedPS: disconnectedMatches[0], reason: 'name_disconnected', needsZombieCleanup: false };
+    }
+    if (sameAddrActiveMatches.length === 1 && disconnectedMatches.length === 0) {
+        return { allowed: true, matchedPS: sameAddrActiveMatches[0], reason: 'name_same_addr', needsZombieCleanup: true };
+    }
+    if (totalNameMatches === 0 && normalizedAddr.length > 0) {
+        var seenAddrs = preMatchSeenAddrsByName[normalizedName];
+        if (seenAddrs && seenAddrs[normalizedAddr] === true) {
+            return { allowed: true, matchedPS: ptr(0), reason: 'name_prematch_addr', needsZombieCleanup: false };
+        }
+    }
+    return { allowed: false, matchedPS: ptr(0), reason: 'not_in_roster', needsZombieCleanup: false };
 }
 
-function checkMidMatchReconnectAllowance(gameModePtr, incomingUid, optionsPtr) {
-    if (!isRosterEnforced(gameModePtr)) {
-        return { allowed: true, enforced: false, reason: 'before_lock', incomingName: '' };
-    }
+function checkMidMatchReconnectAllowance(gameModePtr, incomingUid, optionsPtr, normalizedAddr) {
     var incomingName = parseOptionName(optionsPtr);
+    if (!isRosterEnforced(gameModePtr)) {
+        return {
+            allowed: true,
+            enforced: false,
+            reason: 'before_lock',
+            incomingName: incomingName,
+            matchedPS: ptr(0),
+            needsZombieCleanup: false
+        };
+    }
     if (isMatchEnded(gameModePtr)) {
-        return { allowed: false, enforced: true, reason: 'match_ended', incomingName: incomingName };
+        return {
+            allowed: false,
+            enforced: true,
+            reason: 'match_ended',
+            incomingName: incomingName,
+            matchedPS: ptr(0),
+            needsZombieCleanup: false
+        };
     }
     if (incomingUid.length > 0 && allowedUids[incomingUid] === true) {
-        return { allowed: true, enforced: true, reason: 'uid', incomingName: incomingName };
+        return {
+            allowed: true,
+            enforced: true,
+            reason: 'uid',
+            incomingName: incomingName,
+            matchedPS: ptr(0),
+            needsZombieCleanup: false
+        };
     }
     if (incomingName.length > 0 && allowedNames[incomingName] === true) {
-        if (hasUnambiguousDisconnectedPlayerByName(gameModePtr, incomingName)) {
-            return { allowed: true, enforced: true, reason: 'name_disconnected', incomingName: incomingName };
+        var nameRes = findReconnectCandidateByName(gameModePtr, incomingName, normalizedAddr || '');
+        if (nameRes.allowed) {
+            return {
+                allowed: true,
+                enforced: true,
+                reason: nameRes.reason,
+                incomingName: incomingName,
+                matchedPS: nameRes.matchedPS,
+                needsZombieCleanup: nameRes.needsZombieCleanup
+            };
         }
+        return {
+            allowed: false,
+            enforced: true,
+            reason: nameRes.reason,
+            incomingName: incomingName,
+            matchedPS: ptr(0),
+            needsZombieCleanup: false
+        };
     }
-    return { allowed: false, enforced: true, reason: 'not_in_roster', incomingName: incomingName };
+    return {
+        allowed: false,
+        enforced: true,
+        reason: 'not_in_roster',
+        incomingName: incomingName,
+        matchedPS: ptr(0),
+        needsZombieCleanup: false
+    };
 }
 
 function clearCloseServerTimer(gameModePtr) {
@@ -673,6 +928,21 @@ function hasAnyActivePlayerOrConnection(gameModePtr) {
     return false;
 }
 
+function getConnectionEffectiveUid(connPtr, pcClass) {
+    var connUid = getNormalizedUniqueIdString(connPtr.add(OFF.netConnPlayerId));
+    if (connUid.length > 0) {
+        return connUid;
+    }
+    var connPC = connPtr.add(OFF.netConnPlayerController).readPointer();
+    if (!connPC.isNull() && !isPendingKill(connPC) && isA(connPC, pcClass)) {
+        var connPS = connPC.add(OFF.controllerPlayerState).readPointer();
+        if (!connPS.isNull() && !isPendingKill(connPS)) {
+            return getNormalizedUniqueIdString(connPS.add(OFF.playerStateUniqueId));
+        }
+    }
+    return '';
+}
+
 function cleanupStaleConnectionsForUid(gameModePtr, incomingUid, excludeConnPtr) {
     // 受信中の新規接続を誤破棄しないよう、非NULLの excludeConnPtr を必須とする
     if (isCleaningUpStaleConnection || incomingUid.length === 0 || excludeConnPtr.isNull()) {
@@ -693,6 +963,7 @@ function cleanupStaleConnectionsForUid(gameModePtr, incomingUid, excludeConnPtr)
         return 0;
     }
 
+    var pcClass = getPlayerControllerClass();
     var staleConns = [];
     for (var i = 0; i < connCount; i++) {
         var conn = connData.add(i * 8).readPointer();
@@ -706,7 +977,7 @@ function cleanupStaleConnectionsForUid(gameModePtr, incomingUid, excludeConnPtr)
         if (loginState === CLIENT_LOGIN_STATE_CLEANED_UP) {
             continue;
         }
-        var connUid = getNormalizedUniqueIdString(conn.add(OFF.netConnPlayerId));
+        var connUid = getConnectionEffectiveUid(conn, pcClass);
         if (connUid.length > 0 && connUid === incomingUid) {
             staleConns.push(conn);
         }
@@ -741,7 +1012,104 @@ function cleanupStaleConnectionsForUid(gameModePtr, incomingUid, excludeConnPtr)
         }
         logEvent(
             '[ゾンビ切断整理] 同一UIDの古い接続を ' + cleaned + '件 クリーンアップしました (UID: ' +
-            sanitizeLogValue(incomingUid) + ')'
+            formatUidTag(incomingUid) + ')'
+        );
+    }
+    return cleaned;
+}
+
+function cleanupStaleConnectionsForPlayerState(gameModePtr, targetPS, excludeConnPtr) {
+    if (isCleaningUpStaleConnection || targetPS.isNull() || isPendingKill(targetPS) || excludeConnPtr.isNull()) {
+        return 0;
+    }
+    var pcClass = getPlayerControllerClass();
+    var dhPcClass = getDHPlayerControllerClass();
+    var staleConns = [];
+    var seen = Object.create(null);
+
+    function tryRecordConnFromPC(pcPtr) {
+        if (pcPtr.isNull() || isPendingKill(pcPtr) || !isA(pcPtr, pcClass)) {
+            return;
+        }
+        var pcPS = pcPtr.add(OFF.controllerPlayerState).readPointer();
+        var pcDHPS = isA(pcPtr, dhPcClass) ? pcPtr.add(OFF.dhControllerPlayerState).readPointer() : ptr(0);
+        if (!pcPS.equals(targetPS) && !pcDHPS.equals(targetPS)) {
+            return;
+        }
+        var pcConn = pcPtr.add(OFF.playerControllerNetConnection).readPointer();
+        if (pcConn.isNull() || isPendingKill(pcConn) || pcConn.equals(excludeConnPtr)) {
+            return;
+        }
+        if (pcConn.add(OFF.netConnClientLoginState).readS32() === CLIENT_LOGIN_STATE_CLEANED_UP) {
+            return;
+        }
+        var key = pcConn.toString();
+        if (!seen[key]) {
+            seen[key] = true;
+            staleConns.push(pcConn);
+        }
+    }
+
+    tryRecordConnFromPC(targetPS.add(OFF.actorOwner).readPointer());
+
+    var world = GWorld_ptr.readPointer();
+    if (!world.isNull() && !isPendingKill(world)) {
+        var netDriver = world.add(OFF.worldNetDriver).readPointer();
+        if (!netDriver.isNull() && !isPendingKill(netDriver)) {
+            var connsPtr = netDriver.add(OFF.netDriverClientConnections);
+            var connData = connsPtr.readPointer();
+            var connCount = connsPtr.add(8).readS32();
+            if (!connData.isNull() && connCount > 0 && connCount <= MAX_CLIENT_CONNECTIONS) {
+                for (var c = 0; c < connCount; c++) {
+                    var conn = connData.add(c * 8).readPointer();
+                    if (conn.isNull() || isPendingKill(conn) || conn.equals(excludeConnPtr)) {
+                        continue;
+                    }
+                    if (conn.add(OFF.netConnClientLoginState).readS32() === CLIENT_LOGIN_STATE_CLEANED_UP) {
+                        continue;
+                    }
+                    var connPC = conn.add(OFF.netConnPlayerController).readPointer();
+                    var connOwner = conn.add(OFF.netConnOwningActor).readPointer();
+                    if (!connPC.isNull()) {
+                        tryRecordConnFromPC(connPC);
+                    }
+                    if (!connOwner.isNull() && !connOwner.equals(connPC)) {
+                        tryRecordConnFromPC(connOwner);
+                    }
+                }
+            }
+        }
+    }
+
+    if (staleConns.length === 0) {
+        return 0;
+    }
+
+    isCleaningUpStaleConnection = true;
+    var cleaned = 0;
+    try {
+        for (var k = 0; k < staleConns.length; k++) {
+            var targetConn = staleConns[k];
+            if (targetConn.isNull() || isPendingKill(targetConn)) {
+                continue;
+            }
+            if (targetConn.add(OFF.netConnClientLoginState).readS32() === CLIENT_LOGIN_STATE_CLEANED_UP) {
+                continue;
+            }
+            UNetConnection_CleanUp(targetConn);
+            cleaned += 1;
+        }
+    } finally {
+        isCleaningUpStaleConnection = false;
+    }
+
+    if (cleaned > 0) {
+        if (!gameModePtr.isNull()) {
+            clearCloseServerTimer(gameModePtr);
+        }
+        logEvent(
+            '[ゾンビ切断整理] 同一IP再接続対象の旧接続を ' + cleaned + '件 クリーンアップしました (Name: ' +
+            sanitizeLogValue(getNormalizedPlayerName(targetPS)) + ')'
         );
     }
     return cleaned;
@@ -751,7 +1119,7 @@ function cleanupStaleControllersForCandidatePlayerState(gameModePtr, newPC) {
     if (isCleaningUpStaleConnection || gameModePtr.isNull() || newPC.isNull() || isPendingKill(newPC)) {
         return 0;
     }
-    if (!isA(gameModePtr, getDHGameModeClass()) || isMatchWaitingToStart(gameModePtr) || isMatchEnded(gameModePtr)) {
+    if (!isA(gameModePtr, getDHGameModeClass()) || isMatchPreStart(gameModePtr) || isMatchEnded(gameModePtr)) {
         return 0;
     }
     if ((AGameModeBase_MustSpectate(gameModePtr, newPC) & 1) !== 0) {
@@ -775,7 +1143,7 @@ function cleanupStaleControllersForCandidatePlayerState(gameModePtr, newPC) {
     var dhPsClass = getDHPlayerStateClass();
     var incomingUid = getNormalizedUniqueIdString(newPS.add(OFF.playerStateUniqueId));
     var incomingName = getNormalizedPlayerName(newPS);
-    var incomingNetAddr = readFStringNonOwning(newPS.add(OFF.playerStateSavedNetworkAddress)).trim().toLowerCase();
+    var incomingNetAddr = normalizeAddress(readFStringNonOwning(newPS.add(OFF.playerStateSavedNetworkAddress)));
     var candidatePS = ptr(0);
 
     // 1. UniqueId の完全一致(大小文字無視)
@@ -798,7 +1166,7 @@ function cleanupStaleControllersForCandidatePlayerState(gameModePtr, newPC) {
             if (psAddrCand.isNull() || psAddrCand.equals(newPS) || isPendingKill(psAddrCand) || !isA(psAddrCand, dhPsClass)) {
                 continue;
             }
-            var candAddr = readFStringNonOwning(psAddrCand.add(OFF.playerStateSavedNetworkAddress)).trim().toLowerCase();
+            var candAddr = normalizeAddress(readFStringNonOwning(psAddrCand.add(OFF.playerStateSavedNetworkAddress)));
             if (candAddr.length === 0 || candAddr !== incomingNetAddr) {
                 continue;
             }
@@ -944,7 +1312,7 @@ function cleanupStaleControllersForCandidatePlayerState(gameModePtr, newPC) {
 }
 
 // ============================================================================
-// Hook 0: ポーカー完了・試合開始時に開局名簿を確定 (onEnter のみ使用)
+// Hook 0: ポーカー開始・試合開始時に開局名簿を確定/和集合補完 (onEnter のみ使用)
 // ============================================================================
 Interceptor.attach(moduleBase.add(RVA.ADH_GameMode_RandomizeThralls), {
     onEnter: function (args) {
@@ -986,27 +1354,40 @@ Interceptor.attach(moduleBase.add(RVA.UWorld_NotifyControlMessage), {
 
 // ============================================================================
 // Hook 2: AGameModeBase::PreLogin
-//   開局外プレイヤー拒否・旧接続整理・AtCapacityバイパス・10秒終了タイマー解除
+//   開局前参加者記録・開局外プレイヤー拒否・旧接続整理・AtCapacityバイパス・
+//   10秒終了タイマー解除・診断ログ出力
 // ============================================================================
 Interceptor.attach(moduleBase.add(RVA.AGameModeBase_PreLogin), {
     onEnter: function (args) {
+        this.isDHMode = false;
+        this.gameModePtr = ptr(0);
         this.pushedBypass = false;
         this.rejectOutsider = false;
         this.enforced = false;
         this.incomingUid = '';
         this.incomingName = '';
+        this.incomingAddr = '';
         this.errorMsgPtr = ptr(0);
         try {
             var gameMode = args[0];
             var optionsPtr = args[1];
+            var addressPtr = args[2];
             var uniqueIdPtr = args[3];
             this.errorMsgPtr = args[4];
             if (gameMode.isNull() || !isA(gameMode, getDHGameModeClass())) {
                 return;
             }
+            this.isDHMode = true;
+            this.gameModePtr = gameMode;
             var incomingUid = getNormalizedUniqueIdString(uniqueIdPtr);
+            var incomingAddr = normalizeAddress(readFStringNonOwning(addressPtr));
             this.incomingUid = incomingUid;
-            var check = checkMidMatchReconnectAllowance(gameMode, incomingUid, optionsPtr);
+            this.incomingAddr = incomingAddr;
+            if (!currentLoginConnection.isNull() && incomingAddr.length > 0) {
+                cachePreLoginAddress(currentLoginConnection, incomingAddr);
+            }
+
+            var check = checkMidMatchReconnectAllowance(gameMode, incomingUid, optionsPtr, incomingAddr);
             this.enforced = check.enforced;
             this.incomingName = check.incomingName;
 
@@ -1015,7 +1396,7 @@ Interceptor.attach(moduleBase.add(RVA.AGameModeBase_PreLogin), {
                     this.rejectOutsider = true;
                     logEvent(
                         '[接続拒否] 開局外プレイヤーを拒否しました (PreLogin / 理由: ' + check.reason +
-                        ' / UID: ' + sanitizeLogValue(incomingUid) +
+                        ' / UID: ' + formatUidTag(incomingUid) +
                         ' / Name: ' + sanitizeLogValue(check.incomingName) +
                         ' / State: ' + getMatchStateLabel(gameMode) + ')'
                     );
@@ -1023,7 +1404,7 @@ Interceptor.attach(moduleBase.add(RVA.AGameModeBase_PreLogin), {
                 }
                 logEvent(
                     '[再接続許可] 開局メンバーのPreLoginを受け入れました (一致: ' + check.reason +
-                    ' / UID: ' + sanitizeLogValue(incomingUid) +
+                    ' / UID: ' + formatUidTag(incomingUid) +
                     ' / Name: ' + sanitizeLogValue(check.incomingName) +
                     ' / State: ' + getMatchStateLabel(gameMode) + ')'
                 );
@@ -1034,6 +1415,9 @@ Interceptor.attach(moduleBase.add(RVA.AGameModeBase_PreLogin), {
             }
             if (incomingUid.length > 0) {
                 cleanupStaleConnectionsForUid(gameMode, incomingUid, currentLoginConnection);
+            }
+            if (check.needsZombieCleanup && !check.matchedPS.isNull()) {
+                cleanupStaleConnectionsForPlayerState(gameMode, check.matchedPS, currentLoginConnection);
             }
             if (!isMatchEnded(gameMode)) {
                 if (check.enforced || hasExistingPlayerStateByUid(gameMode, incomingUid)) {
@@ -1048,17 +1432,36 @@ Interceptor.attach(moduleBase.add(RVA.AGameModeBase_PreLogin), {
             if (this.pushedBypass && reconnectCapacityBypassDepth > 0) {
                 reconnectCapacityBypassDepth -= 1;
             }
+            if (!this.isDHMode) {
+                return;
+            }
             if (this.rejectOutsider && !this.errorMsgPtr.isNull()) {
                 var existingLen = this.errorMsgPtr.add(8).readS32();
                 if (existingLen <= 1) {
                     writeUEFString(this.errorMsgPtr, REJECT_MID_MATCH_MESSAGE);
                 }
-            } else if (this.enforced && !this.errorMsgPtr.isNull()) {
+            } else if (!this.errorMsgPtr.isNull()) {
                 var ueErr = readFStringNonOwning(this.errorMsgPtr);
                 if (ueErr.length > 0) {
                     logEvent(
-                        '[PreLoginエラー] UE4側で接続が拒否されました (理由: ' + sanitizeLogValue(ueErr) +
-                        ' / UID: ' + sanitizeLogValue(this.incomingUid) + ')'
+                        '[PreLoginエラー] UE4側で接続が拒否されました (' +
+                        (this.enforced ? '開局後' : '開局前') +
+                        ' / 理由: ' + sanitizeLogValue(ueErr) +
+                        ' / UID: ' + formatUidTag(this.incomingUid) +
+                        ' / Name: ' + sanitizeLogValue(this.incomingName) +
+                        ' / State: ' + getMatchStateLabel(this.gameModePtr) + ')'
+                    );
+                } else if (!this.enforced) {
+                    recordPreMatchParticipant(
+                        this.gameModePtr,
+                        this.incomingUid,
+                        this.incomingName,
+                        this.incomingAddr
+                    );
+                    logEvent(
+                        '[開局前PreLogin] 参加者を受け入れました (UID: ' + formatUidTag(this.incomingUid) +
+                        ' / Name: ' + sanitizeLogValue(this.incomingName) +
+                        ' / State: ' + getMatchStateLabel(this.gameModePtr) + ')'
                     );
                 }
             }
@@ -1067,86 +1470,132 @@ Interceptor.attach(moduleBase.add(RVA.AGameModeBase_PreLogin), {
 });
 
 // ============================================================================
-// Hook 3: ADH_GameMode::Login
-//   乱入二重防御・旧接続整理・AtCapacityバイパス・10秒終了タイマー解除
+// Hook 3: ADH_GameMode::Login (replaceFast でトップレベル固定)
+//   乱入時は元関数を実行せず即拒否(ExpectedPlayerIDs汚染/余分なSpawn防止)、
+//   許可時は旧接続整理・AtCapacityバイパス・開局前参加者記録を実施
 // ============================================================================
-Interceptor.attach(moduleBase.add(RVA.ADH_GameMode_Login), {
-    onEnter: function (args) {
-        this.pushedBypass = false;
-        this.savedLoginConn = false;
-        this.rejectOutsider = false;
-        this.enforced = false;
-        this.incomingUid = '';
-        this.errorMsgPtr = ptr(0);
+var dhGameModeLoginAddr = moduleBase.add(RVA.ADH_GameMode_Login);
+var dhGameModeLoginTrampoline = ptr(0);
+var dhGameModeLoginOrig = null;
+
+var dhGameModeLoginWrapper = new NativeCallback(function (
+    gameMode,
+    newPlayerConn,
+    remoteRole,
+    portalPtr,
+    optionsPtr,
+    uniqueIdPtr,
+    errorMsgPtr
+) {
+    var savedLoginConn = false;
+    var prevLoginConn = ptr(0);
+    var pushedBypass = false;
+    var rejectOutsider = false;
+    var enforced = false;
+    var incomingUid = '';
+    var incomingName = '';
+    var incomingAddr = '';
+
+    try {
         try {
-            var gameMode = args[0];
-            var newPlayerConn = args[1];
-            var optionsPtr = args[4];
-            var uniqueIdPtr = args[5];
-            this.errorMsgPtr = args[6];
             if (!newPlayerConn.isNull()) {
-                this.prevLoginConn = currentLoginConnection;
+                prevLoginConn = currentLoginConnection;
                 currentLoginConnection = newPlayerConn;
-                this.savedLoginConn = true;
-            }
-            if (gameMode.isNull()) {
-                return;
-            }
-            var incomingUid = getNormalizedUniqueIdString(uniqueIdPtr);
-            this.incomingUid = incomingUid;
-            var check = checkMidMatchReconnectAllowance(gameMode, incomingUid, optionsPtr);
-            this.enforced = check.enforced;
-
-            if (check.enforced && !check.allowed) {
-                this.rejectOutsider = true;
-                logEvent(
-                    '[接続拒否] 開局外プレイヤーを拒否しました (Login / 理由: ' + check.reason +
-                    ' / UID: ' + sanitizeLogValue(incomingUid) +
-                    ' / Name: ' + sanitizeLogValue(check.incomingName) + ')'
-                );
-                return;
+                savedLoginConn = true;
+                incomingAddr = getCachedPreLoginAddress(newPlayerConn);
             }
 
-            if (!isMatchEnded(gameMode)) {
-                clearCloseServerTimer(gameMode);
-            }
-            if (incomingUid.length > 0) {
-                cleanupStaleConnectionsForUid(gameMode, incomingUid, newPlayerConn);
-            }
-            if (!isMatchEnded(gameMode)) {
-                if (check.enforced || hasExistingPlayerStateByUid(gameMode, incomingUid)) {
-                    reconnectCapacityBypassDepth += 1;
-                    this.pushedBypass = true;
+            if (!gameMode.isNull() && !isPendingKill(gameMode) && isA(gameMode, getDHGameModeClass())) {
+                incomingUid = getNormalizedUniqueIdString(uniqueIdPtr);
+                var check = checkMidMatchReconnectAllowance(gameMode, incomingUid, optionsPtr, incomingAddr);
+                enforced = check.enforced;
+                incomingName = check.incomingName;
+
+                if (check.enforced && !check.allowed) {
+                    rejectOutsider = true;
+                    logEvent(
+                        '[接続拒否] 開局外プレイヤーを拒否しました (Login / 理由: ' + check.reason +
+                        ' / UID: ' + formatUidTag(incomingUid) +
+                        ' / Name: ' + sanitizeLogValue(incomingName) +
+                        ' / State: ' + getMatchStateLabel(gameMode) + ')'
+                    );
+                    if (!errorMsgPtr.isNull() && errorMsgPtr.add(8).readS32() <= 1) {
+                        writeUEFString(errorMsgPtr, REJECT_MID_MATCH_MESSAGE);
+                    }
+                } else {
+                    if (!isMatchEnded(gameMode)) {
+                        clearCloseServerTimer(gameMode);
+                    }
+                    if (incomingUid.length > 0) {
+                        cleanupStaleConnectionsForUid(gameMode, incomingUid, newPlayerConn);
+                    }
+                    if (check.needsZombieCleanup && !check.matchedPS.isNull()) {
+                        cleanupStaleConnectionsForPlayerState(gameMode, check.matchedPS, newPlayerConn);
+                    }
+                    if (!isMatchEnded(gameMode)) {
+                        if (check.enforced || hasExistingPlayerStateByUid(gameMode, incomingUid)) {
+                            reconnectCapacityBypassDepth += 1;
+                            pushedBypass = true;
+                        }
+                    }
                 }
             }
         } catch (e) {}
-    },
-    onLeave: function (retval) {
+
+        if (rejectOutsider) {
+            return ptr(0);
+        }
+
+        var resultPC = dhGameModeLoginOrig !== null
+            ? dhGameModeLoginOrig(gameMode, newPlayerConn, remoteRole, portalPtr, optionsPtr, uniqueIdPtr, errorMsgPtr)
+            : ptr(0);
+
         try {
-            if (this.savedLoginConn) {
-                currentLoginConnection = this.prevLoginConn || ptr(0);
-            }
-            if (this.pushedBypass && reconnectCapacityBypassDepth > 0) {
-                reconnectCapacityBypassDepth -= 1;
-            }
-            if (this.rejectOutsider) {
-                if (!retval.isNull() && !isPendingKill(retval)) {
-                    AActor_Destroy(retval, 0, 1);
+            if (!resultPC.isNull() && !isPendingKill(resultPC)) {
+                if (!enforced && !gameMode.isNull()) {
+                    var spawnedName = incomingName;
+                    var spawnedUid = incomingUid;
+                    var spawnedPS = resultPC.add(OFF.controllerPlayerState).readPointer();
+                    if (!spawnedPS.isNull() && !isPendingKill(spawnedPS)) {
+                        var psUid = getNormalizedUniqueIdString(spawnedPS.add(OFF.playerStateUniqueId));
+                        if (psUid.length > 0) {
+                            spawnedUid = psUid;
+                        }
+                        var psName = getNormalizedPlayerName(spawnedPS);
+                        if (psName.length > 0) {
+                            spawnedName = psName;
+                        }
+                    }
+                    recordPreMatchParticipant(gameMode, spawnedUid, spawnedName, incomingAddr);
                 }
-                if (!this.errorMsgPtr.isNull() && this.errorMsgPtr.add(8).readS32() <= 1) {
-                    writeUEFString(this.errorMsgPtr, REJECT_MID_MATCH_MESSAGE);
-                }
-                retval.replace(ptr(0));
-            } else if (this.enforced && retval.isNull()) {
-                var loginErr = !this.errorMsgPtr.isNull() ? readFStringNonOwning(this.errorMsgPtr) : '';
+            } else if (enforced) {
+                var loginErr = !errorMsgPtr.isNull() ? readFStringNonOwning(errorMsgPtr) : '';
                 logEvent(
                     '[Loginエラー] プレイヤー生成に失敗しました (理由: ' + sanitizeLogValue(loginErr) +
-                    ' / UID: ' + sanitizeLogValue(this.incomingUid) + ')'
+                    ' / UID: ' + formatUidTag(incomingUid) +
+                    ' / Name: ' + sanitizeLogValue(incomingName) + ')'
                 );
             }
         } catch (e) {}
+
+        return resultPC;
+    } finally {
+        if (pushedBypass && reconnectCapacityBypassDepth > 0) {
+            reconnectCapacityBypassDepth -= 1;
+        }
+        if (savedLoginConn) {
+            currentLoginConnection = prevLoginConn || ptr(0);
+        }
     }
-});
+}, 'pointer', ['pointer', 'pointer', 'int32', 'pointer', 'pointer', 'pointer', 'pointer'], 'win64');
+
+dhGameModeLoginTrampoline = Interceptor.replaceFast(dhGameModeLoginAddr, dhGameModeLoginWrapper);
+dhGameModeLoginOrig = new NativeFunction(
+    dhGameModeLoginTrampoline,
+    'pointer',
+    ['pointer', 'pointer', 'int32', 'pointer', 'pointer', 'pointer', 'pointer'],
+    { abi: 'win64', exceptions: 'propagate' }
+);
 
 // ============================================================================
 // Hook 4: AGameSession::AtCapacity (開局メンバー再接続時の満員拒否を回避)
@@ -1179,13 +1628,43 @@ Interceptor.attach(moduleBase.add(RVA.AGameMode_PostLogin), {
 });
 
 // ============================================================================
-// Hook 6: ADH_GameMode::FindInactivePlayer (onEnter のみ)
-//   再紐付け前に対象 PlayerState を参照する残存旧Controller/接続を事前破棄
+// Hook 6: ADH_GameMode::FindInactivePlayer (onEnter + 結果ログ用 onLeave: 計1件)
+//   再紐付け前に対象 PlayerState を参照する残存旧Controller/接続を事前破棄し、
+//   試合開始後の再紐付け成否を診断ログへ記録する
 // ============================================================================
 Interceptor.attach(moduleBase.add(RVA.ADH_GameMode_FindInactivePlayer), {
     onEnter: function (args) {
+        this.shouldLogOutcome = false;
+        this.uidTag = 'empty';
+        this.playerName = '-';
         try {
-            cleanupStaleControllersForCandidatePlayerState(args[0], args[1]);
+            var gameMode = args[0];
+            var newPC = args[1];
+            cleanupStaleControllersForCandidatePlayerState(gameMode, newPC);
+            if (!gameMode.isNull() && !isPendingKill(gameMode) && isA(gameMode, getDHGameModeClass())) {
+                if (!isMatchPreStart(gameMode) && !isMatchEnded(gameMode)) {
+                    this.shouldLogOutcome = true;
+                    if (!newPC.isNull() && !isPendingKill(newPC)) {
+                        var newPS = newPC.add(OFF.controllerPlayerState).readPointer();
+                        if (!newPS.isNull() && !isPendingKill(newPS)) {
+                            this.uidTag = formatUidTag(getNormalizedUniqueIdString(newPS.add(OFF.playerStateUniqueId)));
+                            this.playerName = sanitizeLogValue(getNormalizedPlayerName(newPS));
+                        }
+                    }
+                }
+            }
+        } catch (e) {}
+    },
+    onLeave: function (retval) {
+        try {
+            if (!this.shouldLogOutcome) {
+                return;
+            }
+            var matched = (retval.toInt32() & 1) !== 0;
+            logEvent(
+                '[再紐付け結果] FindInactivePlayer: ' + (matched ? '成功(既存PlayerState復元)' : '未一致(新規扱い)') +
+                ' (UID: ' + this.uidTag + ' / Name: ' + this.playerName + ')'
+            );
         } catch (e) {}
     }
 });

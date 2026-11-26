@@ -1,9 +1,10 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use dh_server_tool::mods::{build_injection_plan, ModGroup};
 use dh_server_tool::server::patch_logger::{
-    append_patch_runtime_log_at, reset_patch_runtime_log_at, PatchLogLevel,
+    append_patch_runtime_log_at, start_patch_runtime_log_in, PatchLogLevel,
+    MAX_PATCH_RUNTIME_LOG_FILES, PATCH_RUNTIME_LOG_EXTENSION, PATCH_RUNTIME_LOG_PREFIX,
 };
 use dh_server_tool::server::supervisor::{
     alternate_port, format_mod_loaded_line, format_mod_loaded_line_for_group,
@@ -12,27 +13,99 @@ use dh_server_tool::server::supervisor::{
 use uuid::Uuid;
 
 #[test]
-fn overwrites_log_per_round_and_appends_formatted_entries() {
-    let path = std::env::temp_dir().join(format!("dh_patch_log_test_{}.log", Uuid::new_v4()));
+fn creates_timestamped_logs_keeps_newest_three_and_preserves_unrelated_files() {
+    let dir: PathBuf = std::env::temp_dir().join(format!("dh_patch_log_dir_{}", Uuid::new_v4()));
+    fs::create_dir_all(&dir).expect("create temp log dir");
     let patches = build_injection_plan(&[1], 7893);
 
-    reset_patch_runtime_log_at(&path, 7895, &patches);
-    append_patch_runtime_log_at(&path, PatchLogLevel::Info, "コンソール連携.js", "hello");
-    append_patch_runtime_log_at(&path, PatchLogLevel::Error, "接続保護_乱入防止.js", "boom");
+    // Seed unrelated .log files that must NEVER be deleted.
+    let unrelated_other: PathBuf = dir.join("other.log");
+    let unrelated_notes: PathBuf = dir.join("patch_runtime_notes.log");
+    fs::write(&unrelated_other, "unrelated log").expect("write other.log");
+    fs::write(&unrelated_notes, "notes log").expect("write patch_runtime_notes.log");
 
-    let first = fs::read_to_string(&path).expect("read first round log");
-    assert!(first.contains("Port: 7895"));
-    assert!(first.contains("コンソール連携.js"));
-    assert!(first.contains("[INFO] [コンソール連携.js] hello"));
-    assert!(first.contains("[ERROR] [接続保護_乱入防止.js] boom"));
+    // Create 5 sequential match logs (also exercises same-second disambiguation).
+    let mut created: Vec<PathBuf> = Vec::new();
+    for i in 0u16..5u16 {
+        let port: u16 = 7895 + i;
+        let p: PathBuf = start_patch_runtime_log_in(&dir, port, &patches);
+        let name: &str = p
+            .file_name()
+            .and_then(|n| n.to_str())
+            .expect("utf-8 filename");
+        assert!(name.starts_with(PATCH_RUNTIME_LOG_PREFIX));
+        assert!(name.ends_with(PATCH_RUNTIME_LOG_EXTENSION));
+        append_patch_runtime_log_at(
+            &p,
+            PatchLogLevel::Info,
+            "コンソール連携.js",
+            &format!("round_{i}"),
+        );
+        append_patch_runtime_log_at(
+            &p,
+            PatchLogLevel::Error,
+            "接続保護_乱入防止.js",
+            &format!("err_{i}"),
+        );
+        created.push(p);
+    }
 
-    reset_patch_runtime_log_at(&path, 7897, &patches[..4]);
-    let second = fs::read_to_string(&path).expect("read second round log");
-    assert!(second.contains("Port: 7897"));
-    assert!(!second.contains("Port: 7895"));
-    assert!(!second.contains("hello"));
+    // Oldest 2 deleted; newest 3 intact with correct headers and appended entries.
+    assert!(!created[0].exists(), "oldest match #0 must be pruned");
+    assert!(!created[1].exists(), "oldest match #1 must be pruned");
+    for (idx, path) in created.iter().enumerate().skip(2) {
+        assert!(path.exists(), "recent match #{idx} must be kept");
+        let content: String = fs::read_to_string(path).expect("read kept match log");
+        let expected_port: u16 = 7895 + u16::try_from(idx).unwrap();
+        assert!(content.contains(&format!("Port: {expected_port}")));
+        assert!(content.contains("コンソール連携.js"));
+        assert!(content.contains(&format!("[INFO] [コンソール連携.js] round_{idx}")));
+        assert!(content.contains(&format!("[ERROR] [接続保護_乱入防止.js] err_{idx}")));
+    }
 
-    let _ = fs::remove_file(&path);
+    // Distinct filenames and exact 3 matching patch_runtime_*.log files remaining.
+    let kept_matching: Vec<String> = fs::read_dir(&dir)
+        .expect("read dir")
+        .flatten()
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|name| {
+            name.starts_with(PATCH_RUNTIME_LOG_PREFIX)
+                && name.ends_with(PATCH_RUNTIME_LOG_EXTENSION)
+                && name != "patch_runtime_notes.log"
+        })
+        .collect();
+    assert_eq!(kept_matching.len(), MAX_PATCH_RUNTIME_LOG_FILES);
+    assert!(unrelated_other.exists(), "other.log must never be deleted");
+    assert!(
+        unrelated_notes.exists(),
+        "patch_runtime_notes.log must never be deleted"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn prunes_older_timestamps_chronologically_across_dates() {
+    let dir: PathBuf = std::env::temp_dir().join(format!("dh_patch_log_dates_{}", Uuid::new_v4()));
+    fs::create_dir_all(&dir).expect("create temp log dir");
+    let patches = build_injection_plan(&[], 7893);
+
+    let old1: PathBuf = dir.join("patch_runtime_20250101_000001.log");
+    let old2: PathBuf = dir.join("patch_runtime_20250101_000002.log");
+    let old3: PathBuf = dir.join("patch_runtime_20250102_120000.log");
+    let old4: PathBuf = dir.join("patch_runtime_20250102_120000_01.log");
+    for p in [&old1, &old2, &old3, &old4] {
+        fs::write(p, "historical").expect("seed old log");
+    }
+
+    let newest: PathBuf = start_patch_runtime_log_in(&dir, 7895, &patches);
+    assert!(!old1.exists());
+    assert!(!old2.exists());
+    assert!(old3.exists(), "3rd newest timestamped log must remain");
+    assert!(old4.exists(), "2nd newest timestamped log must remain");
+    assert!(newest.exists(), "newly created launch log must remain");
+
+    let _ = fs::remove_dir_all(&dir);
 }
 
 #[test]

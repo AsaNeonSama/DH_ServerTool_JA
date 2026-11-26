@@ -254,6 +254,7 @@ pub enum AppMsgCode {
     BrandBuild,
     BrandWith,
     BrandAntigravity,
+    UsageNoticeLabel,
     MissingServerDirError,
     PublicIpLabel,
     ShutdownSignalReceived,
