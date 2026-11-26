@@ -1,0 +1,20 @@
+pub const PROCESS_BASIC_INFORMATION_CLASS: u32 = 0;
+pub const PEB_IMAGE_BASE_OFFSET: u64 = 0x10;
+pub const DOS_HEADER_SIZE: usize = 64;
+pub const DOS_MAGIC_MZ: u16 = 0x5A4D;
+pub const DOS_LFANEW_OFFSET: usize = 0x3C;
+pub const MAX_REASONABLE_LFANEW: u32 = 0x0010_0000;
+pub const NT_HEADER_READ_SIZE: usize = 0x30;
+pub const NT_SIGNATURE_OFFSET: usize = 0x00;
+pub const NT_MACHINE_OFFSET: usize = 0x04;
+pub const NT_OPTIONAL_MAGIC_OFFSET: usize = 0x18;
+pub const PE_SIGNATURE: u32 = 0x0000_4550;
+pub const IMAGE_FILE_MACHINE_AMD64: u16 = 0x8664;
+pub const PE32_PLUS_OPTIONAL_MAGIC: u16 = 0x020B;
+pub const NT_ADDRESS_OF_ENTRY_POINT_OFFSET: usize = 0x28;
+
+const _: () = assert!(DOS_LFANEW_OFFSET + 4 <= DOS_HEADER_SIZE);
+const _: () = assert!(NT_SIGNATURE_OFFSET + 4 <= NT_HEADER_READ_SIZE);
+const _: () = assert!(NT_MACHINE_OFFSET + 2 <= NT_HEADER_READ_SIZE);
+const _: () = assert!(NT_OPTIONAL_MAGIC_OFFSET + 2 <= NT_HEADER_READ_SIZE);
+const _: () = assert!(NT_ADDRESS_OF_ENTRY_POINT_OFFSET + 4 <= NT_HEADER_READ_SIZE);

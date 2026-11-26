@@ -1,0 +1,37 @@
+[package]
+name = "dh-client-eos-fix"
+version = "0.1.0"
+edition = "2021"
+license-file.workspace = true
+repository.workspace = true
+description = "Dread Hunger client EOS & reconnect fix DLL (supports direct injection as eos_fix.dll and drop-in dsound.dll proxying)"
+authors = ["アサネオン / Build With Antigravity"]
+build = "build.rs"
+
+[features]
+default = []
+# Plan B: marks only the EOS lobby "URI" attribute as EOS_LAT_PRIVATE (1) so non-members
+# querying EOS cannot read the dedicated-server IP before joining the lobby.
+private-uri = []
+
+[lib]
+name = "dh_client_eos_fix"
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_SystemInformation",
+    "Win32_System_SystemServices",
+    "Win32_System_Threading",
+] }
+
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
+
+[lints]
+workspace = true

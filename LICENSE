@@ -1,0 +1,614 @@
+================================================================================
+DH_ServerTool_JA Custom Source-Available Non-Commercial License, Version 1.1
+DH_ServerTool_JA カスタム・ソース利用可能・非商用ライセンス バージョン 1.1
+DH_ServerTool_JA 自定义源码可用非商用许可证 1.1 版
+================================================================================
+
+Copyright (c) 2026 AsaNeonSama (アサネオン) — DH_ServerTool_JA Community Project
+Repository: https://github.com/AsaNeonSama/DH_ServerTool_JA
+Contact:    https://github.com/AsaNeonSama
+
+Version / バージョン / 版本说明:
+  新获取的副本以仓库发布的本许可证最新版本为准；已合法获取的旧版副本可继续按原随附版本遵守，亦可自愿升级至更高兼容版本（见第七条）。
+  新たに入手する複製物にはリポジトリ公開の最新版が適用されます。入手済みの旧版複製物は元の付随バージョンに従うことも、上位互換バージョンを選ぶこともできます（第7条）。
+  Newly obtained copies are governed by the latest version published in the Repository; previously obtained copies remain under their accompanying version, or you may opt in to any later compatible version (Article 7).
+
+Languages included:
+  [1] 简体中文 (Chinese) — 正本 / controlling text
+  [2] 日本語 (Japanese)
+  [3] English
+
+================================================================================
+[1] 简体中文 (CHINESE)
+================================================================================
+
+【要点速览（仅供快速理解，不构成条款）】
+  [可以] 出于非商业目的免费使用、学习、修改、自建服运维与分享。
+  [必须] 分发本项目或修改版、或用修改版公开开服时：公开完整源码、沿用本许可证
+         （或更高兼容版本）、保留原始声明。
+  [禁止] 闭源、仅混淆或加壳、设门槛的分发；任何直接或变相收费；平台或私服独占。
+  [范围] 本许可证只覆盖维护者与贡献者独立编写的部分。游戏资产、派生文件、其他
+         社区独立内容及第三方开源组件不在授权范围内，其权利归各自权利人；维护者
+         在自身权限内不对非商业一并使用、适配或同步分发增设单独限制。
+  [边界] 游戏原生资产归游戏权利人；UE4 付费商用资产依原权属与许可条款而定。
+         接受本许可证即同意不就游戏资产、派生文件或互操作技术事实主张独占或下架。
+  [纠正] 首次非故意违约在收到明确通知后 30 日内纠正的，授权自纠正之日起恢复
+         （再次违约或故意违反第五条除外；未恢复期间须停止相关行为）。
+  [版本] 从仓库新获取的副本以最新 LICENSE 为准；已合法获取的旧版副本不会被后续
+         修订单方面剥夺，可继续按原版本遵守，也可自愿选择升级至更高兼容版本。
+
+--------------------------------------------------------------------------------
+
+您复制、修改、分发本项目，或公开运营其修改版，即表示您接受本许可证。若不接受，除适用法律赋予的法定例外权利外，您无权实施上述任何行为。
+
+--------------------------------------------------------------------------------
+第一条｜定义
+--------------------------------------------------------------------------------
+
+1. “本项目”：指 DH_ServerTool_JA 仓库及官方发布物中的整体内容，包括授权材料、集成的通用第三方开源组件，以及为实现兼容与生态适配而涉及、引用或配套提供的相关内容。
+
+2. “授权材料”：指本项目中由维护者与贡献者独立开发、且可与第三方材料分离的源代码、脚本、文档及由此生成的构建产物。本许可证仅就授权材料授予权利。
+
+3. “游戏原生及相关商用资产”：指以下两类资产的合称：
+   (a) 游戏原生资产：《Dread Hunger》游戏本体及其官方原生资产（官方美术、音频、官方代码、商标及受著作权保护的原创资产数据等）；
+   (b) UE4 付费商用资产：游戏中包含的 Unreal Engine 4（UE4）付费商用资产。
+
+4. “派生文件”：指未经相应合法权利人授权，基于游戏原生及相关商用资产修改、提取、重打包而得，或因含有该等资产内容而与之不可分离的文件（例如经修改或重打包的 .pak、.uasset 等），不论由谁制作。在本许可证下，判断标准是文件是否含有上述资产内容；仅在运行时依赖或交互不构成“不可分离”。该文件是否构成法定侵权演绎，仍依当地适用法律判断。
+
+5. “独立作品”：指作者独立编写、既不含授权材料也不含游戏原生及相关商用资产内容的作品（如独立编写的 MOD 脚本、插件或配置）。即使它通过本项目加载、在运行时调用或挂钩游戏功能，或使用内存偏移、参数定义、接口等客观技术事实，仍属独立作品。独立作品不受本许可证第四条和第五条约束，其原创表达归作者所有。同一发布包中同时含有独立作品与授权材料或派生文件的，按各部分分别判断。独立作品是否侵害合法权利人的法定权利，由作者自行承担责任。
+
+6. “第三方材料”：指游戏原生及相关商用资产、派生文件、未纳入授权材料的其他社区独立开发内容，以及与《Dread Hunger》无关的通用第三方开源组件。
+
+7. “修改版”：指包含或改编了授权材料中任何受著作权保护部分的作品。独立作品不属于修改版。
+
+8. “分发”：指以任何方式向他人提供本项目或修改版的副本，包括上传、发布、群内共享及随其他内容打包提供。
+
+9. “公开运营”：指将修改版作为游戏服务器运行，并向不特定玩家开放，或通过社区、群组、平台、服务器列表等招募玩家。仅限您本人及直接邀请的熟人参与、且不公开招募的私人对局与测试，不属于公开运营。
+
+10. “对应源码”：指构建、安装并运行修改版所需的全部源代码、脚本与构建配置，须为便于修改的原始形式（不得为混淆、加密或仅编译后的形式）；不包括第三方材料和通用构建工具。
+
+--------------------------------------------------------------------------------
+第二条｜非官方性质、第三方资产与社区内容边界
+--------------------------------------------------------------------------------
+
+1. 非官方工具
+   本项目是玩家社区开发的非官方工具，与《Dread Hunger》的开发方、发行方无任何隶属、授权或背书关系。本项目面向官方停服后的自建专用服务器（Dedicated Server）环境，仅为实现技术兼容与互操作而开发。官方停服不等于游戏或其资产进入公有领域；您须自行合法持有正版游戏，并自行承担使用本项目的运行与合规风险。
+
+2. 游戏原生及相关商用资产的权属
+   游戏原生资产的知识产权归 Digital Confectioners Ltd.（新西兰）及其他合法权利人（合称“游戏权利人”）所有。UE4 付费商用资产的权属与授权范围，依原资产的原始权属、许可条款及游戏权利人的实际购买授权情况而定。游戏权利人与 UE4 付费商用资产权利人，合称“合法权利人”。
+
+3. 第三方资产、派生文件与其他社区内容的处理
+   为实现与《Dread Hunger》专用服务器及社区生态的兼容与互操作，本项目可能涉及、引用或配套提供公开可获取的游戏原生及相关商用资产及其适配文件（含派生文件），以及未纳入授权材料的其他社区独立开发内容。对于这些内容：
+   (a) 本许可证不授予任何权利；维护者不主张著作权或独占权，也不作超出各自权利人权限的转授权；
+   (b) 维护者在自身权限范围内，不就您出于非商业目的将其与本项目一并使用、适配或同步分发增设单独限制（其他社区内容另有其原作者明示许可的，从其约定）；
+   (c) 其原始权属与合法使用边界仍受各自权利人及适用法律约束；您能否使用、修改或分发，由您自行确认并独立负责；
+   (d) 与本项目或修改版一并分发时，授权材料与修改版部分仍须遵守第四条和第五条（不得借打包此类内容收费、设门槛或搞独占）；由分发方或修改方自行新增、改动或打包分发的内容，其合法性与侵权处理由该分发方或修改方独立负责。
+
+4. 权利边界与跨法域说明
+   (a) 围绕该游戏产生的抽象构想、玩法规则、内存偏移、参数定义、通用数据与通信格式及互操作接口，属于不受著作权独占保护的客观技术事实。
+   (b) 对于未经合法权利人授权的游戏本体、游戏原生及相关商用资产和派生文件：在非法演绎不受保护的法域（如美国 17 U.S.C. § 103(a)），该等非法利用部分不产生独立版权；在承认非法演绎中新增独创部分受保护的法域（如日本、中国大陆及部分欧洲地区），本款不改变法定著作权归属，但作为合同条件受本条第 5 款约束。
+   本款不影响合法权利人的任何权利，也不影响任何人对其独立创作、可分离原创内容（包括独立作品）享有的权利。
+
+5. 不主张承诺
+   作为接受本许可证的合同条件，您在法律允许的最大范围内同意：不就前款 (a)(b) 项所列内容，向维护者、贡献者或任何合规使用本项目的人主张著作权、独占权或其他排他性权利，也不以此要求下架、限制分发或设置独占。违反本款构成重大违约，依第六条处理，且维护者与受影响方保留依法追究违约责任的权利。
+
+6. 维护者的立场与独立开发声明
+   维护者不对《Dread Hunger》及其社区生态主张排他性、商业性或对抗合法权利人的权利，也不对第 4 款所列内容主张权利。本许可证的限制仅用于防止闭源侵占、倒卖与独占。授权材料本身由维护者与贡献者为实现互操作独立开发，据维护者所知不含未经授权的第三方专有源代码。为生态兼容而涉及或随附的第三方材料（含派生文件与其他社区内容）按本条第 3 款区分处理，不纳入授权材料。
+
+7. 权利人联系通道与责任边界
+   任何权利人（含游戏权利人、UE4 资产权利人及社区原作者）如认为原项目官方仓库（https://github.com/AsaNeonSama/DH_ServerTool_JA）或其官方发布物中的内容侵害其权利，请按仓库内 TAKEDOWN.md 所述方式联系维护者，核实后将及时处理并移除。该文件属于维护者的处理方针，不构成本许可证条款。维护者无法控制或下架第三方仓库、分叉（Fork）、镜像及修改版所分发的内容；任何由第三方分发、改动、打包或公开运营引发的侵权争议与下架责任，均由该第三方自行承担，与维护者无关。
+
+--------------------------------------------------------------------------------
+第三条｜授权、法定例外与专利商标
+--------------------------------------------------------------------------------
+
+1. 著作权授权
+   在您遵守本许可证的前提下，维护者与贡献者授予您全球范围、免费、非独占、不可转让的许可：出于非商业目的（含个人使用）使用、复制、修改和分发授权材料。
+
+2. 下游授权
+   您分发授权材料或修改版时，接收方自动按该副本所附的本许可证版本直接获得授权。您不得另行转授权，也不得附加额外限制。
+
+3. 不可撤销
+   在您持续遵守适用于所持副本的本许可证版本期间，本授权不可撤销。违约时依第六条处理。
+
+4. 私下修改
+   仅供自己使用、既不分发也不公开运营的修改，不触发第四条的义务。
+
+5. 游戏权利人
+   第四条的条件不适用于游戏权利人。如游戏权利人拟将授权材料用于商业用途，仍须另行取得维护者及相应贡献者的书面许可。
+
+6. 法定权利保留
+   本许可证不限制您依当地强行法享有的法定权利或例外，包括合理使用、合法副本运行所需的临时复制，以及为实现软件互操作依法进行的观察、研究或反编译权利。
+
+7. 商标与专利
+   (a) 本许可证不授予使用任何商标、商号或标识的许可（按第四条注明出处所必需的描述性使用除外）。
+   (b) 除本项外，本许可证不授予其他专利许可。每位贡献者（含维护者）仅就其贡献在依本许可证非商业使用时不可避免涉及的自身必要专利，授予您免费、非独占、不可转让的许可；如果您起诉授权材料侵犯专利权，本项授予您的全部专利许可自起诉之日起自动终止。
+
+--------------------------------------------------------------------------------
+第四条｜分发与公开运营的条件
+--------------------------------------------------------------------------------
+
+1. 三项条件
+   您分发本项目或修改版，或公开运营修改版时，须同时满足：
+   (a) 公开源码：最迟在开始分发或公开运营时，以公开、免费、无需付费、审核或加群即可获取的方式（如公开代码仓库）发布对应源码，并在持续期间保持可获取。分发未修改的原版时，注明原仓库地址即可。
+   (b) 沿用本许可证：修改版中的授权材料及您的改动，须按该副本当时适用的本许可证版本（或您依第七条自行选择的更高兼容版本）授权，不得改用闭源或允许商用的许可证。
+   (c) 保留声明：完整保留本许可证全文、原始版权声明、第三方开源声明及原项目出处；如有修改，须醒目注明已作修改及修改日期。
+
+2. 禁止闭源与设置门槛
+   不得以闭源、仅提供混淆或加壳产物、须付费或限成员获取、或由特定主体独占的方式分发本项目或修改版。
+
+3. 第三方开源组件
+   集成的通用第三方开源组件仍受其各自许可证约束，分发时须保留其原声明与 NOTICE 等文件。您不得将与第四条或第五条冲突的强传染性开源组件（如禁止限制商用的 GPL/AGPL 组件）与授权材料不可分离地合并分发，除非另行取得该组件权利人的兼容授权。
+
+4. 社区贡献
+   除另有书面声明外，向本仓库提交的代码、补丁、Pull Request、脚本、资产适配文件或文档：
+   (a) 提交至“授权材料”的部分，视为贡献者同意按提交时仓库适用的本许可证版本，以及维护者依第七条发布的、延续相同核心宗旨的任何后续兼容版本授权；
+   (b) 在法律允许的最大范围内，贡献者同意不就合理修改、整合或技术适配主张著作人格权（含同一性保持权等），但保留依第 1 款 (c) 项署名利益；
+   (c) 贡献者保证具备合法授权资格与行为能力（未成年人须经法定代理人同意），且提交至“授权材料”的内容据其所知不含未经授权的第三方专有代码。如提交内容包含其他社区独立作品、第三方开源组件或游戏资产派生文件，须在提交说明中清晰标明来源、权属与适用许可，并与授权材料分开存放，按第二条第 3 款或本条第 3 款分别处理。
+
+--------------------------------------------------------------------------------
+第五条｜禁止商业化与独占
+--------------------------------------------------------------------------------
+
+1. 禁止的行为
+   本条既构成使用授权材料的许可条件，也构成您接受本许可证后的独立合同义务。不得将本项目或修改版用于直接或间接的商业盈利，包括但不限于：
+   (a) 收费提供：付费销售、付费下载、付费解压码、付费群或会员专属分发；
+   (b) 变相收费：以“赞助解锁”“打赏换源码或成品”设付费门槛，或出售以本项目为核心的代搭建、代托管、代维护套餐；
+   (c) 独占：将其作为任何平台、启动器、社区、私服或商业服务的独占内容，用于绑定收费、引流变现或商业运营。
+
+2. 允许的情形
+   (a) 在游戏视频或直播中展示、使用本项目（含平台默认广告分成与观众自愿打赏），但不得将付费作为获取或使用的条件；
+   (b) 公益自建服成员间公开透明地按实际成本分摊服务器费用（因结算周期产生的少量透明结余，如专款专用仅付后续账单且不作盈利分配，不视为违规）；
+   (c) 租用通用服务器或 VPS 自行部署本项目；
+   (d) 公开代码平台、个人博客或非营利站点上不以获取或使用本项目为条件的常规页面广告。
+
+3. 责任自负
+   违反本条产生的法律后果由违反者自行承担，与本项目及维护者无关。
+
+--------------------------------------------------------------------------------
+第六条｜终止与恢复
+--------------------------------------------------------------------------------
+
+1. 自动终止
+   除本条第 2 款另有规定外，您违反本许可证任何条款时，本许可证授予您的权利自动终止。
+
+2. 纠正与恢复
+   首次违约（故意违反第五条除外）的，如果您在收到维护者明确书面或电子通知（如邮件、平台 Issue/私信或点名公告）后 30 日内彻底纠正，或在收到通知前已自行彻底纠正，您的授权自纠正完成之日起自动恢复。
+   再次违约，或故意、重复违反第五条的，不适用自动恢复，须经维护者明确书面同意方可恢复。
+   授权恢复不影响维护者就违约期间的侵权或违约行为依法追责。
+
+3. 终止期间的义务
+   权利终止且尚未恢复期间，您须立即停止任何新的复制、修改、分发及公开运营行为。继续实施即构成版权侵权与违约，维护者保留依法维权（包括向托管或分发平台提出合规通知）的全部权利。
+
+4. 下游不受影响
+   您的权利终止，不影响已依本许可证从您处合法获得副本、且自身持续合规的下游接收方。
+
+--------------------------------------------------------------------------------
+第七条｜许可证版本与修订
+--------------------------------------------------------------------------------
+
+1. 修订与宗旨约束
+   维护者可随时发布递增版本号的修订版，自发布于本仓库之日起对新发布的本项目版本及后续新获取的副本生效。后续版本必须延续源码公开、非商业化及防止闭源侵占的核心宗旨，不得借修订将既有贡献者提交的代码单方面转为闭源或商用专有许可。
+
+2. 版本适用与既得授权
+   您从本仓库新获取的副本或新发布版本，以获取时仓库中发布的最新本许可证版本为准。您先前已合法获取的旧版副本及其修改版，仍可继续按该副本原随附的版本合规使用，不会被后续修订单方面剥夺；您也可自愿选择升级适用仓库发布的任何更高兼容版本。新版发布前已完成的行为，依当时适用的版本判断。
+
+--------------------------------------------------------------------------------
+第八条｜一般条款
+--------------------------------------------------------------------------------
+
+1. 【重要提示：免责与责任限制】
+   请仔细阅读本款。在适用法律允许的最大范围内，本项目及授权材料按“现状（AS IS）”无偿提供，不附带任何明示、默示或法定担保（包括适销性、特定用途适用性、契约适合性及不侵权担保）。
+   除以下法律不允许免除的情形外，维护者及任何贡献者不对因使用或无法使用本项目产生的任何损害承担赔偿责任：
+   (a) 责任方（维护者或相应贡献者）自身的故意或重大过失；
+   (b) 因过失造成生命、身体或健康损害；
+   (c) 适用强行法禁止免除或限制的其他责任（含适用时的法定产品责任）。
+
+2. 适用法律、最大效力与可分割性
+   本许可证不指定特定国家或地区的准据法或管辖法院。本许可证的解释、效力与执行，以及因本项目产生的知识产权与合同事项，均依相关法域的适用法律处理，且不排除您依当地强行法享有的法定权利。若本许可证某一条款在特定法域被认定为无效、不可执行或超出当地法律允许范围，该条款在当地法律允许的最大范围内继续生效（或由最接近原意的有效规则替代），其余条款的效力不受影响。
+
+3. 语言
+   本许可证提供简体中文、日语、英语三种文本。如有出入，以简体中文文本为准。
+
+================================================================================
+[2] 日本語 (JAPANESE)
+================================================================================
+
+【クイック要約（理解の補助であり、条項ではありません）】
+  [許可] 非商用目的での使用・学習・改変・自己ホスト運用・共有は無料です。
+  [義務] 本プロジェクトや改変版を配布するとき、または改変版でサーバーを公開運営
+         するときは、完全なソース公開・本ライセンス（または上位互換バージョン）の
+         継承・表示の保持が必要です。
+  [禁止] クローズド、難読化のみ、アクセス制限付きでの配布。直接・間接の課金。
+         プラットフォームやプライベートサーバーでの独占。
+  [範囲] 本ライセンスの対象は、メンテナーとコントリビューターが独自に書いた部分
+         だけです。ゲーム資産、派生ファイル、他のコミュニティ独自作品および第三者
+         オープンソースコンポーネントは対象外で、権利は各権利者に帰属します。
+         メンテナーは自らの権限内で、非商用での併用・適合・同時配布に別個の制限
+         を課しません。
+  [境界] 原ゲーム資産はゲーム権利者に、UE4 有料商用アセットは原権属・許諾条件に
+         従います。同意した者はゲーム資産・派生ファイル・相互運用技術事実を根拠に
+         独占や削除を求めないことに合意します。
+  [是正] 初回の非意図的違反は、明確な通知から 30 日以内に是正すれば是正完了日
+         から許諾が復活します（再違反・第5条の意図的違反を除き、終了中は行為停止）。
+  [バージョン] リポジトリから新たに入手する複製物は最新 LICENSE に従います。
+         既に入手した旧版複製物の許諾は将来の改訂で一方的に奪われず、元のバージョ
+         ンに従うことも、上位互換バージョンを選ぶこともできます。
+
+--------------------------------------------------------------------------------
+
+本プロジェクトを複製、改変もしくは配布し、またはその改変版を公開運営した時点で、本ライセンスに同意したものとみなされます。同意しない場合、適用法令が認める法定例外を除き、これらの行為を行う許諾はありません。
+
+--------------------------------------------------------------------------------
+第1条｜定義
+--------------------------------------------------------------------------------
+
+1. 「本プロジェクト」：DH_ServerTool_JA リポジトリおよび公式リリース物の全体をいい、許諾対象物、組み込まれた汎用の第三者オープンソースコンポーネント、ならびに互換性およびエコシステム適合のために言及・参照・付随提供される関連内容を含みます。
+
+2. 「許諾対象物」：本プロジェクトのうち、メンテナーとコントリビューターが独自に開発し、第三者素材から分離可能なソースコード、スクリプト、ドキュメントおよびビルド成果物をいいます。本ライセンスが権利を許諾するのは許諾対象物のみです。
+
+3. 「原ゲームおよび関連商用資産」：次の2種類の総称です。
+   (a) 原ゲーム資産：『Dread Hunger』本体およびその公式オリジナル資産（公式美術、音声、公式コード、商標および著作権で保護されるオリジナルのアセットデータ等）
+   (b) UE4 有料商用アセット：ゲームに含まれる Unreal Engine 4（UE4）の有料商用アセット
+
+4. 「派生ファイル」：適法な権利者の許諾なく、原ゲームおよび関連商用資産を改変・抽出・再パッケージ化して得たファイル、または当該資産の内容を含むため不可分なファイル（改変・再パッケージ済みの .pak、.uasset 等）をいい、作成者を問いません。本ライセンス上の判断基準は当該資産の内容を含むかどうかであり、実行時の依存や連携だけでは「不可分」に当たりません。法定の侵害二次的著作物に当たるかは現地の適用法令によります。
+
+5. 「独立著作物」：作者が独自に作成し、許諾対象物も原ゲームおよび関連商用資産の内容も含まない著作物（独自作成の MOD スクリプト、プラグイン、設定ファイル等）をいいます。本プロジェクト経由で動作し、実行時にゲーム機能を呼び出し・フックし、またはメモリオフセット・パラメータ定義・インターフェース等の客観的技術事実を用いても、独立著作物です。独立著作物は第4条・第5条の対象外で、独自の創作的表現は作者に帰属します。同一パッケージに独立著作物と許諾対象物または派生ファイルが混在する場合は部分ごとに判断します。適法な権利者の法定権利を侵害するかは作者自身の責任で判断します。
+
+6. 「第三者素材」：原ゲームおよび関連商用資産、派生ファイル、許諾対象物に含まれない他のコミュニティ独自開発コンテンツ、および『Dread Hunger』と無関係な汎用第三者オープンソースコンポーネントをいいます。
+
+7. 「改変版」：許諾対象物の著作権保護部分を含み、または翻案した著作物をいいます。独立著作物は該当しません。
+
+8. 「配布」：方法を問わず本プロジェクトまたは改変版の複製物を他者に提供することをいい、アップロード、公開、グループ内共有、他コンテンツとの同梱を含みます。
+
+9. 「公開運営」：改変版をゲームサーバーとして稼働させ、不特定のプレイヤーに開放すること、またはコミュニティ・グループ・プラットフォーム・サーバーリスト等でプレイヤーを募集することをいいます。自分と直接招待した知人のみが参加し公開募集しない私的セッションやテストは該当しません。
+
+10. 「対応ソース」：改変版のビルド・導入・実行に必要な全ソースコード、スクリプトおよびビルド設定をいい、改変しやすい元の形式（難読化・暗号化・コンパイル済みのみは不可）とします。第三者素材と汎用ビルドツールは含みません。
+
+--------------------------------------------------------------------------------
+第2条｜非公式ツールの性質、第三者資産およびコミュニティコンテンツの境界
+--------------------------------------------------------------------------------
+
+1. 非公式ツール
+   本プロジェクトはコミュニティ製の非公式ツールであり、『Dread Hunger』の開発元・販売元と提携、許諾、公認の関係はありません。公式運営終了後の自己ホスト専用サーバー（Dedicated Server）環境の技術的互換性と相互運用性のみを目的としています。公式終了はゲームや資産のパブリックドメイン化を意味しません。正規版ゲームは各自で適法に入手し、利用に伴う運用・法令リスクは利用者自身が負います。
+
+2. 原ゲームおよび関連商用資産の権利帰属
+   原ゲーム資産の知的財産権は Digital Confectioners Ltd.（ニュージーランド）その他の適法な権利者（総称して「ゲーム権利者」）に帰属します。UE4 有料商用アセットの権利関係は原アセットの本来の権属、ライセンス条項および購入許諾状況に従います。ゲーム権利者と UE4 有料商用アセット権利者を総称して「適法な権利者」といいます。
+
+3. 第三者資産、派生ファイルおよび他コミュニティコンテンツの取扱い
+   『Dread Hunger』専用サーバーおよびコミュニティエコシステムとの互換性・相互運用性確保のため、本プロジェクトは公開取得可能な原ゲームおよび関連商用資産とその適合ファイル（派生ファイルを含む）、ならびに許諾対象物以外のコミュニティ独自開発コンテンツに言及・参照し、または付随提供することがあります。これらについては次のとおりとします。
+   (a) 本ライセンスはいかなる権利も許諾せず、メンテナーは著作権も独占権も主張せず、各権利者の権限を超える再許諾も行いません。
+   (b) メンテナーは自らの権限の範囲内で、これらを非商用目的で本プロジェクトと併用・適合・同時配布することに別個の制限を課しません（他のコミュニティコンテンツに原作者の明示的なライセンスがある場合はそれに従います）。
+   (c) 元の権属および適法な利用範囲は引き続き各権利者および適用法令に従います。使用・改変・配布の可否は利用者自身が確認し独立して責任を負います。
+   (d) 本プロジェクトまたは改変版と同時配布する場合も、許諾対象物および改変版部分については第4条・第5条を遵守するものとします（同梱を口実とした課金、制限、独占は不可）。配布者・改変者が独自に追加、改変または同梱して配布した内容の適法性および権利侵害への対応は、当該配布者・改変者が独立して責任を負います。
+
+4. 権利の境界と法域差
+   (a) 同ゲームに関する抽象的なアイデア、ゲームプレイのルール、メモリオフセット、パラメータ定義、汎用データ・通信形式および相互運用インターフェースは、著作権で独占されない客観的な技術的事実です。
+   (b) 適法な権利者の許諾のないゲーム本体、原ゲームおよび関連商用資産ならびに派生ファイルについては、違法な二次的著作物を保護しない法域（米国 17 U.S.C. § 103(a) 等）では独立した著作権は生じません。他方、無許諾翻案の新たな創作部分に著作権を認める法域（日本、中国本土、欧州の一部等）では、本項は法定の権利帰属を変更せず、契約条件として本条第5項の適用を受けます。
+   本項は適法な権利者の権利、および独自に創作され分離可能なオリジナル内容（独立著作物を含む）に対する各人の権利に影響しません。
+
+5. 権利不主張の合意
+   本ライセンス同意の契約条件として、利用者は法令で許される最大限の範囲で、前項 (a)(b) に掲げるものについて、メンテナー、コントリビューターまたは本プロジェクトを適法に利用する他の者に対し著作権・独占権その他の排他的権利を主張せず、削除・配布制限・独占を求めないことに同意します。違反は重大な契約違反として第6条に従い、メンテナーおよび影響を受ける者は契約上の救済を求める権利を留保します。
+
+6. メンテナーの立場と独自開発の表明
+   メンテナーは『Dread Hunger』やそのコミュニティに対し排他的・商業的権利や適法な権利者に対抗する権利を主張せず、第4項に掲げるものにも権利を主張しません。本ライセンスの制限はクローズド化、転売、独占を防ぐ防御目的のみです。許諾対象物自体はメンテナーとコントリビューターが相互運用性のため独自に開発しており、メンテナーの知る限り無許諾の第三者専有ソースコードを含みません。エコシステム適合のため言及・付随する第三者素材（派生ファイルや他コミュニティ作品を含む）は本条第3項に従い区分して扱い、許諾対象物には含めません。
+
+7. 権利者向け連絡窓口および責任の境界
+   権利者（ゲーム権利者、UE4 資産権利者およびコミュニティ原作者を含む）が、元の公式リポジトリ（https://github.com/AsaNeonSama/DH_ServerTool_JA）またはその公式リリース物に含まれる内容による権利侵害を認める場合は、リポジトリ内の TAKEDOWN.md 記載の方法でメンテナーへ連絡してください。確認次第速やかに対応・削除します。同ファイルは運用方針であり、本ライセンスの条項ではありません。メンテナーは第三者のリポジトリ、フォーク、ミラーまたは改変版により配布される内容を管理・削除することはできず、第三者の配布・改変・同梱・公開運営から生じる権利侵害紛争および削除責任はすべて当該第三者が自ら負い、メンテナーは一切関係しません。
+
+--------------------------------------------------------------------------------
+第3条｜許諾、法定例外および商標・特許
+--------------------------------------------------------------------------------
+
+1. 著作権の許諾
+   本ライセンスの遵守を条件に、メンテナーとコントリビューターは、非商用目的（個人利用を含む）で許諾対象物を使用・複製・改変・配布する世界的・無償・非独占的・譲渡不可の許諾を付与します。
+
+2. 下流への許諾
+   許諾対象物または改変版を配布した場合、受領者はその複製物に付された本ライセンスのバージョンに基づき自動的に直接許諾を受けます。再許諾や追加制限は禁止です。
+
+3. 撤回不能
+   保有する複製物に適用されるバージョンを継続遵守している限り、本許諾は撤回されません。違反時は第6条に従います。
+
+4. 私的な改変
+   自分のみで使用し、配布も公開運営もしない改変には第4条の義務は生じません。
+
+5. ゲーム権利者
+   第4条の条件はゲーム権利者に適用されません。ただしゲーム権利者が許諾対象物を商業利用する場合は、別途メンテナーおよび該当コントリビューターの書面許諾が必要です。
+
+6. 法定権利の留保
+   本ライセンスは、フェアユース／フェアディーリング、適法な複製物の実行に必要な一時的複製、およびソフトウェアの相互運用性のために法令上認められる観察・研究・逆コンパイル等、適用強行法上の法定権利・例外を一切制限しません。
+
+7. 商標および特許
+   (a) 本ライセンスはいかなる商標・商号・ロゴの使用許諾も付与しません（第4条に基づく出典表示に合理的に必要な記述的使用を除きます）。
+   (b) 本号以外にいかなる特許許諾も付与しません。各コントリビューター（メンテナーを含む）は、自己の貢献を本ライセンスに基づき非商用利用する上で必然的に侵害される自己の必須特許に限り、無償・非独占的・譲渡不可の許諾を付与します。利用者が許諾対象物の特許侵害を主張して提訴した場合、本号の特許許諾は提訴日に自動終了します。
+
+--------------------------------------------------------------------------------
+第4条｜配布および公開運営の条件
+--------------------------------------------------------------------------------
+
+1. 3つの条件
+   本プロジェクトもしくは改変版を配布し、または改変版を公開運営するときは、次のすべてを満たす必要があります。
+   (a) ソース公開：開始時までに、対応ソースを無償・公開かつ支払い・審査・特定グループ参加不要な方法（公開リポジトリ等）で公開し、継続中は取得可能に保つこと。未改変の原版配布は元リポジトリ URL の明示で足ります。
+   (b) ライセンス継承：改変版内の許諾対象物と自らの変更部分を、その複製物に適用される本ライセンスのバージョン（または第7条に基づき自ら選択した上位互換バージョン）で許諾すること。クローズドや商用可のライセンスへの変更は不可です。
+   (c) 表示保持：本ライセンス全文、元の著作権表示、第三者オープンソース表示および出典をそのまま保持し、改変した場合は改変の事実と改変日を見やすく明示すること。
+
+2. クローズド化およびアクセス制限の禁止
+   クローズドソース、難読化・暗号化ラッパーのみ、有料・会員限定、または特定主体の独占という形態での配布は禁止です。
+
+3. 第三者製オープンソースコンポーネント
+   組み込まれた汎用第三者オープンソースコンポーネントは各自のライセンスに従い、配布時は元の表示や NOTICE 等を保持してください。第4条・第5条と抵触する強いコピーレフト型コンポーネント（非商用制限を禁じる GPL/AGPL 等）は、当該権利者の別途互換許諾がない限り、許諾対象物と不可分に結合して配布できません。
+
+4. コミュニティからの貢献
+   書面による別段の明示がない限り、本リポジトリへ提出されたコード、パッチ、Pull Request、スクリプト、アセット適合ファイルまたはドキュメントについては次のとおりとします。
+   (a) 「許諾対象物」として提出された部分は、提出時に本リポジトリに適用される本ライセンスのバージョン、および第7条に基づき同一の中核趣旨を維持して公開される任意の後続互換バージョンで許諾されたものとみなされます。
+   (b) 提出者は法令で許される最大限の範囲で、合理的な改変・統合・技術的適合に対する著作者人格権（同一性保持権等）を行使しないことに同意します（第1項 (c) に基づく氏名表示利益は留保されます）。
+   (c) 提出者は適法な許諾権限と行為能力（未成年者は法定代理人の同意）を有し、「許諾対象物」として提出する内容に知る限り無許諾の第三者専有コードが含まれないことを保証します。提出物に他のコミュニティ独立作品、第三者オープンソースコンポーネントまたはゲーム資産の派生ファイルが含まれる場合は、提出説明に出典・権利境界・適用条件を明記し、許諾対象物と分けて配置の上、第2条第3項または本条第3項に従い取り扱います。
+
+--------------------------------------------------------------------------------
+第5条｜商用化および独占の禁止
+--------------------------------------------------------------------------------
+
+1. 禁止される行為
+   本条は許諾対象物利用の許諾条件であると同時に、本ライセンス同意後の独立した契約上の義務を構成します。直接・間接を問わず商業的な収益化に用いてはなりません。以下を含みますがこれに限りません。
+   (a) 有償提供：有料販売、有料ダウンロード、有料解凍パスワード、有料グループ・会員限定配布。
+   (b) 名目を変えた課金：「支援特典での解放」「投げ銭と引き換えのソース・ビルド提供」等の課金条件付け、または本プロジェクトを中核とする導入・ホスティング・保守代行パッケージの販売。
+   (c) 独占：プラットフォーム、ランチャー、コミュニティ、プライベートサーバーまたは商用サービスの独占コンテンツとし、課金・集客収益化・商業運営に用いること。
+
+2. 許容される行為
+   (a) ゲーム動画・配信での紹介や使用（プラットフォーム標準広告収益および任意の投げ銭を含む）。ただし入手・利用の条件としないこと。
+   (b) 非営利の自己ホストサーバー参加者間での透明な実費分担（決済周期差による少額の透明な余剰金を、利益分配せず今後のサーバー費用専用に積み立てる場合を含む）。
+   (c) 汎用サーバーや VPS を借りて自分で導入すること。
+   (d) 公開コード基盤、個人ブログまたは非営利サイト上の一般的なページ広告であって、本プロジェクトの入手・利用条件とされていないもの。
+
+3. 責任の所在
+   本条違反による法的責任は違反者自身が負い、本プロジェクトおよびメンテナーは一切関係しません。
+
+--------------------------------------------------------------------------------
+第6条｜終了と復活
+--------------------------------------------------------------------------------
+
+1. 自動終了
+   本条第2項の場合を除き、本ライセンスに違反すると権利は自動的に終了します。
+
+2. 是正と復活
+   初回違反（第5条の意図的違反を除く）の場合、メンテナーからの明確な書面または電子通知（メール、プラットフォーム上の Issue・メッセージ、違反者を特定した告知等）を受領後 30 日以内に完全に是正したとき、または通知前に自ら完全是正していたときは、是正完了日から権利が自動復活します。
+   再度の違反、または第5条の意図的・反復的違反には自動復活は適用されず、メンテナーの明確な書面同意が必要です。
+   権利復活は、違反期間中の侵害・契約違反に対するメンテナーの責任追及権を妨げません。
+
+3. 終了期間中の義務
+   権利終了中で未復活の間は、新たな複製・改変・配布・公開運営を直ちに停止してください。継続行為は著作権侵害および契約違反となり、メンテナーは法的措置（ホスティング・配信基盤への通知を含む）を行う一切の権利を留保します。
+
+4. 下流への影響
+   違反者の権利終了は、その者から本ライセンスに基づき適法に複製物を得て自ら遵守している下流受領者には影響しません。
+
+--------------------------------------------------------------------------------
+第7条｜ライセンスのバージョンと改訂
+--------------------------------------------------------------------------------
+
+1. 改訂と中核趣旨の制約
+   メンテナーは増加するバージョン番号で改訂版を随時公開でき、リポジトリでの公開日から本プロジェクトの新リリースおよび以後新たに入手される複製物に効力を生じます。後続版はソース公開・非商用化・クローズド化防止の中核趣旨を引き継ぐものとし、既存のコントリビューターコードを一方的にクローズドまたは商用専有へ転換することはできません。
+
+2. バージョン適用と既得許諾
+   本リポジトリから新たに入手する複製物や新リリースには、入手時点でリポジトリに公開されている本ライセンスの最新版が適用されます。以前に適法に入手した旧版複製物およびその改変版は、入手時の付随バージョンに基づき引き続き適法に利用でき、将来の改訂で一方的に奪われません。利用者は自ら選んでリポジトリ公開の上位互換バージョンへ切り替えることもできます。新版公開前に完了した行為は、その時点の適用バージョンで判断されます。
+
+--------------------------------------------------------------------------------
+第8条｜一般条項
+--------------------------------------------------------------------------------
+
+1. 【重要：免責および責任制限】
+   本項をよくお読みください。適用法令で許される最大限の範囲において、本プロジェクトおよび許諾対象物は「現状有姿（AS IS）」で無償提供され、商品性、特定目的適合性、契約適合性、権利非侵害を含む一切の明示・黙示・法定保証を行いません。
+   次の法令上免責できない場合を除き、メンテナーおよびいかなるコントリビューターも、本プロジェクトの使用または使用不能から生じるいかなる損害についても賠償責任を負いません。
+   (a) 責任を問われる当事者（メンテナーまたは該当コントリビューター）自身の故意または重大な過失
+   (b) 過失による生命、身体または健康への損害
+   (c) 適用強行法が免除・制限を禁じるその他の責任（適用ある場合の法定製造物責任を含む）
+
+2. 適用法令、最大限の効力および分離可能性
+   本ライセンスは特定の国・地域の準拠法または管轄裁判所を指定しません。本ライセンスの解釈・効力・執行、および本プロジェクトに関する知的財産・契約事項は、関係する法域の適用法令に従うものとし、利用者が現地強行法に基づき有する法定権利を排除しません。一部条項が特定法域で無効、執行不能または現地法の許容範囲外と判断された場合、当該条項は現地法で許される最大限の範囲で効力を維持し（または原意に最も近い有効規定に置き換わり）、残りの条項の効力には影響しません。
+
+3. 言語
+   本ライセンスは簡体字中国語、日本語、英語の3言語で提供されます。相違がある場合は簡体字中国語版を基準とします。
+
+================================================================================
+[3] ENGLISH
+================================================================================
+
+[Quick Summary — for readability only; not part of the terms]
+  [CAN]     Use, study, modify, self-host, and share for free for non-commercial
+            purposes.
+  [MUST]    When distributing this project or a modified version, or publicly
+            running a server on a modified version: publish full source, keep
+            this License (or a later compatible version), and retain notices.
+  [CANNOT]  Distribute closed-source, obfuscated-only, or gated builds; charge
+            directly or indirectly; lock this tool into exclusive platforms or
+            private servers.
+  [SCOPE]   This License covers only what the maintainer and contributors wrote
+            independently. Game assets, derived files, other independent
+            community content, and third-party open-source components are
+            outside this grant and belong to their respective rightsholders;
+            within the maintainer's authority, no separate restriction is added
+            on non-commercial co-use, adaptation, or co-distribution.
+  [LIMITS]  Original game assets belong to the Game Rightsholders; paid UE4
+            assets follow their original ownership and license terms. Accepting
+            this License means agreeing not to assert exclusivity or demand
+            takedowns over game assets, derived files, or interoperability facts.
+  [CURE]    A first-time non-intentional violation cured within 30 days of
+            explicit notice restores rights from the cure date (repeat breaches
+            or intentional Article 5 violations excepted; stop covered acts
+            while terminated).
+  [VERSION] Copies newly obtained from the Repository follow the latest LICENSE;
+            validly acquired rights in earlier copies are not unilaterally
+            revoked, and you may stay on your copy's version or opt in to any
+            later compatible version.
+
+--------------------------------------------------------------------------------
+
+By copying, modifying, or distributing this project, or publicly operating a modified version of it, you accept this License. If you do not accept it, except as allowed by statutory exceptions under applicable law, you have no permission to do any of those things.
+
+--------------------------------------------------------------------------------
+Article 1 | Definitions
+--------------------------------------------------------------------------------
+
+1. "Project" means the overall contents of the DH_ServerTool_JA repository and its official releases, including the Licensed Material, integrated general-purpose third-party open-source components, and related materials involved, referenced, or accompanied for technical compatibility and community ecosystem interoperability.
+
+2. "Licensed Material" means the source code, scripts, documentation, and resulting build outputs in the Project independently developed by the maintainer and contributors and separable from Third-Party Materials. This License grants rights in the Licensed Material only.
+
+3. "Original Game and Related Commercial Assets" means together:
+   (a) Original Game Assets: "Dread Hunger" and its official original assets (official artwork, audio, official code, trademarks, copyright-protected original asset data, etc.); and
+   (b) Paid Commercial UE4 Assets: the paid commercial Unreal Engine 4 (UE4) assets contained in the game.
+
+4. "Derived Files" means files created without authorization from the Lawful Rightsholders by modifying, extracting, or repacking Original Game and Related Commercial Assets, or files inseparable from them because they contain their content (such as modified or repacked .pak or .uasset files), regardless of author. Under this License, the test is whether the file contains such asset content; merely depending on or interacting with the game at run time is not "inseparable". Whether a file is an infringing derivative work by law depends on local applicable law.
+
+5. "Independent Work" means a work written independently that contains no Licensed Material and no Original Game and Related Commercial Assets (such as an independent MOD script, plugin, or config). It remains an Independent Work even if loaded by this Project, calling or hooking game functions at run time, or using objective technical facts like memory offsets, parameter definitions, or interfaces. It is not subject to Articles 4 and 5, and copyright in its original expression belongs to its author. Mixed packages containing both Independent Works and Licensed Material or Derived Files are assessed part by part. Whether an Independent Work infringes statutory rights of Lawful Rightsholders is its author's own responsibility.
+
+6. "Third-Party Materials" means Original Game and Related Commercial Assets, Derived Files, other independently developed community content not part of the Licensed Material, and general-purpose third-party open-source components unrelated to "Dread Hunger".
+
+7. "Modified Version" means a work containing or adapting any copyright-protected part of the Licensed Material. An Independent Work is not a Modified Version.
+
+8. "Distribute" means providing a copy of the Project or a Modified Version to anyone else by any means, including uploading, publishing, group sharing, or bundling with other content.
+
+9. "Publicly Operate" means running a Modified Version as a game server open to players at large, or recruiting players via communities, groups, platforms, server lists, or similar channels. Private sessions and tests limited to you and acquaintances you directly invite, with no public recruitment, are not Public Operation.
+
+10. "Corresponding Source" means all source code, scripts, and build configuration needed to build, install, and run a Modified Version, in original editable form (not obfuscated, encrypted, or compiled-only). It excludes Third-Party Materials and general build tools.
+
+--------------------------------------------------------------------------------
+Article 2 | Unofficial Nature, Third-Party Assets, and Community Content
+--------------------------------------------------------------------------------
+
+1. Unofficial Tool
+   This Project is an unofficial community tool with no affiliation, license, or endorsement from the developer or publisher of "Dread Hunger". It is developed solely for technical compatibility and interoperability in self-hosted Dedicated Server environments after official shutdown. Official shutdown does not place the game or its assets into the public domain; you must lawfully hold a legitimate copy of the game and bear all operational and compliance risks yourself.
+
+2. Ownership of Game and Commercial Assets
+   Intellectual property rights in Original Game Assets belong to Digital Confectioners Ltd. (New Zealand) and other lawful rightsholders (together, "Game Rightsholders"). Rights in Paid Commercial UE4 Assets depend on original ownership, license terms, and actual purchase/licensing status. Together they are the "Lawful Rightsholders".
+
+3. Treatment of Game Assets, Derived Files, and Other Community Content
+   Solely for compatibility and interoperability with the "Dread Hunger" dedicated server and community ecosystem, the Project may involve, reference, or accompany publicly obtainable Original Game and Related Commercial Assets and compatibility files (including Derived Files), as well as other independently developed community content outside the Licensed Material. For all such content:
+   (a) This License grants no rights; the maintainer claims no copyright or exclusivity and grants no sublicense beyond each rightsholder's authority.
+   (b) Within the maintainer's own authority, the maintainer imposes no separate or extra restriction on your non-commercial co-use, adaptation, or co-distribution with the Project (where other community content carries its author's express license, that license governs).
+   (c) Original ownership and lawful use remain governed by each rightsholder's rights and applicable law; checking whether you may use, modify, or distribute it is solely your responsibility.
+   (d) When co-distributed with the Project or a Modified Version, Articles 4 and 5 still apply in full to the Licensed Material and Modified Version (bundling such content may not be used to charge fees, gate access, or create exclusivity). Each distributor or modifier is solely responsible for the lawfulness and rights-claim handling of any content they independently add, alter, or bundle.
+
+4. Boundaries of Rights Across Jurisdictions
+   (a) Abstract ideas, gameplay rules, memory offsets, parameter definitions, common data/communication formats, and interoperability interfaces relating to the game are objective technical facts not subject to exclusive copyright.
+   (b) For unauthorized copies or uses of "Dread Hunger", Original Game and Related Commercial Assets, and Derived Files: in jurisdictions excluding unlawful derivative works from copyright (e.g., 17 U.S.C. § 103(a) in the US), no independent copyright arises in the unlawful portion; in jurisdictions recognizing copyright in new original expression within unauthorized derivative works (e.g., Japan, Mainland China, and parts of Europe), this Section does not alter statutory ownership, but such content is contractually bound by Section 5.
+   This Section does not affect rights of Lawful Rightsholders or anyone's rights in separable original content they created independently (including Independent Works).
+
+5. Covenant Not to Assert
+   As a contractual condition of accepting this License, you agree, to the maximum extent permitted by law, not to assert copyright, exclusivity, or other proprietary rights over anything in Section 4(a)–(b) against the maintainer, contributors, or compliant users of the Project, and not to rely on them to demand takedowns, restrict distribution, or establish exclusivity. Any breach is a material breach handled under Article 6, and the maintainer and affected parties reserve all contractual remedies.
+
+6. Maintainer's Position and Independent Development
+   The maintainer claims no exclusive, commercial, or adverse rights over "Dread Hunger" or its community ecosystem, and no rights in anything listed in Section 4. The restrictions here exist solely to prevent closed-source appropriation, resale, and monopolization. The Licensed Material itself was independently developed for interoperability and, to the maintainer's knowledge, contains no unauthorized third-party proprietary source code. Any Third-Party Materials (including Derived Files and other community content) referenced or accompanied for ecosystem compatibility are kept distinct under Section 3 and excluded from the Licensed Material.
+
+7. Rightsholder Contact and Scope of Responsibility
+   Any rightsholder (including Game Rightsholders, UE4 asset rightsholders, and community authors) believing content in the official Repository (https://github.com/AsaNeonSama/DH_ServerTool_JA) or its official releases infringes its rights should contact the maintainer as set out in TAKEDOWN.md; verified notices will be promptly addressed and removed. That file states handling policy and is not part of this License. The maintainer cannot control or remove content distributed via third-party repositories, forks, mirrors, or Modified Versions; any infringement dispute or takedown obligation arising from third-party distribution, modification, bundling, or Public Operation rests solely with that third party and has no connection to the maintainer.
+
+--------------------------------------------------------------------------------
+Article 3 | Grant, Statutory Exceptions, Trademarks, and Patents
+--------------------------------------------------------------------------------
+
+1. Copyright Grant
+   Subject to this License, the maintainer and contributors grant you a worldwide, royalty-free, non-exclusive, non-transferable license to use, copy, modify, and Distribute the Licensed Material for non-commercial purposes (including personal use).
+
+2. Downstream Recipients
+   Recipients of the Licensed Material or a Modified Version automatically receive a direct license under the version of this License accompanying that copy. You may not sublicense or add extra restrictions.
+
+3. Irrevocability
+   This grant is irrevocable while you comply with the version of this License applicable to your copy. Breaches are handled under Article 6.
+
+4. Private Modification
+   Modifications used solely by yourself, neither Distributed nor Publicly Operated, do not trigger Article 4.
+
+5. Game Rightsholders
+   Article 4 does not apply to the Game Rightsholders. Commercial use of the Licensed Material by Game Rightsholders still requires separate written permission from the maintainer and applicable contributors.
+
+6. Reservation of Statutory Rights
+   Nothing in this License limits statutory rights or exceptions under mandatory local law, including fair use/fair dealing, temporary copying needed to run a lawful copy, and lawful observation, study, or decompilation for software interoperability.
+
+7. Trademarks and Patents
+   (a) This License grants no trademark, trade name, or logo rights, except for reasonable descriptive attribution required under Article 4.
+   (b) Except as stated here, no patent license is granted. Each contributor (including the maintainer) grants you a royalty-free, non-exclusive, non-transferable license solely under their own essential patent claims necessarily infringed by non-commercial use of their contribution under this License; if you sue alleging the Licensed Material infringes a patent, all patent licenses under this Subsection terminate automatically on the filing date.
+
+--------------------------------------------------------------------------------
+Article 4 | Conditions for Distribution and Public Operation
+--------------------------------------------------------------------------------
+
+1. Three Conditions
+   When Distributing the Project or a Modified Version, or Publicly Operating a Modified Version, you must:
+   (a) Publish source: no later than Distribution or Public Operation begins, publish the Corresponding Source publicly and free of charge, obtainable without payment, approval, or group membership (e.g., a public repository), and keep it available while continuing. For the unmodified Project, citing the original repository URL suffices.
+   (b) Keep this License: license the Licensed Material and your changes in the Modified Version under the version of this License applicable to that copy (or any later compatible version you opt into under Article 7). Switching to a closed-source or commercial-use license is forbidden.
+   (c) Retain notices: keep this full License, original copyright notices, third-party open-source notices, and attribution intact; if modified, prominently state that changes were made and the date.
+
+2. No Closed-Source or Gated Distribution
+   You may not Distribute the Project or a Modified Version closed-source, as obfuscated/encrypted-only builds, behind paywalls or member gates, or as any party's exclusive property.
+
+3. Third-Party Open-Source Components
+   Integrated general-purpose third-party open-source components remain under their own licenses, whose notices and NOTICE files must be preserved on Distribution. You may not inseparably combine or link the Licensed Material with conflicting strong-copyleft components (such as GPL/AGPL components prohibiting non-commercial restrictions) without separate compatible permission from their rightsholders.
+
+4. Community Contributions
+   Unless stated otherwise in writing, for any code, patch, pull request, script, asset compatibility file, or documentation submitted to this repository:
+   (a) submissions to the Licensed Material are licensed under the repository's current version of this License and any later compatible version published under Article 7 preserving the same core purpose;
+   (b) to the maximum extent permitted by law, the contributor agrees not to assert moral rights (including rights of integrity) against reasonable modification, integration, or adaptation, while keeping attribution under Section 1(c); and
+   (c) the contributor warrants legal authority and capacity (with guardian consent if a minor) and that submissions to the Licensed Material knowingly contain no unauthorized third-party proprietary code. Any submission containing independent community works, third-party open-source components, or game-asset Derived Files must clearly note origin, rights boundaries, and applicable terms, be separated from the Licensed Material, and be governed by Article 2, Section 3 or Section 3 of this Article.
+
+--------------------------------------------------------------------------------
+Article 5 | No Commercialization or Exclusivity
+--------------------------------------------------------------------------------
+
+1. Prohibited Conduct
+   This Article serves both as a condition of the copyright license and as an independent contractual obligation upon accepting this License. You may not use the Project or a Modified Version for direct or indirect commercial gain, including without limitation:
+   (a) Charging for access: paid sales, downloads, archive passwords, or paid-group/member-only distribution.
+   (b) Disguised charging: conditioning source or builds on "sponsor unlocks" or "tips", or selling setup, hosting, or maintenance packages built around the Project.
+   (c) Exclusivity: making it exclusive content of any platform, launcher, community, private server, or commercial service to charge fees, monetize traffic, or operate commercially.
+
+2. Permitted Conduct
+   (a) Showing or using the Project in gameplay videos or streams (including default platform ads and voluntary viewer tips), provided payment is never a condition of access or use.
+   (b) Transparent actual-cost server splitting among members of a non-profit self-hosted server (including minor transparent surplus reserved strictly for future server bills and never distributed for profit).
+   (c) Renting a general server or VPS and deploying the Project yourself.
+   (d) Regular page ads on public code hosts, personal blogs, or non-profit sites not conditioned on obtaining or using the Project.
+
+3. Responsibility
+   Legal consequences of breaching this Article rest solely with the violator, with no connection to the Project or maintainer.
+
+--------------------------------------------------------------------------------
+Article 6 | Termination and Reinstatement
+--------------------------------------------------------------------------------
+
+1. Automatic Termination
+   Except as provided in Section 2, violating any term of this License automatically terminates your rights under it.
+
+2. Cure and Reinstatement
+   For a first-time violation (excluding an intentional breach of Article 5), if you fully cure it within 30 days after receiving explicit written or electronic notice from the maintainer (such as email, platform issue/message, or public notice naming you), or voluntarily cure it before notice, your rights reinstate automatically on the date cure is completed.
+   Repeat violations, or intentional or repeated breaches of Article 5, do not reinstate automatically and require the maintainer's express written consent.
+   Reinstatement does not affect the maintainer's right to seek remedies for infringement or breach during the violation period.
+
+3. Obligations While Terminated
+   While terminated and not reinstated, you must immediately stop any new copying, modifying, Distributing, or Publicly Operating. Continuing constitutes copyright infringement and breach of contract, and the maintainer reserves all legal remedies, including compliance notices to hosting or distribution platforms.
+
+4. Downstream Recipients Unaffected
+   Termination of your rights does not affect downstream recipients who lawfully obtained copies from you and remain compliant themselves.
+
+--------------------------------------------------------------------------------
+Article 7 | License Versions and Revisions
+--------------------------------------------------------------------------------
+
+1. Revisions and Purpose Constraint
+   The maintainer may publish revised versions with incrementing version numbers at any time, taking effect upon publication in this Repository for new releases of the Project and copies newly obtained thereafter. Later versions must preserve the core purpose of source availability, non-commercial use, and preventing closed-source appropriation, and may not unilaterally convert existing contributor code to closed-source or proprietary commercial licensing.
+
+2. Version Applicability and Acquired Rights
+   Copies or new releases newly obtained from this Repository are governed by the latest version of this License published in the Repository at the time of acquisition. Previously lawfully obtained copies and Modified Versions based on them may continue to be used in compliance with their originally accompanying version and are not unilaterally revoked by later revisions; you may also opt in to any later compatible version published in the Repository. Conduct completed before a newer version is published is judged under the version applicable at that time.
+
+--------------------------------------------------------------------------------
+Article 8 | General
+--------------------------------------------------------------------------------
+
+1. IMPORTANT — DISCLAIMER AND LIMITATION OF LIABILITY
+   PLEASE READ THIS SECTION CAREFULLY. TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE PROJECT AND LICENSED MATERIAL ARE PROVIDED "AS IS" AND FREE OF CHARGE, WITHOUT ANY EXPRESS, IMPLIED, OR STATUTORY WARRANTY (INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, CONFORMITY TO CONTRACT, AND NON-INFRINGEMENT).
+   EXCEPT FOR THE NON-EXCLUDABLE LIABILITIES BELOW, NEITHER THE MAINTAINER NOR ANY CONTRIBUTOR IS LIABLE FOR ANY DAMAGES ARISING FROM USE OF, OR INABILITY TO USE, THE PROJECT:
+   (a) WILLFUL MISCONDUCT OR GROSS NEGLIGENCE OF THE LIABLE PARTY ITSELF (MAINTAINER OR APPLICABLE CONTRIBUTOR);
+   (b) DEATH, PERSONAL INJURY, OR DAMAGE TO HEALTH CAUSED BY NEGLIGENCE; OR
+   (c) OTHER LIABILITY THAT APPLICABLE MANDATORY LAW FORBIDS EXCLUDING OR LIMITING (INCLUDING STATUTORY PRODUCT LIABILITY WHERE APPLICABLE).
+
+2. Applicable Law, Maximum Enforceability, and Severability
+   This License does not designate the governing law or courts of any specific jurisdiction. Interpretation, validity, enforcement, and intellectual property or contractual matters relating to this Project are governed by applicable law in the relevant jurisdiction, without excluding any statutory rights you have under mandatory local law. If any provision of this License is held invalid, unenforceable, or beyond what local law permits in a jurisdiction, it remains effective to the maximum extent permitted by local law (or is replaced by the closest valid rule), and the remaining provisions stay in full effect.
+
+3. Language
+   This License is provided in Simplified Chinese, Japanese, and English. If the texts differ, the Simplified Chinese text prevails.

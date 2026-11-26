@@ -1,0 +1,13 @@
+EXPORTS
+    DirectSoundCreate=dh_proxy_direct_sound_create @1
+    DirectSoundEnumerateA=dh_proxy_direct_sound_enumerate_a @2
+    DirectSoundEnumerateW=dh_proxy_direct_sound_enumerate_w @3
+    DllCanUnloadNow=dh_proxy_dll_can_unload_now @4 PRIVATE
+    DllGetClassObject=dh_proxy_dll_get_class_object @5 PRIVATE
+    DirectSoundCaptureCreate=dh_proxy_direct_sound_capture_create @6
+    DirectSoundCaptureEnumerateA=dh_proxy_direct_sound_capture_enumerate_a @7
+    DirectSoundCaptureEnumerateW=dh_proxy_direct_sound_capture_enumerate_w @8
+    GetDeviceID=dh_proxy_get_device_id @9
+    DirectSoundFullDuplexCreate=dh_proxy_direct_sound_full_duplex_create @10
+    DirectSoundCreate8=dh_proxy_direct_sound_create8 @11
+    DirectSoundCaptureCreate8=dh_proxy_direct_sound_capture_create8 @12
