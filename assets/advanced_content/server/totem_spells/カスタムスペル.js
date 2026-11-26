@@ -73,10 +73,6 @@
         bombMiceClimbMaxDurationSec: 4.5,
         bombMiceClimbMaxZGainUU: 1400.0,
         bombMiceClimbCooldownSec: 0.85,
-        bombMiceClimbPitchDefaultDeg: 72.0,
-        bombMiceClimbPitchMinDeg: 55.0,
-        bombMiceClimbPitchMaxDeg: 78.0,
-        bombMiceClimbPitchBackoffDeg: 35.0,
         bombMiceSlopeRecoverGraceSec: 0.30,
         bombMiceSlopeRecoverMinZGainUU: 35.0,
         bombMiceSlopeCheckIntervalSec: 0.12,
@@ -1688,7 +1684,7 @@
     // 8. 全 5 スペル純 JS 実装
     // ========================================================================
 
-    // --- [5] 爆弾ネズミ (TS_BombMice): 原版 MOD 移動物理 + 純JS専用 NavMesh 経路探索 + 1A 姿勢傾斜 + 2B 軍艦・舷梯防爬ガード ---
+    // --- [5] 爆弾ネズミ (TS_BombMice): 原版 MOD 移動物理 + 純JS専用 NavMesh 経路探索 + 垂直氷壁登攀・<78°復帰 + 2B 軍艦・舷梯防爬ガード ---
     function resolveWeakObject(weakPtr) {
         if (!weakPtr || weakPtr.isNull()) {
             return ptr(0);
@@ -1734,48 +1730,24 @@
         }
     }
 
-    function getActorYawDeg(actorPtr) {
-        if (!actorPtr || actorPtr.isNull() || isPendingKill(actorPtr)) {
-            return 0.0;
-        }
-        try {
-            var rootComp = actorPtr.add(OFFSETS.AActor_RootComponent).readPointer();
-            if (rootComp.isNull() || isPendingKill(rootComp)) {
-                return 0.0;
-            }
-            var qx = rootComp.add(OFFSETS.USceneComponent_ComponentToWorldQuat).readFloat();
-            var qy = rootComp.add(OFFSETS.USceneComponent_ComponentToWorldQuat + 4).readFloat();
-            var qz = rootComp.add(OFFSETS.USceneComponent_ComponentToWorldQuat + 8).readFloat();
-            var qw = rootComp.add(OFFSETS.USceneComponent_ComponentToWorldQuat + 12).readFloat();
-            var siny = 2.0 * (qw * qz + qx * qy);
-            var cosy = 1.0 - 2.0 * (qy * qy + qz * qz);
-            var yaw = Math.atan2(siny, cosy) * (180.0 / Math.PI);
-            return Number.isFinite(yaw) ? yaw : 0.0;
-        } catch (e) {
-            return 0.0;
-        }
-    }
-
-    function setActorPitchYawRoll(actorPtr, pitchDeg, yawDeg, rollDeg) {
+    function setActorYawUpright(actorPtr, dx, dy) {
         if (!actorPtr || actorPtr.isNull() || isPendingKill(actorPtr)) {
             return;
         }
-        if (!Number.isFinite(pitchDeg) || !Number.isFinite(yawDeg) || !Number.isFinite(rollDeg)) {
+        var horizSq = dx * dx + dy * dy;
+        if (!Number.isFinite(horizSq) || horizSq <= 1.0) {
+            return;
+        }
+        var yawDeg = Math.atan2(dy, dx) * (180.0 / Math.PI);
+        if (!Number.isFinite(yawDeg)) {
             return;
         }
         try {
-            rotatorBuf.writeFloat(pitchDeg);
+            rotatorBuf.writeFloat(0.0);
             rotatorBuf.add(4).writeFloat(yawDeg);
-            rotatorBuf.add(8).writeFloat(rollDeg);
+            rotatorBuf.add(8).writeFloat(0.0);
             AActor_K2_SetActorRotation(actorPtr, rotatorBuf, 0);
         } catch (e) {}
-    }
-
-    function resetActorPitchRoll(actorPtr) {
-        if (!actorPtr || actorPtr.isNull() || isPendingKill(actorPtr)) {
-            return;
-        }
-        setActorPitchYawRoll(actorPtr, 0.0, getActorYawDeg(actorPtr), 0.0);
     }
 
     function updateWarshipCache(gsPtr) {
@@ -2008,7 +1980,7 @@
     }
 
     function probeBombMouseForwardWall(worldPtr, ratPtr, targetPtr, fromLoc, ux, uy, maxDist) {
-        var res = { hitAny: false, hitShip: false, hitSteepWall: false, steepestNormZ: 1.0 };
+        var res = { hitAny: false, hitShip: false, hitSteepWall: false };
         if (!worldPtr || worldPtr.isNull() || !fromLoc) {
             return res;
         }
@@ -2024,9 +1996,6 @@
                 res.hitAny = true;
                 if (r.isShip) {
                     res.hitShip = true;
-                }
-                if (r.normZ < res.steepestNormZ) {
-                    res.steepestNormZ = r.normZ;
                 }
                 if (r.normZ < WALKABLE_SLOPE_COS_78) {
                     res.hitSteepWall = true;
@@ -2400,7 +2369,7 @@
         return false;
     }
 
-    // 2段階 垂直氷壁・岸壁登攀ステートマシン (MOVE_Flying=5 + 1A 正 Pitch 鼻上げ傾斜 + <78° 復帰 + 2B 軍艦・舷梯防爬)
+    // 2段階 垂直氷壁・岸壁登攀ステートマシン (MOVE_Flying=5 + 直立登攀 + <78° 復帰 + 2B 軍艦・舷梯防爬)
     function enterBombMouseWallClimb(worldPtr, mEntry, ctrl, targetPtr, ratLoc, targetLoc, nowTimeSec) {
         if (!mEntry || !mEntry.rat || mEntry.rat.isNull() || isPendingKill(mEntry.rat)) {
             return false;
@@ -2450,7 +2419,6 @@
         mEntry.climbCrestUntil = 0.0;
         mEntry.climbNextFloorCheckAt = nowTimeSec + CONFIG.bombMiceSlopeRecoverGraceSec;
         mEntry.climbNextShipTraceAt = nowTimeSec + CONFIG.shipMidClimbTraceIntervalSec;
-        mEntry.climbPitchDeg = CONFIG.bombMiceClimbPitchDefaultDeg;
         mEntry.walkableSlopeHits = 0;
         mEntry.detourUntil = 0.0;
         mEntry.stuckCount = 0;
@@ -2469,8 +2437,6 @@
         mEntry.nextIdleRetryAt = nowTimeSec;
         try {
             if (mEntry.rat && !mEntry.rat.isNull() && !isPendingKill(mEntry.rat)) {
-                // 1A 必須要件: ADH_AnimalCharacter の RotationRate.Pitch=0 のため終了時に必ず Pitch=0, Roll=0 を明示復帰
-                resetActorPitchRoll(mEntry.rat);
                 var moveComp = mEntry.rat.add(OFFSETS.ACharacter_CharacterMovement).readPointer();
                 if (!moveComp.isNull() && !isPendingKill(moveComp)) {
                     if (typeof mEntry.savedBrakingFly === 'number') {
@@ -2504,7 +2470,7 @@
             exitBombMouseWallClimb(mEntry, ctrl, nowTimeSec);
             return false;
         }
-        // 2B 登攀中の船体接近・目標乗船ガード（即座に中断＋Pitch/Roll 帰零）
+        // 2B 登攀中の船体接近・目標乗船ガード（即座に中断）
         if (isTargetOnShip(targetPtr, targetLoc) || isPointInShipOBB(ratLoc, 40.0, 15.0)) {
             exitBombMouseWallClimb(mEntry, ctrl, nowTimeSec);
             return false;
@@ -2526,7 +2492,6 @@
 
         var ux = (Number.isFinite(distXY) && distXY > 1.0) ? (dx / distXY) : 0.0;
         var uy = (Number.isFinite(distXY) && distXY > 1.0) ? (dy / distXY) : 0.0;
-        var yawDeg = (distXY > 1.0) ? (Math.atan2(dy, dx) * (180.0 / Math.PI)) : getActorYawDeg(mEntry.rat);
 
         // 2B 登攀中 0.15s ごとの船殻・舷梯レイ再検査
         if (nowTimeSec >= mEntry.climbNextShipTraceAt) {
@@ -2552,25 +2517,23 @@
                 AAIController_StopMovement(ctrl);
             }
         } catch (eSt) {}
+        setActorYawUpright(mEntry.rat, dx, dy);
 
         if (mEntry.climbPhase === 1) {
-            // 1A: < 78° 傾角復帰判定（MOVE_Flying 中は CurrentFloor が空のため K2_FindFloor + 前方レイで判定）
+            // < 78° 傾角復帰判定（MOVE_Flying 中は CurrentFloor が空のため K2_FindFloor + 前方レイで判定）
             if (elapsed >= CONFIG.bombMiceSlopeRecoverGraceSec && zGained >= CONFIG.bombMiceSlopeRecoverMinZGainUU &&
                 nowTimeSec >= mEntry.climbNextFloorCheckAt) {
                 mEntry.climbNextFloorCheckAt = nowTimeSec + CONFIG.bombMiceSlopeCheckIntervalSec;
                 try {
                     var wallAhead = (distXY > 1.0)
                         ? probeBombMouseForwardWall(worldPtr, mEntry.rat, targetPtr, ratLoc, ux, uy, 130.0)
-                        : { hitAny: false, hitShip: false, hitSteepWall: false, steepestNormZ: 1.0 };
+                        : { hitAny: false, hitShip: false, hitSteepWall: false };
                     if (wallAhead.hitShip) {
                         exitBombMouseWallClimb(mEntry, ctrl, nowTimeSec);
                         return false;
                     }
                     if (wallAhead.hitSteepWall) {
                         mEntry.walkableSlopeHits = 0;
-                        var wallSlopeDeg = Math.acos(Math.max(0.0, Math.min(1.0, wallAhead.steepestNormZ))) * (180.0 / Math.PI);
-                        var targetPitch = Math.max(CONFIG.bombMiceClimbPitchMinDeg, Math.min(CONFIG.bombMiceClimbPitchMaxDeg, wallSlopeDeg * 0.85));
-                        mEntry.climbPitchDeg = targetPitch;
                     } else {
                         floorLocBuf.writeFloat(ratLoc.x);
                         floorLocBuf.add(4).writeFloat(ratLoc.y);
@@ -2598,12 +2561,11 @@
                 } catch (eFl) {}
             }
 
-            // Phase 1: CLIMB_UP（垂直壁・氷壁に沿ってカプセルスイープ上昇 + 正 Pitch 鼻上げ傾斜 + オーバーハング回避）
+            // Phase 1: CLIMB_UP（直立姿勢で垂直壁・氷壁に沿ってカプセルスイープ上昇 + オーバーハング回避）
             var desiredZ = Math.max(targetLoc.z + CONFIG.bombMiceClimbTopMarginUU, mEntry.climbMinGoalZ);
             if (ratLoc.z >= desiredZ) {
                 mEntry.climbPhase = 2;
                 mEntry.climbCrestUntil = nowTimeSec + CONFIG.bombMiceCrestDurationSec;
-                setActorPitchYawRoll(mEntry.rat, 0.0, yawDeg, 0.0);
             } else {
                 if (nowTimeSec >= mEntry.climbLastZCheckAt) {
                     var dzStep = ratLoc.z - mEntry.climbLastCheckZ;
@@ -2621,12 +2583,10 @@
                     }
                 }
                 if (nowTimeSec < mEntry.climbBackoffUntil) {
-                    setActorPitchYawRoll(mEntry.rat, CONFIG.bombMiceClimbPitchBackoffDeg, yawDeg, 0.0);
                     moveComp.add(OFFSETS.UMovementComponent_Velocity).writeFloat(-ux * CONFIG.bombMiceClimbBackoffVelXY);
                     moveComp.add(OFFSETS.UMovementComponent_Velocity + 4).writeFloat(-uy * CONFIG.bombMiceClimbBackoffVelXY);
                     moveComp.add(OFFSETS.UMovementComponent_Velocity + 8).writeFloat(CONFIG.bombMiceClimbBackoffVelZ);
                 } else {
-                    setActorPitchYawRoll(mEntry.rat, mEntry.climbPitchDeg, yawDeg, 0.0);
                     moveComp.add(OFFSETS.UMovementComponent_Velocity).writeFloat(ux * CONFIG.bombMiceClimbVelXY);
                     moveComp.add(OFFSETS.UMovementComponent_Velocity + 4).writeFloat(uy * CONFIG.bombMiceClimbVelXY);
                     moveComp.add(OFFSETS.UMovementComponent_Velocity + 8).writeFloat(CONFIG.bombMiceClimbVelZ);
@@ -2635,8 +2595,7 @@
             }
         }
 
-        // Phase 2: CREST（Pitch=0 へ戻して崖天面へ水平に踏み込んで確実に乗せる）
-        setActorPitchYawRoll(mEntry.rat, 0.0, yawDeg, 0.0);
+        // Phase 2: CREST（崖天面へ水平に踏み込んで確実に乗せる）
         if (nowTimeSec >= mEntry.climbCrestUntil || distXY <= 85.0) {
             exitBombMouseWallClimb(mEntry, ctrl, nowTimeSec);
             return false;
@@ -3034,7 +2993,6 @@
             climbCooldownUntil: 0.0,
             climbNextFloorCheckAt: 0.0,
             climbNextShipTraceAt: 0.0,
-            climbPitchDeg: CONFIG.bombMiceClimbPitchDefaultDeg,
             walkableSlopeHits: 0,
             savedBrakingFly: 0.0,
             savedMaxFlySpeed: 600.0,

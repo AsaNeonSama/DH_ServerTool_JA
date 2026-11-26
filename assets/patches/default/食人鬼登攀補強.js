@@ -3,12 +3,10 @@
 //   - 食人鬼 (ADH_CannibalCharacter) の急斜面・垂直氷壁・岸壁でのスタックを解消する 2 段階登攀補強
 //   - 基礎物理: WalkableFloorAngle=78° (WalkableFloorZ≈0.2079), MaxStepHeight>=75 (原版 128 UU 維持), 水辺這い上がり + bCanFly
 //   - スマート検知: 単なる実移動距離だけでなく「目標との接近進捗・高度差(dz>=95 UU)・崖下ウロウロ・部分経路停止」を 0.7s 毎に評価
-//   - 2 段階垂直登攀 (MOVE_Flying=5) + 1A 姿勢・モーション補強:
-//       Phase 1 (CLIMB_UP): カプセルスイープ衝突を保ったまま壁・氷壁に沿って垂直上昇（オーバーハング時は一時後退して回避）
-//                           登攀中はモデルを壁面方向へ前傾 Pitch 傾斜 + PackNetworkMovementMode (0x241FA20) でネットワーク上のみ
-//                           MOVE_Swimming(4) として四肢掻き動作 (AS_Cannibal_Swim_F) を再生（SlopeConformAlpha=0 で Pitch 保持）
-//       < 78° 傾角復帰:     K2_FindFloor (0x241D5A0) + 前方レイで地面傾角 < 78° をヒステリシス検知し登攀解除＋Pitch/Roll=0 明示復帰
-//       Phase 2 (CREST):    Pitch/Roll=0 へ戻して崖天面へ水平に踏み込み、MOVE_Falling 経由で即座に MOVE_Walking へ接地復帰
+//   - 2 段階垂直登攀 (MOVE_Flying=5) + < 78° 傾角復帰:
+//       Phase 1 (CLIMB_UP): 直立姿勢 (Pitch=0, Roll=0) で目標方向へ Yaw のみ向け、カプセルスイープ衝突を保ったまま壁・氷壁に沿って垂直上昇（オーバーハング時は一時後退して回避）
+//       < 78° 傾角復帰:     K2_FindFloor (0x241D5A0) + 前方レイで地面傾角 < 78° をヒステリシス検知し登攀解除して通常歩行へ早期復帰
+//       Phase 2 (CREST):    崖天面へ水平に踏み込み、MOVE_Falling 経由で即座に MOVE_Walking へ接地復帰
 //   - 2B 軍艦・舷梯への登船完全禁止（3 層ガード）:
 //       Layer 1: 船体リアルタイム OBB + ShipBase(+0x9F8) / BasedMovement(+0x298) による船上目標・船外からの登攀/跳躍遮断
 //       Layer 2: 前方短距離レイキャスト (LineTraceSingleByChannel 0x2400340) による船殻・子アクタ・舷梯 (SM_BoatGangwayRails等) の精判
@@ -63,11 +61,7 @@
         climbCooldownSec: 0.85,
         climbStuckGraceSec: 1.5,
 
-        // 1A: 食人鬼の登攀モデル前傾 Pitch（高縦カプセルの壁引っ掛かりを防ぐ安全角度）＆ < 78° 傾角復帰判定
-        climbPitchDefaultDeg: -34.0,
-        climbPitchBackoffDeg: -16.0,
-        climbPitchMinDeg: -38.0,
-        climbPitchMaxDeg: -22.0,
+        // < 78° 傾角復帰判定
         slopeRecoverGraceSec: 0.30,
         slopeRecoverMinZGainUU: 35.0,
         slopeCheckIntervalSec: 0.12,
@@ -93,8 +87,6 @@
         FMemory_Free: 0x105DD50,
         FName_GetPlainNameString: 0x11604F0,
         FCollisionResponseParams_DefaultResponseParam: 0x46C6EA8,
-        PackedMoveMode_CustomThr: 0x46C72C4,
-        PackedMoveMode_Mask: 0x46C72C5,
 
         ADH_CannibalCharacter_GetPrivateStaticClass: 0xE9F130,
         ADH_HumanCharacter_GetPrivateStaticClass: 0xEC3DA0,
@@ -121,7 +113,6 @@
         UWorld_LineTraceSingleByChannel: 0x2400340,
         UCharacterMovementComponent_IsWalkable: 0x241D1E0,
         UCharacterMovementComponent_K2_FindFloor: 0x241D5A0,
-        UCharacterMovementComponent_PackNetworkMovementMode: 0x241FA20,
         UCharacterMovementComponent_SetWalkableFloorAngle: 0x242E4E0,
         UCharacterMovementComponent_SetMovementMode: 0x242D7D0
     };
@@ -286,7 +277,6 @@
 
     var pinnedCallbacks = [];
     var origMonsterCharacterStuck = null;
-    var origPackNetworkMovementMode = null;
 
     var cachedCannibalClass = ptr(0);
     var cachedHumanClass = ptr(0);
@@ -296,7 +286,6 @@
     var trackedWorldKey = '';
     var trackedCannibals = {};
     var trackedMoveComps = {};
-    var climbingMoveComps = {};
     var nextActorDiscoveryAt = 0.0;
     var gangwayCache = {};
     var gangwayCacheCount = 0;
@@ -494,28 +483,6 @@
         return { x: x, y: y, z: z };
     }
 
-    function getActorYawDeg(actorPtr) {
-        if (!actorPtr || actorPtr.isNull() || isPendingKill(actorPtr)) {
-            return 0.0;
-        }
-        try {
-            var rootComp = actorPtr.add(OFFSETS.AActor_RootComponent).readPointer();
-            if (rootComp.isNull() || isPendingKill(rootComp)) {
-                return 0.0;
-            }
-            var qx = rootComp.add(OFFSETS.USceneComponent_ComponentToWorldQuat).readFloat();
-            var qy = rootComp.add(OFFSETS.USceneComponent_ComponentToWorldQuat + 4).readFloat();
-            var qz = rootComp.add(OFFSETS.USceneComponent_ComponentToWorldQuat + 8).readFloat();
-            var qw = rootComp.add(OFFSETS.USceneComponent_ComponentToWorldQuat + 12).readFloat();
-            var siny = 2.0 * (qw * qz + qx * qy);
-            var cosy = 1.0 - 2.0 * (qy * qy + qz * qz);
-            var yaw = Math.atan2(siny, cosy) * (180.0 / Math.PI);
-            return Number.isFinite(yaw) ? yaw : 0.0;
-        } catch (e) {
-            return 0.0;
-        }
-    }
-
     function distance3D(a, b) {
         var dx = a.x - b.x;
         var dy = a.y - b.y;
@@ -523,26 +490,24 @@
         return Math.sqrt(dx * dx + dy * dy + dz * dz);
     }
 
-    function setActorPitchYawRoll(actorPtr, pitchDeg, yawDeg, rollDeg) {
+    function setActorYawUpright(actorPtr, dx, dy) {
         if (!actorPtr || actorPtr.isNull() || isPendingKill(actorPtr)) {
             return;
         }
-        if (!Number.isFinite(pitchDeg) || !Number.isFinite(yawDeg) || !Number.isFinite(rollDeg)) {
+        var horizSq = dx * dx + dy * dy;
+        if (!Number.isFinite(horizSq) || horizSq <= 1.0) {
+            return;
+        }
+        var yawDeg = Math.atan2(dy, dx) * (180.0 / Math.PI);
+        if (!Number.isFinite(yawDeg)) {
             return;
         }
         try {
-            rotatorBuf.writeFloat(pitchDeg);
+            rotatorBuf.writeFloat(0.0);
             rotatorBuf.add(4).writeFloat(yawDeg);
-            rotatorBuf.add(8).writeFloat(rollDeg);
+            rotatorBuf.add(8).writeFloat(0.0);
             AActor_K2_SetActorRotation(actorPtr, rotatorBuf, 0);
         } catch (e) {}
-    }
-
-    function resetActorPitchRoll(actorPtr) {
-        if (!actorPtr || actorPtr.isNull() || isPendingKill(actorPtr)) {
-            return;
-        }
-        setActorPitchYawRoll(actorPtr, 0.0, getActorYawDeg(actorPtr), 0.0);
     }
 
     function clearActorTimer(actorPtr, handleOffset) {
@@ -800,7 +765,7 @@
     }
 
     function probeForwardWall(worldPtr, pawnPtr, targetPtr, fromLoc, ux, uy, maxDist) {
-        var res = { hitAny: false, hitShip: false, hitSteepWall: false, steepestNormZ: 1.0 };
+        var res = { hitAny: false, hitShip: false, hitSteepWall: false };
         if (!worldPtr || worldPtr.isNull() || !fromLoc) {
             return res;
         }
@@ -816,9 +781,6 @@
                 res.hitAny = true;
                 if (r.isShip) {
                     res.hitShip = true;
-                }
-                if (r.normZ < res.steepestNormZ) {
-                    res.steepestNormZ = r.normZ;
                 }
                 if (r.normZ < WALKABLE_SLOPE_COS_78) {
                     res.hitSteepWall = true;
@@ -880,18 +842,6 @@
         }
         if (entry.moveCompKey) {
             delete trackedMoveComps[entry.moveCompKey];
-            delete climbingMoveComps[entry.moveCompKey];
-        }
-    }
-
-    function syncClimbingMoveCompFlag(entry, active) {
-        if (!entry || !entry.moveCompKey) {
-            return;
-        }
-        if (active) {
-            climbingMoveComps[entry.moveCompKey] = true;
-        } else {
-            delete climbingMoveComps[entry.moveCompKey];
         }
     }
 
@@ -940,7 +890,6 @@
         entry.climbPhase = 0;
         entry.stuckCount = 0;
         entry.walkableSlopeHits = 0;
-        syncClimbingMoveCompFlag(entry, false);
         if (wasClimbing) {
             entry.climbCooldownUntil = nowTimeSec + CONFIG.climbCooldownSec;
             entry.climbProtectedUntil = nowTimeSec + CONFIG.climbStuckGraceSec;
@@ -964,8 +913,6 @@
         if (wasClimbing) {
             try {
                 if (entry.pawn && !entry.pawn.isNull() && !isPendingKill(entry.pawn)) {
-                    // 1A 必須要件: ADH_AnimalCharacter の RotationRate.Pitch=0 のため終了時に必ず Pitch=0, Roll=0 を明示復帰
-                    resetActorPitchRoll(entry.pawn);
                     var moveComp = entry.pawn.add(OFFSETS.ACharacter_CharacterMovement).readPointer();
                     if (!moveComp.isNull() && !isPendingKill(moveComp)) {
                         if (typeof entry.savedBrakingFly === 'number') {
@@ -1008,7 +955,6 @@
         }
         trackedCannibals = {};
         trackedMoveComps = {};
-        climbingMoveComps = {};
         nextActorDiscoveryAt = 0.0;
         gangwayCache = {};
         gangwayCacheCount = 0;
@@ -1066,7 +1012,6 @@
             climbProtectedUntil: 0.0,
             climbNextFloorCheckAt: 0.0,
             climbNextShipTraceAt: 0.0,
-            climbPitchDeg: CONFIG.climbPitchDefaultDeg,
             walkableSlopeHits: 0,
             savedChaseTarget: null,
             savedCtrl: ptr(0),
@@ -1180,10 +1125,8 @@
         entry.climbCrestUntil = 0.0;
         entry.climbNextFloorCheckAt = nowTimeSec + CONFIG.slopeRecoverGraceSec;
         entry.climbNextShipTraceAt = nowTimeSec + CONFIG.shipMidClimbTraceIntervalSec;
-        entry.climbPitchDeg = CONFIG.climbPitchDefaultDeg;
         entry.walkableSlopeHits = 0;
         entry.stuckCount = 0;
-        syncClimbingMoveCompFlag(entry, true);
         return true;
     }
 
@@ -1193,7 +1136,7 @@
             exitCannibalWallClimb(entry, ctrl, nowTimeSec);
             return false;
         }
-        // 2B 登攀中の船体接近・目標乗船ガード（即座に中断＋Pitch/Roll 帰零）
+        // 2B 登攀中の船体接近・目標乗船ガード（即座に中断）
         if (isTargetOnShip(targetPtr, tLoc) || isPointInShipOBB(cLoc, 40.0, 15.0)) {
             exitCannibalWallClimb(entry, ctrl, nowTimeSec);
             return false;
@@ -1215,7 +1158,6 @@
 
         var ux = (Number.isFinite(distXY) && distXY > 1.0) ? (dx / distXY) : 0.0;
         var uy = (Number.isFinite(distXY) && distXY > 1.0) ? (dy / distXY) : 0.0;
-        var yawDeg = (distXY > 1.0) ? (Math.atan2(dy, dx) * (180.0 / Math.PI)) : getActorYawDeg(entry.pawn);
 
         // 2B 登攀中 0.15s ごとの船殻・舷梯レイ再検査
         if (nowTimeSec >= entry.climbNextShipTraceAt) {
@@ -1241,25 +1183,23 @@
                 AAIController_StopMovement(ctrl);
             }
         } catch (eSt) {}
+        setActorYawUpright(entry.pawn, dx, dy);
 
         if (entry.climbPhase === 1) {
-            // 1A: < 78° 傾角復帰判定（MOVE_Flying 中は CurrentFloor が空のため K2_FindFloor + 前方レイで判定）
+            // < 78° 傾角復帰判定（MOVE_Flying 中は CurrentFloor が空のため K2_FindFloor + 前方レイで判定）
             if (elapsed >= CONFIG.slopeRecoverGraceSec && zGained >= CONFIG.slopeRecoverMinZGainUU &&
                 nowTimeSec >= entry.climbNextFloorCheckAt) {
                 entry.climbNextFloorCheckAt = nowTimeSec + CONFIG.slopeCheckIntervalSec;
                 try {
                     var wallAhead = (distXY > 1.0)
                         ? probeForwardWall(worldPtr, entry.pawn, targetPtr, cLoc, ux, uy, 145.0)
-                        : { hitAny: false, hitShip: false, hitSteepWall: false, steepestNormZ: 1.0 };
+                        : { hitAny: false, hitShip: false, hitSteepWall: false };
                     if (wallAhead.hitShip) {
                         exitCannibalWallClimb(entry, ctrl, nowTimeSec);
                         return false;
                     }
                     if (wallAhead.hitSteepWall) {
                         entry.walkableSlopeHits = 0;
-                        var wallSlopeDeg = Math.acos(Math.max(0.0, Math.min(1.0, wallAhead.steepestNormZ))) * (180.0 / Math.PI);
-                        var targetPitch = -Math.max(22.0, Math.min(38.0, wallSlopeDeg * 0.42));
-                        entry.climbPitchDeg = Math.max(CONFIG.climbPitchMinDeg, Math.min(CONFIG.climbPitchMaxDeg, targetPitch));
                     } else {
                         floorLocBuf.writeFloat(cLoc.x);
                         floorLocBuf.add(4).writeFloat(cLoc.y);
@@ -1277,7 +1217,7 @@
                             !isWarshipOrGangwayActor(flActor, flComp)) {
                             entry.walkableSlopeHits++;
                             if (entry.walkableSlopeHits >= CONFIG.slopeRecoverHitsNeeded) {
-                                // < 78° の歩行可能斜面／崖天面に復帰 -> 登攀終了＋Pitch/Roll 帰零して通常歩行へ
+                                // < 78° の歩行可能斜面／崖天面に復帰 -> 登攀終了して通常歩行へ
                                 exitCannibalWallClimb(entry, ctrl, nowTimeSec);
                                 return false;
                             }
@@ -1292,8 +1232,6 @@
             if (cLoc.z >= desiredZ) {
                 entry.climbPhase = 2;
                 entry.climbCrestUntil = nowTimeSec + CONFIG.crestDurationSec;
-                syncClimbingMoveCompFlag(entry, false);
-                setActorPitchYawRoll(entry.pawn, 0.0, yawDeg, 0.0);
             } else {
                 if (nowTimeSec >= entry.climbLastZCheckAt) {
                     var dzStep = cLoc.z - entry.climbLastCheckZ;
@@ -1310,14 +1248,11 @@
                         entry.climbNoZCount = 0;
                     }
                 }
-                syncClimbingMoveCompFlag(entry, true);
                 if (nowTimeSec < entry.climbBackoffUntil) {
-                    setActorPitchYawRoll(entry.pawn, CONFIG.climbPitchBackoffDeg, yawDeg, 0.0);
                     moveComp.add(OFFSETS.UMovementComponent_Velocity).writeFloat(-ux * CONFIG.climbBackoffVelXY);
                     moveComp.add(OFFSETS.UMovementComponent_Velocity + 4).writeFloat(-uy * CONFIG.climbBackoffVelXY);
                     moveComp.add(OFFSETS.UMovementComponent_Velocity + 8).writeFloat(CONFIG.climbBackoffVelZ);
                 } else {
-                    setActorPitchYawRoll(entry.pawn, entry.climbPitchDeg, yawDeg, 0.0);
                     moveComp.add(OFFSETS.UMovementComponent_Velocity).writeFloat(ux * CONFIG.climbVelXY);
                     moveComp.add(OFFSETS.UMovementComponent_Velocity + 4).writeFloat(uy * CONFIG.climbVelXY);
                     moveComp.add(OFFSETS.UMovementComponent_Velocity + 8).writeFloat(CONFIG.climbVelZ);
@@ -1326,9 +1261,7 @@
             }
         }
 
-        // Phase 2: CREST（Pitch=0 へ戻して崖天面へ水平に押し込んで確実に接地）
-        syncClimbingMoveCompFlag(entry, false);
-        setActorPitchYawRoll(entry.pawn, 0.0, yawDeg, 0.0);
+        // Phase 2: CREST（崖天面へ水平に押し込んで確実に接地）
         if (nowTimeSec >= entry.climbCrestUntil || distXY <= 95.0) {
             exitCannibalWallClimb(entry, ctrl, nowTimeSec);
             return false;
@@ -1539,30 +1472,7 @@
         'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' }
     );
 
-    // 2. UCharacterMovementComponent::PackNetworkMovementMode (replaceFast: CLIMB_UP 中の追跡食人鬼のみ MOVE_Swimming=4 送信・onLeave 消費 0)
-    var packNetworkModeCb = new NativeCallback(function (moveCompPtr) {
-        var packed = origPackNetworkMovementMode ? origPackNetworkMovementMode(moveCompPtr) : 0;
-        try {
-            if (moveCompPtr && !moveCompPtr.isNull() && climbingMoveComps[moveCompPtr.toString()]) {
-                if (moveCompPtr.add(OFFSETS.UCharacterMovementComponent_MovementMode).readU8() === 5) {
-                    var customThr = moduleBase.add(RVA.PackedMoveMode_CustomThr).readU8();
-                    var mask = moduleBase.add(RVA.PackedMoveMode_Mask).readU8();
-                    if (packed < customThr && mask !== 0) {
-                        return (packed & (~mask & 0xFF)) | 4; // 4 = MOVE_Swimming (AS_Cannibal_Swim_F 再生 + Pitch 保持)
-                    }
-                    return 4;
-                }
-            }
-        } catch (e) {}
-        return packed;
-    }, 'uint8', ['pointer'], 'win64');
-    pinnedCallbacks.push(packNetworkModeCb);
-    origPackNetworkMovementMode = new NativeFunction(
-        Interceptor.replaceFast(moduleBase.add(RVA.UCharacterMovementComponent_PackNetworkMovementMode), packNetworkModeCb),
-        'uint8', ['pointer'], { abi: 'win64', exceptions: 'propagate' }
-    );
-
-    // 3. UCharacterMovementComponent::IsWalkable (2B 受動物理防爬ガード: Interceptor.attach でカスタムスペル.js と安全共存、0x241D1E0 上の onLeave 総数 <= 2)
+    // 2. UCharacterMovementComponent::IsWalkable (2B 受動物理防爬ガード: Interceptor.attach でカスタムスペル.js と安全共存、0x241D1E0 上の onLeave 総数 <= 2)
     Interceptor.attach(moduleBase.add(RVA.UCharacterMovementComponent_IsWalkable), {
         onEnter: function (args) {
             this.blockShipWalk = false;
@@ -1599,7 +1509,7 @@
         }
     });
 
-    // 4. ADH_AIController::OnPossess (onEnter のみ・onLeave 消費 0)
+    // 3. ADH_AIController::OnPossess (onEnter のみ・onLeave 消費 0)
     Interceptor.attach(moduleBase.add(RVA.ADH_AIController_OnPossess), {
         onEnter: function (args) {
             try {
@@ -1608,7 +1518,7 @@
         }
     });
 
-    // 5. ADH_AnimalCharacter::BeginPlay (ワールド配置済み食人鬼の補完登録・onEnter のみ)
+    // 4. ADH_AnimalCharacter::BeginPlay (ワールド配置済み食人鬼の補完登録・onEnter のみ)
     Interceptor.attach(moduleBase.add(RVA.ADH_AnimalCharacter_BeginPlay), {
         onEnter: function (args) {
             try {
@@ -1617,7 +1527,7 @@
         }
     });
 
-    // 6. ADH_AnimalCharacter::Destroyed / ADH_Character::OnDied (登攀状態＋Pitch/Roll 復元＋即時追跡解除・onEnter のみ)
+    // 5. ADH_AnimalCharacter::Destroyed / ADH_Character::OnDied (登攀状態復元＋即時追跡解除・onEnter のみ)
     Interceptor.attach(moduleBase.add(RVA.ADH_AnimalCharacter_Destroyed), {
         onEnter: function (args) {
             try {
@@ -1634,7 +1544,7 @@
         }
     });
 
-    // 7. ADH_GameState::Tick (GameThread 監視・UWorld::TimeSeconds 駆動・onEnter のみ)
+    // 6. ADH_GameState::Tick (GameThread 監視・UWorld::TimeSeconds 駆動・onEnter のみ)
     Interceptor.attach(moduleBase.add(RVA.ADH_GameState_Tick), {
         onEnter: function (args) {
             try {
@@ -1649,5 +1559,5 @@
         }
     });
 
-    log('初期化完了（食人鬼 1A登攀Pitch傾斜+PackNetworkMovementMode=4+<78度復帰 + 2B軍艦・舷梯3層防爬ガード + 原版ThreatTable互換）');
+    log('初期化完了（食人鬼 垂直壁登攀+<78度傾角復帰 + 2B軍艦・舷梯3層防爬ガード + 原版ThreatTable互換）');
 })();

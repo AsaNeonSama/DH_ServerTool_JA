@@ -88,8 +88,8 @@ async fn stage0_live_oep_gadget_poc_against_dread_hunger_server() {
     )
     .expect("init patch_runtime.log");
 
-    // Load the 3 newly renamed Japanese MOD scripts (read-only from controller/assets/mods/).
-    let mods_root: PathBuf = controller_dir.join("assets").join("mods");
+    // Load the 3 newly renamed Japanese MOD scripts (read-only from tools/assets/patches/).
+    let mods_root: PathBuf = controller_dir.join("assets").join("patches");
     let mod_specs: [(&str, &str, &str); 3] = [
         (
             "default:console",

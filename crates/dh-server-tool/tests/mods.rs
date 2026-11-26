@@ -89,10 +89,13 @@ fn embeds_all_30_non_empty_unique_scripts_and_22_menu_options() {
             && cannibal_climb.source.contains("0x22E1260")
             && cannibal_climb.source.contains("0x2D7A130")
             && cannibal_climb.source.contains("0x241D1E0")
-            && cannibal_climb.source.contains("0x241FA20")
             && cannibal_climb.source.contains("0x241D5A0")
             && cannibal_climb.source.contains("0x2400340"),
-        "default cannibal climb script must reference ADH_CannibalCharacter (0xE9F130), SetWalkableFloorAngle (0x242E4E0), CharacterStuck (0xD4CA50), K2_SetActorRotation (0x22E1260), StopMovement (0x2D7A130), IsWalkable (0x241D1E0), PackNetworkMovementMode (0x241FA20), K2_FindFloor (0x241D5A0), and LineTraceSingleByChannel (0x2400340)"
+        "default cannibal climb script must reference ADH_CannibalCharacter (0xE9F130), SetWalkableFloorAngle (0x242E4E0), CharacterStuck (0xD4CA50), K2_SetActorRotation (0x22E1260), StopMovement (0x2D7A130), IsWalkable (0x241D1E0), K2_FindFloor (0x241D5A0), and LineTraceSingleByChannel (0x2400340)"
+    );
+    assert!(
+        !cannibal_climb.source.contains("0x241FA20"),
+        "PackNetworkMovementMode (0x241FA20) swim disguise must stay removed from 食人鬼登攀補強.js"
     );
 
     let all_sabotage = find_option_by_number(5).expect("mod #5 must exist");
@@ -229,7 +232,7 @@ fn embeds_zero_asset_totem_spells_content_mod_and_orders_before_server_only_mods
     );
     assert!(
         !script.source.contains("0x241FA20"),
-        "PackNetworkMovementMode (0x241FA20) replaceFast must stay exclusive to 食人鬼登攀補強.js to prevent hook collision"
+        "PackNetworkMovementMode (0x241FA20) swim disguise must stay absent from カスタムスペル.js"
     );
 
     let temp_cache: PathBuf =

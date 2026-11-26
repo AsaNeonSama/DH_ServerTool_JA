@@ -18,13 +18,13 @@ Dread Hunger Windows Dedicated Server（原生未改造サーバー）用の統�
   - `default/スペルチャージ修正.js`（スペルチャージ修正）
   - `default/死亡切断通知.js`（オフライン・死亡アナウンス日本語版）
   - `default/接続保護_乱入防止.js`（ネットワーク接続保護・乱入防止：ポーカー／試合開始時ロックによる途中乱入防止・ゾンビ接続および残留旧 Controller の即時クリーンアップ・満員時の開局メンバー許可・無人 10 秒サーバー終了タイマー解除＆CloseServer 抑止・診断ログ出力）
-  - `default/食人鬼登攀補強.js`（食人鬼登攀補強：急斜面 78° 登攀・2 段階垂直氷壁／岸壁登攀 `MOVE_Flying`＋登攀 Pitch 傾斜／`<78°` 自動復帰・3 層防爬船＆舷梯遮断・原版 ThreatTable 互換、野生動物非干渉）
+  - `default/食人鬼登攀補強.js`（食人鬼登攀補強：急斜面 78° 登攀・2 段階垂直氷壁／岸壁登攀 `MOVE_Flying`＋`<78°` 緩斜面自動復帰・3 層防爬船＆舷梯遮断・原版 ThreatTable 互換、野生動物非干渉）
 - **JS パッチ実行ログのファイル出力 (`./patch_runtime.log`)**:
   - Frida JS パッチのランタイムログおよびエラーは、ループバック NDJSON チャンネル経由で `DH_ServerTool_JA.exe` と同階層の `./patch_runtime.log` に集約出力されます（サーバータブ `[2]` には各 MOD の注入完了進捗のみ表示）。
   - 試合開始ごとに上書きされ、常に最新 1 試合分のみ保持されます。
 - **コンテンツ MOD（クライアント `.pak` 併用・サーバー側ゼロ資産）**:
-  - `1: カスタムスペル(新呪文5種)`（サーバー側は純 JS でランタイム合成、クライアント配布用 `.pak` / `.sig` は `assets/content_mods/client/paked/totem_spells/` に格納）
-- **クライアント EOS 再接続・同ポート再起動修正 DLL (`dist/eos_fix/plan_a/eos_fix.dll`・`dist/eos_fix/plan_b/eos_fix.dll` / 約 225 KB)**:
+  - `1: カスタムスペル(新呪文5種)`（サーバー側は純 JS でランタイム合成、クライアント配布用 `.pak` / `.sig` は `assets/advanced_content/client/paked/totem_spells/` に格納・配布出力先 `dist/advanced_content/totem_spells/`）
+- **クライアント EOS 再接続・同ポート再起動修正 DLL (`dist/client_fix/eos_fix/plan_a/eos_fix.dll`・`dist/client_fix/eos_fix/plan_b/eos_fix.dll` / 約 225 KB)**:
   - Rust ネイティブ実装 (`crates/dh-client-eos-fix/`) + 静的 CRT (`+crt-static`) による単体クライアント DLL（`VCRUNTIME140.dll` 不要・Steam オーバーレイ / OBS や `DH_TotemSpells_Client_p.pak` と完全非干渉）。`dsound.dll` の全 12 固定序号エクスポートを保持しているため、DLL インジェクタによる `eos_fix.dll` 直接注入と、ゲーム本体フォルダへ `dsound.dll` にリネーム配置するゼロインジェクタ起動の両方に対応します。
   - **Plan A（標準・7 パッチ、`plan_a/eos_fix.dll`）**:
     - 非公開／カスタム部屋の EOS ロビー検索権限を `EOS_LPL_PUBLICADVERTISED (0)` に補正しつつ、`LOBBYSEARCH` 属性を `bShouldAdvertise` 連動に制御することで、公開ロビー一覧には露出させずに途中切断時の `SessionId` 照会・再接続を可能にします。
@@ -64,8 +64,8 @@ Dread Hunger Windows Dedicated Server（原生未改造サーバー）用の統�
 ## 使い方 (Windows Server)
 1. `dist/DH_ServerTool_JA.exe` のみを原生 `WindowsServer` フォルダ（`DreadHunger\Binaries\Win64\DreadHungerServer-Win64-Shipping.exe` の上位階層）に配置します。
 2. `DH_ServerTool_JA.exe` を実行すると初回起動時にデフォルト設定の `./config.json` が自動作成されます。`[Webコンソール設定]` -> `[サーバー・試合設定]` の順に設定してください（ポート項目は `Enter` でデフォルト値を使用できます）。
-3. コンテンツ MOD（`カスタムスペル` など）を有効化する場合は、参加クライアント側で `assets/content_mods/client/paked/` 配下の対応 `.pak` / `.sig` を `DreadHunger/Content/Paks/~mods/` に配置してください（サーバー側への `.pak` 配置は不要です）。
-4. 固定ポートでの同端再起動や非公開カスタム部屋の途中切断再接続を有効化する場合は、少なくとも**部屋ホスト側**で `dist/eos_fix/plan_a/eos_fix.dll`（または入室前 EOS IP 秘匿検証版の `dist/eos_fix/plan_b/eos_fix.dll`）を `DreadHunger-Win64-Shipping.exe` に注入するか、`dsound.dll` へリネームしてゲーム本体の `DreadHunger/Binaries/Win64/`（`DreadHunger-Win64-Shipping.exe` と同階層）に配置してください（参加メンバーはバニラ状態でも同端重開・クラッシュ再起動再接続・Steam 招待再接続が機能します。ホスト途中クラッシュ時の EOS オーナー移譲まで保護したい場合は全参加者への導入を推奨します。`.pak` とは独立しており、`DH_TotemSpells_Client_p.pak` との併用時も競合しません）。
+3. コンテンツ MOD（`カスタムスペル` など）を有効化する場合は、参加クライアント側で `dist/advanced_content/<MOD名>/`（ソース配置: `assets/advanced_content/client/paked/<MOD名>/`）配下の対応 `.pak` / `.sig` を `DreadHunger/Content/Paks/~mods/` に配置してください（サーバー側への `.pak` 配置は不要です）。
+4. 固定ポートでの同端再起動や非公開カスタム部屋の途中切断再接続を有効化する場合は、少なくとも**部屋ホスト側**で `dist/client_fix/eos_fix/plan_a/eos_fix.dll`（または入室前 EOS IP 秘匿検証版の `dist/client_fix/eos_fix/plan_b/eos_fix.dll`）を `DreadHunger-Win64-Shipping.exe` に注入するか、`dsound.dll` へリネームしてゲーム本体の `DreadHunger/Binaries/Win64/`（`DreadHunger-Win64-Shipping.exe` と同階層）に配置してください（参加メンバーはバニラ状態でも同端重開・クラッシュ再起動再接続・Steam 招待再接続が機能します。ホスト途中クラッシュ時の EOS オーナー移譲まで保護したい場合は全参加者への導入を推奨します。`.pak` とは独立しており、`DH_TotemSpells_Client_p.pak` との併用時も競合しません）。
 
 ## `config.json` 設定項目 (自動生成デフォルト)
 ```json
@@ -89,10 +89,10 @@ Dread Hunger Windows Dedicated Server（原生未改造サーバー）用の統�
 - `crates/dh-gadget-injector/`: 独立再利用可能な Frida Gadget 17.27.4 OEP 早注入・キャッシュ管理・16→17 互換 Prelude・ループバック NDJSON ログチャンネル
 - `crates/dh-server-tool/`: メイン実行ファイル (`DH_ServerTool_JA.exe`)（設定・AES-256-GCM・Web コンソール・双タブ TUI・CLI・MOD レジストリ・Supervisor）
 - `crates/dh-client-eos-fix/`: クライアント用 EOS 再接続・同ポート再起動修正 DLL（`eos_fix.dll` 直接注入／`dsound.dll` プロキシ両対応、EOS ロビー検索権限補正・`LOBBYSEARCH` 制御・`SetURI` `STARTUTCDATETIME` 補完・試合終了／ロビー復帰時 URL 自動リセット・オプション `private-uri` 機能）
-- `assets/mods/`: デフォルト自動注入・サーバー単体 MOD スクリプト (`.js`)
-- `assets/content_mods/server/`: コンテンツ MOD 用サーバー側スクリプト (`.js`)
-- `assets/content_mods/client/paked/`: コンテンツ MOD 用クライアント配布 `.pak` / `.sig`
-- `assets/content_mods/client/source/`: クライアント `.pak` 展開済みソース資産
+- `assets/patches/`: デフォルト自動注入・サーバー単体 MOD スクリプト (`.js`)
+- `assets/advanced_content/server/`: コンテンツ MOD 用サーバー側スクリプト (`.js`)
+- `assets/advanced_content/client/paked/`: コンテンツ MOD 用クライアント配布 `.pak` / `.sig`
+- `assets/advanced_content/client/source/`: クライアント `.pak` 展開済みソース資産
 - `assets/console/`・`assets/languages/`: Web コンソールテンプレートおよび言語ファイル
 
 ## 開発・ビルド
@@ -108,7 +108,11 @@ cargo build --release
 cargo build --release -p dh-client-eos-fix --features private-uri
 ```
 
-ビルド成果物は `target/release/DH_ServerTool_JA.exe`（配布用コピー先: `dist/DH_ServerTool_JA.exe`）および `target/release/dh_client_eos_fix.dll`（配布用コピー先: Plan A `dist/eos_fix/plan_a/eos_fix.dll` / Plan B `--features private-uri` `dist/eos_fix/plan_b/eos_fix.dll`）に出力されます。
+配布用 `dist/` 出力構成（git 無視対象）:
+- `dist/DH_ServerTool_JA.exe`: サーバーコントローラ本体（`target/release/DH_ServerTool_JA.exe` からコピー）
+- `dist/advanced_content/<MOD名>/*.{pak,sig}`: クライアント配布用 `.pak` / `.sig` のみ（`assets/advanced_content/client/paked/` から MOD 別サブフォルダを維持してコピー。例: `dist/advanced_content/totem_spells/DH_TotemSpells_Client_p.{pak,sig}`。`source/`・`.uasset`/`.uexp`・サーバー `.js` は同梱しません）
+- `dist/client_fix/eos_fix/plan_a/eos_fix.dll`: クライアント EOS 修正 DLL Plan A（標準 7 パッチ、デフォルトリリースビルド）
+- `dist/client_fix/eos_fix/plan_b/eos_fix.dll`: クライアント EOS 修正 DLL Plan B（8 パッチ、`--features private-uri` リリースビルド）
 
 ## ライセンス / License
 
