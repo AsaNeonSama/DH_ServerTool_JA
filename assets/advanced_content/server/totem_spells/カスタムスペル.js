@@ -1853,16 +1853,24 @@
         return invPtr.add(OFFSETS.ADH_Inventory_HumanOwner).readPointer();
     }
 
+    function isFistsInventory(invPtr) {
+        if (!invPtr || invPtr.isNull() || isPendingKill(invPtr)) {
+            return false;
+        }
+        try {
+            return invPtr.add(OFFSETS.ADH_Inventory_InventoryType).readU8() === INVENTORY_TYPE_FISTS;
+        } catch (e) {
+            return false;
+        }
+    }
+
     function isFistsInventorySelection(invMgrPtr, invSelectionPtr) {
         if (!invMgrPtr || invMgrPtr.isNull() || !invSelectionPtr || invSelectionPtr.isNull()) {
             return false;
         }
         try {
             var resolved = FInventorySelection_GetInventory(invSelectionPtr, invMgrPtr);
-            if (resolved.isNull() || isPendingKill(resolved)) {
-                return false;
-            }
-            return resolved.add(OFFSETS.ADH_Inventory_InventoryType).readU8() === INVENTORY_TYPE_FISTS;
+            return isFistsInventory(resolved);
         } catch (e) {
             return false;
         }
@@ -1922,8 +1930,12 @@
         var useCb = new NativeCallback(function (invMgr, transformPtr, useStatePtr) {
             try {
                 if (isHumanIntimidated(getInvHumanOwner(invMgr))) {
-                    forceHolsterNow(invMgr);
-                    return;
+                    // 素手(BP_Fists_Inventory)での殴打使用は許可し、武器・アイテム使用のみ遮断
+                    var selectedInv = invMgr.add(OFFSETS.UDH_InventoryManager_SelectedInventory).readPointer();
+                    if (!isFistsInventory(selectedInv)) {
+                        forceHolsterNow(invMgr);
+                        return;
+                    }
                 }
             } catch (e) {}
             if (origUseInventory) { origUseInventory(invMgr, transformPtr, useStatePtr); }
@@ -1992,10 +2004,10 @@
             'void', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' }
         );
 
-        // クライアント予測近接攻撃（武器・素手）による ApplyMeleeDamage RPC ダメージをサーバー権威で完全遮断
+        // クライアント予測近接攻撃（武器のみ）による ApplyMeleeDamage RPC ダメージをサーバー権威で遮断（素手は許可）
         var meleeDamageCb = new NativeCallback(function (weaponPtr, hitsArrayPtr, attackStatePtr) {
             try {
-                if (isHumanIntimidated(getInventoryHumanOwner(weaponPtr))) {
+                if (!isFistsInventory(weaponPtr) && isHumanIntimidated(getInventoryHumanOwner(weaponPtr))) {
                     return;
                 }
             } catch (e) {}

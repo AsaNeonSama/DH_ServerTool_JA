@@ -1,0 +1,31 @@
+[package]
+name = "dh-client-voice"
+version = "0.1.0"
+edition = "2021"
+license-file.workspace = true
+repository.workspace = true
+description = "Dread Hunger client dual-mode UE4 native voice DLL (EOS voice in Lobby, UE4 native 48 kHz Opus voice on Dedicated Servers; supports direct injection as dh_voice_client.dll and drop-in X3DAudio1_7.dll proxying)"
+authors = ["アサネオン / Build With Antigravity"]
+build = "build.rs"
+
+[lib]
+name = "dh_voice_client"
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_SystemInformation",
+    "Win32_System_SystemServices",
+    "Win32_System_Threading",
+] }
+
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
+
+[lints]
+workspace = true

@@ -1,0 +1,3 @@
+EXPORTS
+    X3DAudioCalculate=dh_voice_cli_proxy_x3daudio_calculate @1
+    X3DAudioInitialize=dh_voice_cli_proxy_x3daudio_initialize @2

@@ -318,6 +318,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "dh-client-voice"
+version = "0.1.0"
+dependencies = [
+ "windows",
+ "winresource",
+]
+
+[[package]]
 name = "dh-gadget-injector"
 version = "0.1.0"
 dependencies = [

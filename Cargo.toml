@@ -5,6 +5,7 @@ members = [
     "crates/dh-gadget-injector",
     "crates/dh-server-tool",
     "crates/dh-client-eos-fix",
+    "crates/dh-client-voice",
 ]
 
 [workspace.package]
