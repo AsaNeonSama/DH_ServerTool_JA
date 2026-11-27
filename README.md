@@ -26,12 +26,12 @@ Dread Hunger Windows Dedicated Server（原生未改造サーバー）用の統�
   - `1: カスタムスペル(新呪文5種)`（サーバー側は純 JS でランタイム合成、クライアント配布用 `.pak` / `.sig` は `assets/advanced_content/client/paked/totem_spells/` に格納・配布出力先 `dist/advanced_content/totem_spells/`）
 - **クライアント EOS 再接続・同ポート再起動修正 DLL (`dist/client_fix/eos_fix/plan_a/eos_fix.dll`・`dist/client_fix/eos_fix/plan_b/eos_fix.dll` / 約 225 KB)**:
   - Rust ネイティブ実装 (`crates/dh-client-eos-fix/`) + 静的 CRT (`+crt-static`) による単体クライアント DLL（`VCRUNTIME140.dll` 不要・Steam オーバーレイ / OBS や `DH_TotemSpells_Client_p.pak` と完全非干渉）。`dsound.dll` の全 12 固定序号エクスポートを保持しているため、DLL インジェクタによる `eos_fix.dll` 直接注入と、ゲーム本体フォルダへ `dsound.dll` にリネーム配置するゼロインジェクタ起動の両方に対応します。
-  - **Plan A（標準・18 パッチ、`plan_a/eos_fix.dll`）**:
-    - 非公開／カスタム部屋の EOS ロビー検索権限を `EOS_LPL_PUBLICADVERTISED (0)` に補正しつつ、`LOBBYSEARCH` 属性を `bShouldAdvertise` 連動に制御し、試合終了・リセット時に EOS 公開設定が勝手にオフへ戻される挙動も抑止します。
+  - **Plan A（標準・19 パッチ、`plan_a/eos_fix.dll`）**:
+    - 非公開／カスタム部屋の EOS ロビー検索権限を `EOS_LPL_PUBLICADVERTISED (0)` に補正しつつ、`LOBBYSEARCH` 属性を `bShouldAdvertise` 連動に制御し、試合終了・リセット・セッション更新完了時（`OnMatchEnded` / `ResetCurrentData` / `OnOnlineSessionUpdateComplete`）に EOS 公開設定が勝手にオフへ戻される挙動も全面抑止します。
     - `SetLobbyAttributes` の 256B `MEMBERS` 切り詰めを最大 1000B（UTF-8 境界安全）へ拡張し、8 人全員を EOS メンバーリストに保持するとともに、試合開始後の `MEMBERS` 上書き保護・`ConnectToIP` 時の `STARTUTCDATETIME` 自動設定・進行中ロビー検索許可・Steam「ゲームに参加」(`+connect_lobby`) 維持によって船員の途中切断・クラッシュ再起動・Steam 招待再接続を全面修正します。
     - `UDH_GameInstance + 0x570`（前回接続 URL）の試合中重複接続抑止を維持したまま、ロビー復帰時（`PostUpdate`）・セッション参加完了時（`OnJoinSessionComplete`）・試合終了／リセット時（`OnMatchEnded` / `ResetCurrentData` / `OnDestroyComplete`）に `ResetURI` と `bHasGameStarted` を適切にリセットすることで、無限再接続を起こさずに固定ポートでの連続再起動（同端重開）と途中切断からの再接続を安定化します。
-  - **Plan B（Private URI 検証版・19 パッチ、`plan_b/eos_fix.dll` / `--features private-uri`）**:
-    - Plan A の全 18 パッチに加え、`FOnlineSessionEOS::AddLobbyAttribute`（`0x9CA894`）で `"URI"` 属性のみ `EOS_LAT_PRIVATE (1)`（ロビー参加メンバー限定公開）に切り替え、入室前の EOS 照会から専用サーバー IP を秘匿します。
+  - **Plan B（Private URI 検証版・20 パッチ、`plan_b/eos_fix.dll` / `--features private-uri`）**:
+    - Plan A の全 19 パッチに加え、`FOnlineSessionEOS::AddLobbyAttribute`（`0x9CA894`）で `"URI"` 属性のみ `EOS_LAT_PRIVATE (1)`（ロビー参加メンバー限定公開）に切り替え、入室前の EOS 照会から専用サーバー IP を秘匿します。
 - **個別選択 MOD (`1〜22`・サーバー単体動作)**:
   - `1: 役職ランダム` (`single/役職ランダム.js`)
   - `2: 開幕沈黙` (`single/開幕沈黙.js`)
@@ -88,7 +88,7 @@ Dread Hunger Windows Dedicated Server（原生未改造サーバー）用の統�
 - `crates/dh-win32/`: Win32 API ラッパー（Job Object・プロセス制御・PEB/OEP 読み取り・UDP/TCP テーブル・コンソール／クリップボード）
 - `crates/dh-gadget-injector/`: 独立再利用可能な Frida Gadget 17.27.4 OEP 早注入・キャッシュ管理・16→17 互換 Prelude・ループバック NDJSON ログチャンネル
 - `crates/dh-server-tool/`: メイン実行ファイル (`DH_ServerTool_JA.exe`)（設定・AES-256-GCM・Web コンソール・双タブ TUI・CLI・MOD レジストリ・Supervisor）
-- `crates/dh-client-eos-fix/`: クライアント用 EOS 再接続・同ポート再起動修正 DLL（`eos_fix.dll` 直接注入／`dsound.dll` プロキシ両対応、Plan A 18 パッチ標準版／Plan B 19 パッチ `--features private-uri`：EOS ロビー検索権限・公開状態保持・`MEMBERS` 1000B 拡張・Steam 招待維持・`STARTUTCDATETIME` 補完・`ResetURI` / `bHasGameStarted` 制御）
+- `crates/dh-client-eos-fix/`: クライアント用 EOS 再接続・同ポート再起動修正 DLL（`eos_fix.dll` 直接注入／`dsound.dll` プロキシ両対応、Plan A 19 パッチ標準版／Plan B 20 パッチ `--features private-uri`：EOS ロビー検索権限・公開状態保持・`MEMBERS` 1000B 拡張・Steam 招待維持・`STARTUTCDATETIME` 補完・`ResetURI` / `bHasGameStarted` 制御）
 - `assets/patches/`: デフォルト自動注入・サーバー単体 MOD スクリプト (`.js`)
 - `assets/advanced_content/server/`: コンテンツ MOD 用サーバー側スクリプト (`.js`)
 - `assets/advanced_content/client/paked/`: コンテンツ MOD 用クライアント配布 `.pak` / `.sig`
@@ -111,8 +111,8 @@ cargo build --release -p dh-client-eos-fix --features private-uri
 配布用 `dist/` 出力構成（git 無視対象）:
 - `dist/DH_ServerTool_JA.exe`: サーバーコントローラ本体（`target/release/DH_ServerTool_JA.exe` からコピー）
 - `dist/advanced_content/<MOD名>/*.{pak,sig}`: クライアント配布用 `.pak` / `.sig` のみ（`assets/advanced_content/client/paked/` から MOD 別サブフォルダを維持してコピー。例: `dist/advanced_content/totem_spells/DH_TotemSpells_Client_p.{pak,sig}`。`source/`・`.uasset`/`.uexp`・サーバー `.js` は同梱しません）
-- `dist/client_fix/eos_fix/plan_a/eos_fix.dll`: クライアント EOS 修正 DLL Plan A（標準 18 パッチ、デフォルトリリースビルド）
-- `dist/client_fix/eos_fix/plan_b/eos_fix.dll`: クライアント EOS 修正 DLL Plan B（19 パッチ、`--features private-uri` リリースビルド）
+- `dist/client_fix/eos_fix/plan_a/eos_fix.dll`: クライアント EOS 修正 DLL Plan A（標準 19 パッチ、デフォルトリリースビルド）
+- `dist/client_fix/eos_fix/plan_b/eos_fix.dll`: クライアント EOS 修正 DLL Plan B（20 パッチ、`--features private-uri` リリースビルド）
 
 ## ライセンス / License
 

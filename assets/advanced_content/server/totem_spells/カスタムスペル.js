@@ -111,12 +111,13 @@
         teleportSpiritWalkFallbackSec: 2.6,
         teleportSpiritWalkExitDelaySec: 0.15,
 
-        // 威嚇 (TS_Intimidate): 通知なし・効果音のみ・霊界同等の即発動(STS_CASTER) / 半径 50m (5000 UU) / 暗視野 + 段階別スタミナ回復遅延(0/3/5s)
+        // 威嚇 (TS_Intimidate): 通知なし・効果音のみ・霊界同等の即発動(STS_CASTER) / 半径 50m (5000 UU) / 暗視野 + 段階別スタミナ回復遅延(0/3/5s) + COND_OwnerOnly クライアント丸腰同期
         intimidateCooldownSec: 120.0,
         intimidateRadiusUU: 5000.0,
         intimidateDurationsByTier: { 2: 5.0, 3: 10.0, 4: 15.0 },
         intimidateStaminaRegenDelayByTier: { 2: 0.0, 3: 3.0, 4: 5.0 },
         intimidateNativeStaminaDelaySec: 5.0, // ADH_HumanCharacter::Tick (0xD74F44) のネイティブ 5.0s 閾値
+        intimidateRepSignalValue: -1.0, // SanityBoostRemaining (+0xFF0, COND_OwnerOnly) へ書き込むクライアント毎フレーム丸腰同期信号（負値なので未使用 Sanity 系 UI/Tick へ副作用ゼロ）
         intimidateCameraFadeAlpha: 0.74,
         intimidateCameraFadeTimeSec: 0.45,
         intimidateCameraFadeOutTimeSec: 0.35,
@@ -359,6 +360,7 @@
         ADH_HumanCharacter_CurrentStamina: 0xA50,
         ADH_HumanCharacter_bSpiritWalking: 0xC71,
         ADH_HumanCharacter_SpiritWalkTimerHandle: 0xD50,
+        ADH_HumanCharacter_SanityBoostRemaining: 0xFF0, // COND_OwnerOnly 複製 float（GetSanityBoostRemaining 0xEC63E5 / サーバー・クライアント共 Tick 書込ゼロ）
         ADH_HumanCharacter_LastStaminaExhaustedTime: 0x102C, // UWorld::TimeSeconds 基準（0.0=遅延なし, TimeSeconds - val <= 5.0s の間回復停止）
 
         UDH_InventoryManager_HumanOwner: 0xD8,
@@ -1515,6 +1517,17 @@
         return ptr(0);
     }
 
+    function setIntimidateRepSignal(humanPtr, active) {
+        if (!humanPtr || humanPtr.isNull() || isPendingKill(humanPtr)) {
+            return;
+        }
+        try {
+            humanPtr.add(OFFSETS.ADH_HumanCharacter_SanityBoostRemaining).writeFloat(
+                active ? CONFIG.intimidateRepSignalValue : 0.0
+            );
+        } catch (eSig) {}
+    }
+
     function applyIntimidateCameraFade(pcPtr, enableFading, fromAlpha, toAlpha, fadeTimeSec, holdWhenFinished) {
         if (!pcPtr || pcPtr.isNull() || isPendingKill(pcPtr)) {
             return;
@@ -1611,13 +1624,18 @@
         if (!entry) {
             return;
         }
+        // クライアント側毎フレーム監視 Actor (BP_IntimidateWatcher) へ威嚇解除を即時通知
+        setIntimidateRepSignal(entry.human, false);
         var pc = resolvePlayerControllerForIntimidate(entry);
+        var liveHuman = resolveLiveHumanForIntimidate(entry, pc);
+        if (!liveHuman.isNull() && (!entry.human || entry.human.isNull() || !liveHuman.equals(entry.human))) {
+            setIntimidateRepSignal(liveHuman, false);
+        }
         if (!pc.isNull()) {
             // 試行 #0: 0.74 -> 0.0 の滑らかなフェードアウト (0.35s, hold=0)
             applyIntimidateCameraFade(pc, true, -1.0, 0.0, CONFIG.intimidateCameraFadeOutTimeSec, false);
         }
         if (!skipUnholster) {
-            var liveHuman = resolveLiveHumanForIntimidate(entry, pc);
             tryUnholsterLiveHuman(liveHuman, entry.invMgr);
         }
         if (enqueueRetries) {
@@ -1708,6 +1726,7 @@
                 // 冪等ハードクリア (enable=0, from=0, to=0, time=0.0, hold=0):
                 // 既に解除済みなら無害なノーオペ、試行 #0 欠損・死亡遷移中ロスト時は確実に暗視野を強制解除
                 applyIntimidateCameraFade(livePc, false, 0.0, 0.0, 0.0, false);
+                setIntimidateRepSignal(liveHuman, false);
                 if (!liveHuman.isNull() && isHumanAlive(liveHuman)) {
                     tryUnholsterLiveHuman(liveHuman, ptr(0));
                 }
@@ -3757,13 +3776,22 @@
                 pc: pc,
                 invMgr: invMgr,
                 expireTime: nextExpire,
-                spellKeys: spellKeys
+                spellKeys: spellKeys,
+                thirdPersonHolstered: false
             };
 
-            // 発動時の初回収刀・照準解除のみ呼出（以降はクライアント毎フレーム収刀＋サーバー側 RPC 権威遮断に委譲）
+            // COND_OwnerOnly 複製フィールド (SanityBoostRemaining = -1.0f) で被弾者クライアントの毎フレーム丸腰監視を起動
+            setIntimidateRepSignal(human, true);
+
+            // 発動時の初回収刀・照準解除を呼出（後揺れクールダウン等で弾かれた場合は Tick で 1 回のみ補完収刀）
             if (!invMgr.isNull() && !isPendingKill(invMgr)) {
                 if (origAimInventory) { origAimInventory(invMgr, 0); }
                 forceHolsterNow(invMgr);
+                try {
+                    if (invMgr.add(OFFSETS.UDH_InventoryManager_SelectedViewClass).readPointer().isNull()) {
+                        intimidatedHumans[hKey].thirdPersonHolstered = true;
+                    }
+                } catch (eVc) {}
             }
 
             // 暗視野カメラフェード（ClientSetCameraFade: 行動阻害なし・現在値から滑らかに 0.74 黒フェード保持）
@@ -4270,7 +4298,7 @@
                     updateWarshipCache(currentGameState);
 
                     // 1) 威嚇 (TS_Intimidate) 期限切れ/死亡時の安全フォールバック回収＆有界リトライキュー駆動
-                    //    ※ 進行中の毎フレーム武器監視・再収刀は一切行わない（純粋な発動呼出＋終了/死亡コールバック設計）
+                    //    ※ 被弾瞬間の後揺れクールダウン等で初回 3P 収刀が弾かれた個体のみ 1 回だけ補完収刀
                     var intKeys = Object.keys(intimidatedHumans);
                     for (var i = 0; i < intKeys.length; i++) {
                         var ik = intKeys[i];
@@ -4278,6 +4306,13 @@
                         var ieAlive = ie ? isHumanAlive(ie.human) : false;
                         if (!ie || wt.timeSeconds >= ie.expireTime || !ieAlive) {
                             clearIntimidateEntry(ik, ie, !ieAlive, true);
+                        } else if (!ie.thirdPersonHolstered && ie.invMgr && !ie.invMgr.isNull() && !isPendingKill(ie.invMgr)) {
+                            try {
+                                forceHolsterNow(ie.invMgr);
+                                if (ie.invMgr.add(OFFSETS.UDH_InventoryManager_SelectedViewClass).readPointer().isNull()) {
+                                    ie.thirdPersonHolstered = true;
+                                }
+                            } catch (eHol) {}
                         }
                     }
                     tickPendingIntimidateCleanups(wt.timeSeconds);

@@ -2,7 +2,6 @@
 /dist/
 /.build-cache/
 /.dh_cache/
-/assets/knowlage/
 patch_runtime.log
 config.json
 todo.md

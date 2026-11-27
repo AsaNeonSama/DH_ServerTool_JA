@@ -8,7 +8,7 @@ use crate::structs::patch::{
 pub const TARGET_PROCESS_NAME: &str = "DreadHunger-Win64-Shipping.exe";
 
 /// Number of direct in-place EOS lobby code patches applied to the client image.
-pub const DIRECT_PATCH_COUNT: usize = 10;
+pub const DIRECT_PATCH_COUNT: usize = 11;
 
 /// Number of owner-gated `ResetURI` trampoline patches (`OnMatchEnded`, `ResetCurrentData`).
 pub const OWNER_RESET_TRAMPOLINE_COUNT: usize = 2;
@@ -25,7 +25,7 @@ pub const PRIVATE_URI_PATCH_COUNT: usize = 1;
 #[cfg(not(feature = "private-uri"))]
 pub const PRIVATE_URI_PATCH_COUNT: usize = 0;
 
-/// Total number of patches enabled in this build (Plan A: 18 patches; Plan B `private-uri`: 19 patches).
+/// Total number of patches enabled in this build (Plan A: 19 patches; Plan B `private-uri`: 20 patches).
 pub const TOTAL_PATCH_COUNT: usize = DIRECT_PATCH_COUNT
     + 1
     + OWNER_RESET_TRAMPOLINE_COUNT
@@ -384,6 +384,12 @@ pub const DIRECT_PATCHES: [BytePatch; DIRECT_PATCH_COUNT] = [
     BytePatch {
         name: "ResetCurrentData_KeepLobbyPublic",
         rva: 0x00E8_B338,
+        expected: &[0xC6, 0x80, 0xB0, 0x04, 0x00, 0x00, 0x00],
+        replacement: &[0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90],
+    },
+    BytePatch {
+        name: "OnOnlineSessionUpdateComplete_KeepLobbyPublic",
+        rva: 0x00E8_2734,
         expected: &[0xC6, 0x80, 0xB0, 0x04, 0x00, 0x00, 0x00],
         replacement: &[0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90],
     },

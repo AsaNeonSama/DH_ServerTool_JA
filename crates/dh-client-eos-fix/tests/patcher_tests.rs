@@ -232,10 +232,10 @@ fn all_trampoline_expected_call_bytes_match_target_rvas() {
 #[test]
 fn total_patch_count_matches_active_feature_plan() {
     #[cfg(not(feature = "private-uri"))]
-    assert_eq!(TOTAL_PATCH_COUNT, 18);
+    assert_eq!(TOTAL_PATCH_COUNT, 19);
 
     #[cfg(feature = "private-uri")]
-    assert_eq!(TOTAL_PATCH_COUNT, 19);
+    assert_eq!(TOTAL_PATCH_COUNT, 20);
 }
 
 #[test]
