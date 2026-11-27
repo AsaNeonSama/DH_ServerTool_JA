@@ -42,13 +42,20 @@ var ADH_SpellManager_SetEquippedSpells = new NativeFunction(moduleBase.add(0xE81
 var ADH_SpellManager_SetSpellChargeLevel = new NativeFunction(moduleBase.add(0xE82CC0), 'void', ['pointer', 'float'], { abi: 'win64', exceptions: 'propagate' });
 var ADH_HumanCharacter_SetIsSpiritWalking = new NativeFunction(moduleBase.add(0xD70310), 'void', ['pointer', 'int8', 'float'], { abi: 'win64', exceptions: 'propagate' });
 var AActor_GetWorldTimerManager = new NativeFunction(moduleBase.add(0x22DDC30), 'pointer', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
+var AActor_ForceNetUpdate = new NativeFunction(moduleBase.add(0x22D8050), 'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
 var FTimerManager_FindTimer = new NativeFunction(moduleBase.add(0x28F2D80), 'pointer', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
 var FTimerManager_InternalClearTimer = new NativeFunction(moduleBase.add(0x28F6A00), 'void', ['pointer', 'uint64'], { abi: 'win64', exceptions: 'propagate' });
 var UKismetSystemLibrary_ExecuteConsoleCommand = new NativeFunction(moduleBase.add(0x25EFC50), 'void', ['pointer', 'pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var UActorChannel_WriteContentBlockPayload = new NativeFunction(moduleBase.add(0x24DEE80), 'int32', ['pointer', 'pointer', 'pointer', 'uint8', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var FNetBitWriter_Ctor = new NativeFunction(moduleBase.add(0x11E7320), 'pointer', ['pointer', 'pointer', 'int64'], { abi: 'win64', exceptions: 'propagate' });
+var FBitWriter_WriteBit = new NativeFunction(moduleBase.add(0x1156AF0), 'void', ['pointer', 'uint8'], { abi: 'win64', exceptions: 'propagate' });
+var FBitWriter_SerializeIntPacked = new NativeFunction(moduleBase.add(0x1154590), 'void', ['pointer', 'pointer'], { abi: 'win64', exceptions: 'propagate' });
+var FArchiveState_Dtor = new NativeFunction(moduleBase.add(0x114A9D0), 'void', ['pointer'], { abi: 'win64', exceptions: 'propagate' });
 
 var APlayerController_BeginPlay_addr = moduleBase.add(0xE2DBC0);
 var ADH_GameState_Tick_addr = moduleBase.add(0xDAD420);
 var ADH_GameState_HandleMatchHasStarted_addr = moduleBase.add(0xD99080);
+var FObjectReplicator_ReplicateProperties_addr = moduleBase.add(0x2504F60);
 
 // ============================================================================
 // UE4 構造体オフセット
@@ -64,6 +71,7 @@ var UE_OFFSETS = {
     sceneComponentToWorldRot: 0x1C0,
     sceneComponentToWorldPos: 0x1D0,
     worldGameInstance: 0x180,
+    worldTimeSeconds: 0x598,
     gameInstancePlayerRoleList: 0x3B8,
     gameStateAuthorityGameMode: 0x228,
     gameStatePlayerArray: 0x238,
@@ -74,6 +82,7 @@ var UE_OFFSETS = {
     playerStateFlags: 0x22A,
     playerStatePlayerName: 0x300,
     playerStateSpellManager: 0x488,
+    playerStateIsThrall: 0x572,
     playerStateOtherThralls: 0x578,
     playerStateSelectedRole: 0x590,
     playerStateRealPawn: 0x638,
@@ -81,9 +90,27 @@ var UE_OFFSETS = {
     roleDataOnlineName: 0x48,
     playerControllerPlayerState: 0x228,
     playerControllerPawn: 0x250,
+    playerControllerPlayer: 0x298,
     playerControllerCheatManager: 0x338,
+    playerControllerNetConnection: 0x418,
+    netConnectionPlayerController: 0x30,
+    actorChannelActor: 0x70,
+    outBunchErrorFlags: 0x29,
+    outBunchPackageMap: 0xC0,
+    bitWriterBufferData: 0x98,
+    bitWriterNumBits: 0xA8,
+    bitWriterMaxBits: 0xB0,
+    bitWriterAllowResize: 0xB8,
+    replicatorFlags: 0x08,
+    replicatorRepLayout: 0x20,
+    replicatorObjectPtr: 0x48,
+    replicatorConnection: 0x50,
+    replicatorOwningChannel: 0x58,
+    repLayoutCmds: 0x38,
+    fPropertyNamePrivate: 0x28,
     humanInventoryManager: 0x808,
     humanLastDHPlayerState: 0xC40,
+    humanIsSpiritWalking: 0xC71,
     humanSpiritWalkTimerHandle: 0xD50
 };
 
@@ -241,11 +268,10 @@ function readFStringNonOwning(fstrPtr) {
     }
 }
 
-function getUObjectName(uObjectPtr) {
-    if (uObjectPtr.isNull()) {
+function readFNamePlainString(namePrivatePtr) {
+    if (namePrivatePtr.isNull()) {
         return '';
     }
-    var namePrivatePtr = uObjectPtr.add(UE_OFFSETS.uObjectNamePrivate);
     var nameBuffer = Memory.alloc(16);
     nameBuffer.writePointer(ptr(0));
     nameBuffer.add(8).writeS32(0);
@@ -266,6 +292,13 @@ function getUObjectName(uObjectPtr) {
         }
     }
     return text ? text : '';
+}
+
+function getUObjectName(uObjectPtr) {
+    if (uObjectPtr.isNull()) {
+        return '';
+    }
+    return readFNamePlainString(uObjectPtr.add(UE_OFFSETS.uObjectNamePrivate));
 }
 
 function findObjectByPath(objectPath, targetClassPtr) {
@@ -362,7 +395,7 @@ function removeFromOtherThrallsArray(playerStatePtr, targetToRemovePtr) {
     var dataPtr = otherThrallsPtr.readPointer();
     var count = otherThrallsPtr.add(8).readS32();
     if (dataPtr.isNull() || count <= 0 || count > 64) {
-        return;
+        return false;
     }
     var writeIdx = 0;
     for (var i = 0; i < count; i++) {
@@ -376,18 +409,260 @@ function removeFromOtherThrallsArray(playerStatePtr, targetToRemovePtr) {
     }
     if (writeIdx !== count) {
         otherThrallsPtr.add(8).writeS32(writeIdx);
+        return true;
     }
+    return false;
 }
 
 var trackedGameStatePtr = ptr(0);
 var summonedThrallPlayerStates = [];
 var savedEquippedSpellsByPs = {};
 
+// ============================================================================
+// リモートクライアント側 bIsThrall=false 同期 (COND_OwnerOnly 残留対策)
+// ============================================================================
+// ADH_PlayerState::bIsThrall (+0x572) は COND_OwnerOnly のため、傀儡同士では
+// OtherThralls 経由の OnRep_OtherThralls() がクライアントローカルで仲間の bIsThrall=1 を立てる。
+// その後コンソールで片方を探検家に戻しても OnRep_OtherThralls() は除外された要素の
+// bIsThrall を 0 に戻さず、スコアボード表示および召喚系呪文のターゲット判定が傀儡扱いのまま残留する。
+// そのため、FObjectReplicator::ReplicateProperties の非オーナー向け送信時に
+// bIsThrall=0 のみの ContentBlock を追記し、クライアント側で bIsThrall=0 と OnRep_IsThrall を確実に発火させる。
+var THRALL_CLEAR_SEND_COUNT = 4;
+var THRALL_CLEAR_RESEND_INTERVAL_SEC = 0.35;
+var MAX_PENDING_THRALL_CLEAR_TASKS = 256;
+var REPCMD_PROPERTY_BOOL = 0x15;
+var cachedPlayerStateIsThrallRepHandle = 0;
+var pendingThrallClearTasks = {};
+var pendingThrallClearCount = 0;
+
+function resetPendingThrallClearTasks() {
+    pendingThrallClearTasks = {};
+    pendingThrallClearCount = 0;
+}
+
+function getWorldTimeSeconds() {
+    var worldPtr = GWorld_ptr.readPointer();
+    if (worldPtr.isNull() || isPendingKill(worldPtr)) {
+        return 0.0;
+    }
+    var timeSec = worldPtr.add(UE_OFFSETS.worldTimeSeconds).readFloat();
+    return Number.isFinite(timeSec) ? timeSec : 0.0;
+}
+
+function getPlayerControllerNetConnection(playerControllerPtr) {
+    if (playerControllerPtr.isNull() || isPendingKill(playerControllerPtr)) {
+        return ptr(0);
+    }
+    var netConn = playerControllerPtr.add(UE_OFFSETS.playerControllerNetConnection).readPointer();
+    if (!netConn.isNull() && !isPendingKill(netConn)) {
+        return netConn;
+    }
+    var playerObj = playerControllerPtr.add(UE_OFFSETS.playerControllerPlayer).readPointer();
+    if (!playerObj.isNull() && !isPendingKill(playerObj)) {
+        var linkedPc = playerObj.add(UE_OFFSETS.netConnectionPlayerController).readPointer();
+        if (!linkedPc.isNull() && linkedPc.equals(playerControllerPtr)) {
+            return playerObj;
+        }
+    }
+    return ptr(0);
+}
+
+function getPlayerStateNetConnection(playerStatePtr) {
+    if (playerStatePtr.isNull() || isPendingKill(playerStatePtr)) {
+        return ptr(0);
+    }
+    var ownerPc = playerStatePtr.add(UE_OFFSETS.playerStateOwnerController).readPointer();
+    if (ownerPc.isNull() || isPendingKill(ownerPc) || !isA(ownerPc, getPlayerControllerClass())) {
+        return ptr(0);
+    }
+    return getPlayerControllerNetConnection(ownerPc);
+}
+
+function resolvePlayerStateIsThrallRepHandle(repLayoutPtr) {
+    if (cachedPlayerStateIsThrallRepHandle > 0) {
+        return cachedPlayerStateIsThrallRepHandle;
+    }
+    if (repLayoutPtr.isNull()) {
+        return 0;
+    }
+    var cmdsData = repLayoutPtr.add(UE_OFFSETS.repLayoutCmds).readPointer();
+    var cmdsNum = repLayoutPtr.add(UE_OFFSETS.repLayoutCmds + 8).readS32();
+    if (cmdsData.isNull() || cmdsNum <= 0 || cmdsNum > 512) {
+        return 0;
+    }
+    for (var i = 0; i < cmdsNum; i++) {
+        var cmdPtr = cmdsData.add(i * 0x20);
+        var offset = cmdPtr.add(0x0C).readS32();
+        var typeByte = cmdPtr.add(0x1C).readU8();
+        if (offset !== UE_OFFSETS.playerStateIsThrall || typeByte !== REPCMD_PROPERTY_BOOL) {
+            continue;
+        }
+        var propPtr = cmdPtr.readPointer();
+        if (propPtr.isNull()) {
+            continue;
+        }
+        if (readFNamePlainString(propPtr.add(UE_OFFSETS.fPropertyNamePrivate)) === 'bIsThrall') {
+            var relHandle = cmdPtr.add(0x14).readU16();
+            if (relHandle > 0) {
+                cachedPlayerStateIsThrallRepHandle = relHandle;
+                return relHandle;
+            }
+        }
+    }
+    return 0;
+}
+
+function makeThrallClearKey(targetPsPtr, viewerConnPtr) {
+    return targetPsPtr.toString() + '|' + viewerConnPtr.toString();
+}
+
+function removeThrallClearKey(taskKey) {
+    if (pendingThrallClearTasks.hasOwnProperty(taskKey)) {
+        delete pendingThrallClearTasks[taskKey];
+        if (pendingThrallClearCount > 0) {
+            pendingThrallClearCount -= 1;
+        }
+    }
+}
+
+function cancelThrallClearForPair(targetPsPtr, viewerConnPtr) {
+    if (targetPsPtr.isNull() || viewerConnPtr.isNull()) {
+        return;
+    }
+    removeThrallClearKey(makeThrallClearKey(targetPsPtr, viewerConnPtr));
+}
+
+function isPairBothActiveThralls(targetPsPtr, viewerConnPtr) {
+    if (targetPsPtr.isNull() || isPendingKill(targetPsPtr) || viewerConnPtr.isNull() || isPendingKill(viewerConnPtr)) {
+        return false;
+    }
+    if (targetPsPtr.add(UE_OFFSETS.playerStateIsThrall).readU8() === 0) {
+        return false;
+    }
+    var viewerPc = viewerConnPtr.add(UE_OFFSETS.netConnectionPlayerController).readPointer();
+    if (viewerPc.isNull() || isPendingKill(viewerPc)) {
+        return false;
+    }
+    var viewerPs = viewerPc.add(UE_OFFSETS.playerControllerPlayerState).readPointer();
+    if (viewerPs.isNull() || isPendingKill(viewerPs)) {
+        return false;
+    }
+    return viewerPs.add(UE_OFFSETS.playerStateIsThrall).readU8() !== 0;
+}
+
+function enqueueThrallClearForPair(targetPsPtr, viewerConnPtr, nowSec) {
+    if (targetPsPtr.isNull() || isPendingKill(targetPsPtr) || viewerConnPtr.isNull() || isPendingKill(viewerConnPtr)) {
+        return;
+    }
+    // オーナー接続には通常の COND_OwnerOnly で同期されるため対象外
+    var viewerPc = viewerConnPtr.add(UE_OFFSETS.netConnectionPlayerController).readPointer();
+    if (!viewerPc.isNull() && !isPendingKill(viewerPc)) {
+        var viewerPs = viewerPc.add(UE_OFFSETS.playerControllerPlayerState).readPointer();
+        if (!viewerPs.isNull() && viewerPs.equals(targetPsPtr)) {
+            return;
+        }
+    }
+    if (isPairBothActiveThralls(targetPsPtr, viewerConnPtr)) {
+        return;
+    }
+    var taskKey = makeThrallClearKey(targetPsPtr, viewerConnPtr);
+    var isNew = !pendingThrallClearTasks.hasOwnProperty(taskKey);
+    if (isNew && pendingThrallClearCount >= MAX_PENDING_THRALL_CLEAR_TASKS) {
+        return;
+    }
+    pendingThrallClearTasks[taskKey] = {
+        targetPs: targetPsPtr,
+        viewerConn: viewerConnPtr,
+        remainingSends: THRALL_CLEAR_SEND_COUNT,
+        nextForceUpdateAt: nowSec + THRALL_CLEAR_RESEND_INTERVAL_SEC
+    };
+    if (isNew) {
+        pendingThrallClearCount += 1;
+    }
+    AActor_ForceNetUpdate(targetPsPtr);
+}
+
+function tickPendingThrallClears() {
+    if (pendingThrallClearCount === 0) {
+        return;
+    }
+    var nowSec = getWorldTimeSeconds();
+    var keys = Object.keys(pendingThrallClearTasks);
+    var forcedActors = {};
+    for (var i = 0; i < keys.length; i++) {
+        var key = keys[i];
+        var task = pendingThrallClearTasks[key];
+        if (!task) {
+            continue;
+        }
+        if (task.remainingSends <= 0 ||
+            task.targetPs.isNull() || isPendingKill(task.targetPs) ||
+            task.viewerConn.isNull() || isPendingKill(task.viewerConn) ||
+            isPairBothActiveThralls(task.targetPs, task.viewerConn)) {
+            removeThrallClearKey(key);
+            continue;
+        }
+        if (nowSec >= task.nextForceUpdateAt) {
+            task.nextForceUpdateAt = nowSec + THRALL_CLEAR_RESEND_INTERVAL_SEC;
+            var actorKey = task.targetPs.toString();
+            if (!forcedActors.hasOwnProperty(actorKey)) {
+                forcedActors[actorKey] = true;
+                AActor_ForceNetUpdate(task.targetPs);
+            }
+        }
+    }
+}
+
+function appendIsThrallFalseContentBlock(replicatorPtr, owningChannelPtr, targetPsPtr, outBunchPtr, repLayoutPtr) {
+    var relHandle = resolvePlayerStateIsThrallRepHandle(repLayoutPtr);
+    if (relHandle === 0) {
+        return false;
+    }
+    if ((outBunchPtr.add(UE_OFFSETS.outBunchErrorFlags).readU8() & 1) !== 0) {
+        return false;
+    }
+    var allowResize = outBunchPtr.add(UE_OFFSETS.bitWriterAllowResize).readU8();
+    var bunchNumBits = outBunchPtr.add(UE_OFFSETS.bitWriterNumBits).readS64().toNumber();
+    var bunchMaxBits = outBunchPtr.add(UE_OFFSETS.bitWriterMaxBits).readS64().toNumber();
+    if (allowResize === 0 && (bunchMaxBits - bunchNumBits) < 64) {
+        return false;
+    }
+
+    var packageMapPtr = outBunchPtr.add(UE_OFFSETS.outBunchPackageMap).readPointer();
+    var payloadWriter = Memory.alloc(0xE0);
+    FNetBitWriter_Ctor(payloadWriter, packageMapPtr, 256);
+    try {
+        var packedBuf = Memory.alloc(8);
+        // FRepLayout::SendProperties と完全同一のワイヤ形式:
+        // [bDoChecksum=0] [Handle=bIsThrall] [Value=0] [EndHandle=0]
+        FBitWriter_WriteBit(payloadWriter, 0);
+        packedBuf.writeU32(relHandle);
+        FBitWriter_SerializeIntPacked(payloadWriter, packedBuf);
+        FBitWriter_WriteBit(payloadWriter, 0);
+        packedBuf.writeU32(0);
+        FBitWriter_SerializeIntPacked(payloadWriter, packedBuf);
+
+        UActorChannel_WriteContentBlockPayload(owningChannelPtr, targetPsPtr, outBunchPtr, 1, payloadWriter);
+    } finally {
+        var writerBufData = payloadWriter.add(UE_OFFSETS.bitWriterBufferData).readPointer();
+        if (!writerBufData.isNull()) {
+            FMemory_Free(writerBufData);
+        }
+        FArchiveState_Dtor(payloadWriter);
+    }
+
+    // FObjectReplicator::bLastUpdateEmpty (bit 0) をクリアし、送信済み扱いに整合させる
+    var repFlagsBits = replicatorPtr.add(UE_OFFSETS.replicatorFlags).readU32();
+    replicatorPtr.add(UE_OFFSETS.replicatorFlags).writeU32((repFlagsBits & ~1) >>> 0);
+    return true;
+}
+
 function pruneSummonedThrallPlayerStates(gameStatePtr) {
     if (!trackedGameStatePtr.equals(gameStatePtr)) {
         trackedGameStatePtr = gameStatePtr;
         summonedThrallPlayerStates = [];
         savedEquippedSpellsByPs = {};
+        resetPendingThrallClearTasks();
         return;
     }
     var alive = [];
@@ -637,6 +912,20 @@ function setTargetPlayerIsThrall(gameStatePtr, playerControllerPtr, isThrall) {
         return;
     }
     pruneSummonedThrallPlayerStates(gameStatePtr);
+    var targetConn = getPlayerControllerNetConnection(playerControllerPtr);
+    var playerArrayPtr = gameStatePtr.add(UE_OFFSETS.gameStatePlayerArray);
+    var playerListDataPtr = playerArrayPtr.readPointer();
+    var playerCount = playerArrayPtr.add(8).readU32();
+    var otherPlayerStates = [];
+    if (!playerListDataPtr.isNull() && playerCount > 0 && playerCount <= 64) {
+        for (var p = 0; p < playerCount; p++) {
+            var candidatePs = playerListDataPtr.add(8 * p).readPointer();
+            if (!candidatePs.isNull() && !isPendingKill(candidatePs) && !candidatePs.equals(playerStatePtr)) {
+                otherPlayerStates.push(candidatePs);
+            }
+        }
+    }
+
     if (isThrall) {
         ADH_PlayerState_SetIsThrall(playerStatePtr, 1);
         // クライアント側 SetEquippedSpellsFromSave(+0x7B9) は試合中1度しか走らないため、
@@ -647,28 +936,57 @@ function setTargetPlayerIsThrall(gameStatePtr, playerControllerPtr, isThrall) {
             if (!dummyPs.isNull() && !isPendingKill(dummyPs)) {
                 addUniquePointer(playerStatePtr.add(UE_OFFSETS.playerStateOtherThralls), dummyPs);
                 addUniquePointer(dummyPs.add(UE_OFFSETS.playerStateOtherThralls), playerStatePtr);
+                cancelThrallClearForPair(dummyPs, targetConn);
             }
         }
+        // 傀儡へ再昇格した場合、他傀儡との間で進行中だった bIsThrall=0 クリア予約を取り消し即時再同期
+        for (var t = 0; t < otherPlayerStates.length; t++) {
+            var allyPs = otherPlayerStates[t];
+            if (allyPs.add(UE_OFFSETS.playerStateIsThrall).readU8() !== 0) {
+                var allyConn = getPlayerStateNetConnection(allyPs);
+                cancelThrallClearForPair(playerStatePtr, allyConn);
+                cancelThrallClearForPair(allyPs, targetConn);
+                AActor_ForceNetUpdate(allyPs);
+            }
+        }
+        AActor_ForceNetUpdate(playerStatePtr);
         return;
     }
     // 傀儡から探検家へ安全に戻す:
-    // 1. 傀儡ビジョンを無効化
+    // 1. 傀儡ビジョンと霊界歩行を無効化
     ADH_PlayerController_SetDesiresThrallVision_Impl(playerControllerPtr, 0);
+    var targetPawn = playerControllerPtr.add(UE_OFFSETS.playerControllerPawn).readPointer();
+    if (!targetPawn.isNull() && !isPendingKill(targetPawn)) {
+        var pawnClassPtr = targetPawn.add(UE_OFFSETS.uObjectClassPrivate).readPointer();
+        if (!pawnClassPtr.isNull() && getUObjectName(pawnClassPtr) === 'BP_HumanCharacter_C') {
+            if (targetPawn.add(UE_OFFSETS.humanIsSpiritWalking).readU8() !== 0) {
+                setSpiritWalkingState(targetPawn, 0);
+            }
+        }
+    }
 
-    // 2. 対象および他プレイヤー(召喚傀儡海兵含む)の OtherThralls 配列から対象を除去
+    // 2. 対象が認知していた仲間の傀儡一覧を退避してから、対象および他プレイヤーの OtherThralls 配列を整理
+    var priorOtherThralls = [];
     var targetOtherThrallsPtr = playerStatePtr.add(UE_OFFSETS.playerStateOtherThralls);
-    if (targetOtherThrallsPtr.add(8).readS32() > 0) {
+    var priorOtherDataPtr = targetOtherThrallsPtr.readPointer();
+    var priorOtherCount = targetOtherThrallsPtr.add(8).readS32();
+    if (!priorOtherDataPtr.isNull() && priorOtherCount > 0 && priorOtherCount <= 64) {
+        for (var k = 0; k < priorOtherCount; k++) {
+            var formerAllyPs = priorOtherDataPtr.add(8 * k).readPointer();
+            if (!formerAllyPs.isNull() && !isPendingKill(formerAllyPs) && !formerAllyPs.equals(playerStatePtr)) {
+                priorOtherThralls.push(formerAllyPs);
+            }
+        }
+    }
+    if (priorOtherCount > 0) {
         targetOtherThrallsPtr.add(8).writeS32(0);
     }
-    var playerArrayPtr = gameStatePtr.add(UE_OFFSETS.gameStatePlayerArray);
-    var playerListDataPtr = playerArrayPtr.readPointer();
-    var playerCount = playerArrayPtr.add(8).readU32();
-    if (!playerListDataPtr.isNull() && playerCount > 0 && playerCount <= 64) {
-        for (var i = 0; i < playerCount; i++) {
-            var otherPlayerStatePtr = playerListDataPtr.add(8 * i).readPointer();
-            if (!otherPlayerStatePtr.isNull() && !isPendingKill(otherPlayerStatePtr) && !otherPlayerStatePtr.equals(playerStatePtr)) {
-                removeFromOtherThrallsArray(otherPlayerStatePtr, playerStatePtr);
-            }
+
+    var modifiedOtherPlayerStates = [];
+    for (var i = 0; i < otherPlayerStates.length; i++) {
+        var otherPlayerStatePtr = otherPlayerStates[i];
+        if (removeFromOtherThrallsArray(otherPlayerStatePtr, playerStatePtr)) {
+            modifiedOtherPlayerStates.push(otherPlayerStatePtr);
         }
     }
     for (var d = 0; d < summonedThrallPlayerStates.length; d++) {
@@ -690,6 +1008,24 @@ function setTargetPlayerIsThrall(gameStatePtr, playerControllerPtr, isThrall) {
 
     // 4. bIsThrall (+0x572) を 0 に設定し、デリゲートと関連状態を更新
     ADH_PlayerState_SetIsThrall(playerStatePtr, 0);
+
+    // 5. 他クライアントおよび対象クライアント上に残留したローカル bIsThrall=1 を 0 へ強制同期
+    var nowSec = getWorldTimeSeconds();
+    for (var m = 0; m < otherPlayerStates.length; m++) {
+        var viewerConn = getPlayerStateNetConnection(otherPlayerStates[m]);
+        if (!viewerConn.isNull()) {
+            enqueueThrallClearForPair(playerStatePtr, viewerConn, nowSec);
+        }
+    }
+    if (!targetConn.isNull()) {
+        for (var f = 0; f < priorOtherThralls.length; f++) {
+            enqueueThrallClearForPair(priorOtherThralls[f], targetConn, nowSec);
+        }
+    }
+    for (var u = 0; u < modifiedOtherPlayerStates.length; u++) {
+        AActor_ForceNetUpdate(modifiedOtherPlayerStates[u]);
+    }
+    AActor_ForceNetUpdate(playerStatePtr);
 }
 
 function setTargetPlayerSpellCharge(playerControllerPtr, chargeLevel) {
@@ -967,6 +1303,82 @@ function executeQueuedPayload(gameStatePtr, payload) {
 // ============================================================================
 // ゲームフック
 // ============================================================================
+var origReplicatePropertiesFn = null;
+var replicatePropertiesTrampoline = ptr(0);
+var hookedReplicatePropertiesCb = new NativeCallback(function (replicatorPtr, outBunchPtr, repFlags) {
+    if (!origReplicatePropertiesFn) {
+        if (replicatePropertiesTrampoline.isNull()) {
+            return 0;
+        }
+        origReplicatePropertiesFn = new NativeFunction(
+            replicatePropertiesTrampoline,
+            'uint8',
+            ['pointer', 'pointer', 'uint32'],
+            { abi: 'win64', exceptions: 'propagate' }
+        );
+    }
+    var origResult = origReplicatePropertiesFn(replicatorPtr, outBunchPtr, repFlags);
+    if (pendingThrallClearCount === 0 || (repFlags & 1) !== 0) {
+        return origResult;
+    }
+    try {
+        if (replicatorPtr.isNull() || outBunchPtr.isNull()) {
+            return origResult;
+        }
+        var objPtr = replicatorPtr.add(UE_OFFSETS.replicatorObjectPtr).readPointer();
+        var connPtr = replicatorPtr.add(UE_OFFSETS.replicatorConnection).readPointer();
+        if (objPtr.isNull() || connPtr.isNull()) {
+            return origResult;
+        }
+        var taskKey = makeThrallClearKey(objPtr, connPtr);
+        if (!pendingThrallClearTasks.hasOwnProperty(taskKey)) {
+            return origResult;
+        }
+        var task = pendingThrallClearTasks[taskKey];
+        if (!task || task.remainingSends <= 0 || isPendingKill(objPtr) || isPendingKill(connPtr) || isPairBothActiveThralls(objPtr, connPtr)) {
+            removeThrallClearKey(taskKey);
+            return origResult;
+        }
+        var owningChannelPtr = replicatorPtr.add(UE_OFFSETS.replicatorOwningChannel).readPointer();
+        var repLayoutPtr = replicatorPtr.add(UE_OFFSETS.replicatorRepLayout).readPointer();
+        if (owningChannelPtr.isNull() || repLayoutPtr.isNull()) {
+            return origResult;
+        }
+        // ルート Actor (ADH_PlayerState) のチャネルであることを厳格検証
+        if (!owningChannelPtr.add(UE_OFFSETS.actorChannelActor).readPointer().equals(objPtr)) {
+            return origResult;
+        }
+        // オーナー接続には絶対に注入しない二重ガード
+        var viewerPc = connPtr.add(UE_OFFSETS.netConnectionPlayerController).readPointer();
+        if (!viewerPc.isNull() && !isPendingKill(viewerPc)) {
+            var viewerPs = viewerPc.add(UE_OFFSETS.playerControllerPlayerState).readPointer();
+            if (!viewerPs.isNull() && viewerPs.equals(objPtr)) {
+                removeThrallClearKey(taskKey);
+                return origResult;
+            }
+        }
+        if (appendIsThrallFalseContentBlock(replicatorPtr, owningChannelPtr, objPtr, outBunchPtr, repLayoutPtr)) {
+            task.remainingSends -= 1;
+            if (task.remainingSends <= 0) {
+                removeThrallClearKey(taskKey);
+            }
+            return 1;
+        }
+    } catch (e) {}
+    return origResult;
+}, 'uint8', ['pointer', 'pointer', 'uint32']);
+
+replicatePropertiesTrampoline = Interceptor.replaceFast(
+    FObjectReplicator_ReplicateProperties_addr,
+    hookedReplicatePropertiesCb
+);
+origReplicatePropertiesFn = new NativeFunction(
+    replicatePropertiesTrampoline,
+    'uint8',
+    ['pointer', 'pointer', 'uint32'],
+    { abi: 'win64', exceptions: 'propagate' }
+);
+
 Interceptor.attach(ADH_GameState_Tick_addr, {
     onEnter: function (args) {
         try {
@@ -976,6 +1388,13 @@ Interceptor.attach(ADH_GameState_Tick_addr, {
             }
             if (!isBridgeServerRunning && Date.now() >= nextBridgeRetryAt) {
                 startBridgeServer();
+            }
+            if (pendingThrallClearCount > 0) {
+                if (!trackedGameStatePtr.equals(gameStatePtr)) {
+                    pruneSummonedThrallPlayerStates(gameStatePtr);
+                } else {
+                    tickPendingThrallClears();
+                }
             }
             var payload = dequeueCommand();
             if (payload) {
