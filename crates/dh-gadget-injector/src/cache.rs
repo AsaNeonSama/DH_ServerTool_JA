@@ -45,8 +45,8 @@ fn sha256_bytes_hex(bytes: &[u8]) -> String {
 }
 
 /// Returns the default candidate cache directories in priority order:
-/// 1. `%LOCALAPPDATA%\DH_ServerTool_JA`
-/// 2. `%TEMP%\DH_ServerTool_JA`
+/// 1. `%LOCALAPPDATA%\DH_Tool_JA`
+/// 2. `%TEMP%\DH_Tool_JA`
 /// 3. `./.dh_cache`
 #[must_use]
 pub fn default_cache_candidates() -> Vec<PathBuf> {
@@ -290,6 +290,12 @@ impl RoundTempDir {
     #[must_use]
     pub fn bundle_js_path(&self) -> &Path {
         &self.bundle_js_path
+    }
+
+    /// Disarms automatic directory removal on `Drop` (used when detaching from a still-running
+    /// child process that keeps `gadget.dll` mapped; `sweep_stale_run_dirs` reclaims it later).
+    pub(crate) fn disarm_cleanup(&mut self) {
+        self.cleaned = true;
     }
 
     /// Best-effort recursive removal with brief retries so Windows finishes unmapping

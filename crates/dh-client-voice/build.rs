@@ -24,7 +24,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 #[cfg(windows)]
 fn embed_windows_resources() -> Result<(), Box<dyn Error>> {
     let mut res: winresource::WindowsResource = winresource::WindowsResource::new();
-    res.set("ProductName", "DH_ServerTool_JA");
+    res.set("ProductName", "DH_Tool_JA");
     res.set(
         "FileDescription",
         "Dread Hunger Client Dual-Mode UE4 Native Voice Bridge",

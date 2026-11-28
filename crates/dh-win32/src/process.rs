@@ -1,6 +1,8 @@
 use std::borrow::Cow;
-use std::ffi::c_void;
+use std::collections::BTreeMap;
+use std::ffi::{c_void, OsString};
 use std::mem::{size_of, zeroed};
+use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
 
 use windows::core::{s, w, PCWSTR, PWSTR};
@@ -14,8 +16,9 @@ use windows::Win32::System::Diagnostics::ToolHelp::{
 use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
 use windows::Win32::System::Threading::{
     CreateProcessW, GetExitCodeProcess, OpenProcess, ResumeThread, TerminateProcess,
-    WaitForSingleObject, CREATE_NEW_CONSOLE, CREATE_SUSPENDED, PROCESS_INFORMATION,
-    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE, STARTUPINFOW,
+    WaitForSingleObject, CREATE_NEW_CONSOLE, CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT,
+    PROCESS_CREATION_FLAGS, PROCESS_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION,
+    PROCESS_TERMINATE, STARTUPINFOW,
 };
 
 use crate::consts::process::{
@@ -26,7 +29,33 @@ use crate::consts::process::{
 };
 use crate::error::{encode_wide_null_no_interior_nul, from_windows_err, Result, Win32Error};
 use crate::structs::process::{NtQueryInformationProcessFn, OwnedHandle, ProcessBasicInformation};
-pub use crate::structs::process::{ProcessInfo, RemotePeEntry, SpawnedProcess};
+pub use crate::structs::process::{ProcessInfo, RemotePeEntry, SpawnOptions, SpawnedProcess};
+
+impl Default for SpawnOptions {
+    fn default() -> Self {
+        Self::console()
+    }
+}
+
+impl SpawnOptions {
+    /// Spawns with `CREATE_SUSPENDED | CREATE_NEW_CONSOLE` (default for console/dedicated server).
+    #[must_use]
+    pub const fn console() -> Self {
+        Self {
+            create_console: true,
+            env_overrides: Vec::new(),
+        }
+    }
+
+    /// Spawns with `CREATE_SUSPENDED` only (no blank console window for GUI applications).
+    #[must_use]
+    pub const fn gui() -> Self {
+        Self {
+            create_console: false,
+            env_overrides: Vec::new(),
+        }
+    }
+}
 
 impl Drop for OwnedHandle {
     fn drop(&mut self) {
@@ -42,6 +71,10 @@ impl Drop for OwnedHandle {
 
 // SAFETY: Win32 process and thread handles are safe to move between threads.
 unsafe impl Send for SpawnedProcess {}
+// SAFETY: All `&self` methods on `SpawnedProcess` only read immutable fields or invoke
+// kernel-synchronized Win32 handle APIs (`GetExitCodeProcess`, `WaitForSingleObject`,
+// `ResumeThread`, `TerminateProcess`, `ReadProcessMemory`); handle closure requires `&mut self` (`Drop`).
+unsafe impl Sync for SpawnedProcess {}
 
 impl SpawnedProcess {
     #[must_use]
@@ -166,13 +199,100 @@ pub fn build_command_line(exe_path: &Path, args: &[String]) -> String {
     cmd
 }
 
-/// Spawns `exe_path` in suspended state with a fresh detached console window
-/// (`CREATE_SUSPENDED | CREATE_NEW_CONSOLE`, `bInheritHandles = FALSE`, and no
-/// `STARTF_USESTDHANDLES` so UE4 `-log` binds its own console output cleanly).
-pub fn spawn_suspended_console(
+fn fold_wide_key_uppercase(wide: &[u16]) -> Vec<u16> {
+    let mut folded: Vec<u16> = Vec::with_capacity(wide.len());
+    for item in char::decode_utf16(wide.iter().copied()) {
+        match item {
+            Ok(ch) => {
+                for up in ch.to_uppercase() {
+                    let mut buf: [u16; 2] = [0u16; 2];
+                    let encoded: &[u16] = up.encode_utf16(&mut buf);
+                    folded.extend_from_slice(encoded);
+                }
+            }
+            Err(unpaired) => folded.push(unpaired.unpaired_surrogate()),
+        }
+    }
+    folded
+}
+
+/// Builds a Win32 `CREATE_UNICODE_ENVIRONMENT` block by merging `overrides` case-insensitively
+/// over `base_vars`, sorting keys in case-insensitive Unicode order per Win32 `CreateProcessW`
+/// requirements, and encoding as `KEY=VALUE\0...\0\0` UTF-16LE code units.
+pub fn build_unicode_environment_block<I>(
+    base_vars: I,
+    overrides: &[(String, String)],
+) -> Result<Vec<u16>>
+where
+    I: IntoIterator<Item = (OsString, OsString)>,
+{
+    let mut merged: BTreeMap<Vec<u16>, (Vec<u16>, Vec<u16>)> = BTreeMap::new();
+
+    for (raw_key, raw_val) in base_vars {
+        let key_wide: Vec<u16> = raw_key.encode_wide().collect();
+        let val_wide: Vec<u16> = raw_val.encode_wide().collect();
+        if key_wide.is_empty() || key_wide.contains(&0) || val_wide.contains(&0) {
+            continue;
+        }
+        let sort_key: Vec<u16> = fold_wide_key_uppercase(&key_wide);
+        let _: Option<(Vec<u16>, Vec<u16>)> = merged.insert(sort_key, (key_wide, val_wide));
+    }
+
+    for (key, value) in overrides {
+        if key.is_empty() {
+            return Err(Win32Error::InvalidArgument(
+                "env_overrides key must not be empty".to_string(),
+            ));
+        }
+        if key.contains('=') {
+            return Err(Win32Error::InvalidArgument(format!(
+                "env_overrides key '{key}' must not contain '='"
+            )));
+        }
+        if key.contains('\0') {
+            return Err(Win32Error::InvalidArgument(
+                "env_overrides key must not contain interior NUL characters".to_string(),
+            ));
+        }
+        if value.contains('\0') {
+            return Err(Win32Error::InvalidArgument(format!(
+                "env_overrides value for '{key}' must not contain interior NUL characters"
+            )));
+        }
+        let key_wide: Vec<u16> = key.encode_utf16().collect();
+        let val_wide: Vec<u16> = value.encode_utf16().collect();
+        let sort_key: Vec<u16> = fold_wide_key_uppercase(&key_wide);
+        let _: Option<(Vec<u16>, Vec<u16>)> = merged.insert(sort_key, (key_wide, val_wide));
+    }
+
+    let mut block: Vec<u16> = Vec::with_capacity(merged.len().saturating_mul(64).saturating_add(2));
+    for (_sort_key, (key_wide, val_wide)) in merged {
+        block.extend_from_slice(&key_wide);
+        block.push(u16::from(b'='));
+        block.extend_from_slice(&val_wide);
+        block.push(0u16);
+    }
+    if block.is_empty() {
+        block.push(0u16);
+    }
+    block.push(0u16);
+    Ok(block)
+}
+
+/// Spawns `exe_path` in suspended state according to `options` (`bInheritHandles = FALSE`,
+/// no `STARTF_USESTDHANDLES`).
+///
+/// - `options.create_console == true`: passes `CREATE_SUSPENDED | CREATE_NEW_CONSOLE` so
+///   console applications (e.g. UE4 dedicated server with `-log`) get a detached console window.
+/// - `options.create_console == false`: passes `CREATE_SUSPENDED` only so GUI applications
+///   (e.g. `DreadHunger-Win64-Shipping.exe`) launch without creating a blank console window.
+/// - When `options.env_overrides` is non-empty, merges overrides case-insensitively over the
+///   inherited environment and passes `CREATE_UNICODE_ENVIRONMENT` without mutating the parent.
+pub fn spawn_suspended(
     exe_path: &Path,
     args: &[String],
     cwd: Option<&Path>,
+    options: &SpawnOptions,
 ) -> Result<SpawnedProcess> {
     let exe_str: Cow<'_, str> = exe_path.to_string_lossy();
     if exe_str.is_empty() {
@@ -199,6 +319,15 @@ pub fn spawn_suspended_console(
         None => None,
     };
 
+    let env_block: Option<Vec<u16>> = if options.env_overrides.is_empty() {
+        None
+    } else {
+        Some(build_unicode_environment_block(
+            std::env::vars_os(),
+            &options.env_overrides,
+        )?)
+    };
+
     // SAFETY: `STARTUPINFOW` is a plain-old-data Win32 C struct valid when zero-initialized with `cb` set.
     let mut si: STARTUPINFOW = unsafe { zeroed() };
     si.cb = u32::try_from(size_of::<STARTUPINFOW>()).map_err(|_: std::num::TryFromIntError| {
@@ -209,8 +338,22 @@ pub fn spawn_suspended_console(
     // SAFETY: `PROCESS_INFORMATION` is a plain-old-data Win32 output struct valid when zero-initialized.
     let mut pi: PROCESS_INFORMATION = unsafe { zeroed() };
 
-    // SAFETY: `app_wide`, `cmd_wide`, and optional `work_dir_wide` are NUL-terminated UTF-16LE buffers
-    // living across `CreateProcessW`; `&raw const si` and `&raw mut pi` point to valid initialized structs.
+    let mut creation_flags: PROCESS_CREATION_FLAGS = if options.create_console {
+        CREATE_SUSPENDED | CREATE_NEW_CONSOLE
+    } else {
+        CREATE_SUSPENDED
+    };
+    if env_block.is_some() {
+        creation_flags |= CREATE_UNICODE_ENVIRONMENT;
+    }
+
+    let env_ptr: Option<*const c_void> = env_block
+        .as_ref()
+        .map(|buf: &Vec<u16>| buf.as_ptr().cast::<c_void>());
+
+    // SAFETY: `app_wide`, `cmd_wide`, optional `work_dir_wide`, and optional double-NUL-terminated
+    // UTF-16LE `env_block` all live across `CreateProcessW`; `&raw const si` and `&raw mut pi`
+    // point to valid initialized structs.
     unsafe {
         CreateProcessW(
             PCWSTR::from_raw(app_wide.as_ptr()),
@@ -218,8 +361,8 @@ pub fn spawn_suspended_console(
             None,
             None,
             false,
-            CREATE_SUSPENDED | CREATE_NEW_CONSOLE,
-            None,
+            creation_flags,
+            env_ptr,
             work_dir_wide
                 .as_ref()
                 .map_or(PCWSTR::null(), |buf: &Vec<u16>| {
@@ -244,6 +387,27 @@ pub fn spawn_suspended_console(
         thread_handle: pi.hThread,
         pid: pi.dwProcessId,
     })
+}
+
+/// Spawns `exe_path` in suspended state with a fresh detached console window
+/// (`CREATE_SUSPENDED | CREATE_NEW_CONSOLE`, `bInheritHandles = FALSE`, and no
+/// `STARTF_USESTDHANDLES` so UE4 `-log` binds its own console output cleanly).
+pub fn spawn_suspended_console(
+    exe_path: &Path,
+    args: &[String],
+    cwd: Option<&Path>,
+) -> Result<SpawnedProcess> {
+    spawn_suspended(exe_path, args, cwd, &SpawnOptions::console())
+}
+
+/// Spawns `exe_path` in suspended state without allocating a new console window
+/// (`CREATE_SUSPENDED` only, suitable for GUI applications like `DreadHunger-Win64-Shipping.exe`).
+pub fn spawn_suspended_gui(
+    exe_path: &Path,
+    args: &[String],
+    cwd: Option<&Path>,
+) -> Result<SpawnedProcess> {
+    spawn_suspended(exe_path, args, cwd, &SpawnOptions::gui())
 }
 
 /// Returns `true` if a process with `pid` exists and has not exited (`STILL_ACTIVE`).

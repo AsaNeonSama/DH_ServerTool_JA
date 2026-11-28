@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DH_ClientLauncher_JA — Dread Hunger クライアントランチャー</title>
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,600;0,700;1,700&family=Dela+Gothic+One&family=JetBrains+Mono:wght@700;800&family=Zen+Kaku+Gothic+New:wght@700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="wrapper">
+    <div id="topNeonRibbon" class="neon-ribbon" aria-hidden="true"></div>
+
+    <!-- Frameless Draggable Header (matching DH_ServerLauncher_JA) -->
+    <header id="appHeader" class="console-header">
+      <div class="console-brand">
+        <div class="brand-emblem-wrap">
+          <div class="brand-emblem">
+            <div class="brand-emblem-inner">
+              <img src="favicon.ico" alt="DH_ClientLauncher_JA" draggable="false">
+            </div>
+          </div>
+        </div>
+        <div class="console-title-group">
+          <span class="console-kicker">DH_TOOL_JA // CLIENT LAUNCHER</span>
+          <h1 class="console-title">DH_ClientLauncher_JA</h1>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <div class="header-status-slot">
+          <span class="badge-wrap">
+            <span id="headerStatusBadge" class="badge badge-status status-idle">待機中</span>
+          </span>
+        </div>
+
+        <div class="window-controls" role="group" aria-label="ウィンドウ操作">
+          <button type="button" id="winMinBtn" class="win-ctrl-btn win-ctrl-min" title="最小化" aria-label="最小化">−</button>
+          <button type="button" id="winCloseBtn" class="win-ctrl-btn win-ctrl-close" title="終了" aria-label="終了">✕</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Symmetric 2-Column Equal-Height Main Area (ZERO outer scrollbar) -->
+    <main class="console-body">
+      <div class="split-layout">
+        <!-- Left Column: EXE Path + Patch Selection + Launch Controls -->
+        <section class="pane-col" aria-labelledby="sec-launch-pane">
+          <div class="section-bar">
+            <div class="section-tag-wrap">
+              <h2 id="sec-launch-pane" class="section-tag">クライアント起動・パッチ選択</h2>
+            </div>
+            <div class="section-accent-line" aria-hidden="true"></div>
+            <span id="builtinCountPill" class="count-pill count-pill-yellow">有効 1 / 2</span>
+          </div>
+
+          <div class="launcher-card">
+            <div class="nb-card-stripe" aria-hidden="true"></div>
+
+            <div class="launcher-card-body">
+              <!-- EXE Path -->
+              <div class="field-group">
+                <div class="field-label-row">
+                  <label for="exePathInput" class="field-label">実行ファイルパス</label>
+                  <span id="exeStatusPill" class="status-pill pill-missing">未検出</span>
+                </div>
+                <div class="exe-action-row">
+                  <input
+                    type="text"
+                    id="exePathInput"
+                    class="nb-input"
+                    spellcheck="false"
+                    autocomplete="off"
+                    placeholder="./DreadHunger/Binaries/Win64/DreadHunger-Win64-Shipping.exe"
+                  >
+                  <button type="button" id="pickExeBtn" class="nb-btn nb-btn-yellow">参照</button>
+                  <button type="button" id="autoDetectExeBtn" class="nb-btn nb-btn-blue">自動検出</button>
+                  <button type="button" id="refreshStatusBtn" class="nb-btn nb-btn-cyan nb-btn-icon" title="存在確認を再実行" aria-label="存在確認を再実行">↻</button>
+                </div>
+              </div>
+
+              <!-- Patch Selection -->
+              <div class="field-group patch-group">
+                <div class="field-label-row">
+                  <span class="field-label cyan">パッチ選択</span>
+                  <span id="launchModeBadge" class="mode-pill">内蔵DLL (1件 / Frida未使用)</span>
+                </div>
+
+                <div class="patch-stack" role="group" aria-label="パッチ選択">
+                  <button type="button" id="builtinPlanABtn" class="builtin-tile tile-plan-a" aria-pressed="false">
+                    <span class="builtin-tile-border">
+                      <span class="builtin-tile-face">
+                        <span class="builtin-tile-left">
+                          <span class="builtin-tile-title">EOS修復 Plan A</span>
+                          <span class="kind-badge kind-eos-a">19パッチ</span>
+                        </span>
+                        <span class="builtin-state-pill" data-state-pill="eos_fix_plan_a">OFF</span>
+                      </span>
+                    </span>
+                  </button>
+
+                  <button type="button" id="builtinPlanBBtn" class="builtin-tile tile-plan-b" aria-pressed="true">
+                    <span class="builtin-tile-border">
+                      <span class="builtin-tile-face">
+                        <span class="builtin-tile-left">
+                          <span class="builtin-tile-title">EOS修復 Plan B</span>
+                          <span class="kind-badge kind-eos-b">20パッチ・非公開URI</span>
+                        </span>
+                        <span class="builtin-state-pill" data-state-pill="eos_fix_plan_b">ON</span>
+                      </span>
+                    </span>
+                  </button>
+
+                  <button type="button" id="builtinVoiceBtn" class="builtin-tile tile-voice" aria-pressed="false">
+                    <span class="builtin-tile-border">
+                      <span class="builtin-tile-face">
+                        <span class="builtin-tile-left">
+                          <span class="builtin-tile-title">UEネイティブボイス</span>
+                          <span class="kind-badge kind-voice">音声チャット</span>
+                        </span>
+                        <span class="builtin-state-pill" data-state-pill="voice_chat">OFF</span>
+                      </span>
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Bottom-Pinned Launch Controls -->
+            <div class="launcher-card-footer">
+              <div class="launch-status-row">
+                <span class="launch-status-label">プロセス状態</span>
+                <span id="processDetailText" class="launch-status-value">待機中</span>
+              </div>
+
+              <div class="launch-buttons-row">
+                <div class="btn-wrap launch-primary-wrap">
+                  <div class="btn-border">
+                    <button type="button" id="launchBtn" class="launch-main-btn">ゲーム起動</button>
+                    <span class="btn-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                  </div>
+                </div>
+
+                <button type="button" id="terminateBtn" class="nb-btn nb-btn-red terminate-btn" disabled>強制終了</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Right Column: Full-Height Scrollable Execution Log -->
+        <section class="pane-col" aria-labelledby="sec-log-pane">
+          <div class="section-bar">
+            <div class="section-tag-wrap accent-pink">
+              <h2 id="sec-log-pane" class="section-tag">実行ログ</h2>
+            </div>
+            <div class="section-accent-line" aria-hidden="true"></div>
+            <span id="logCountPill" class="count-pill count-pill-dark">0件</span>
+            <button type="button" id="clearLogBtn" class="nb-btn nb-btn-bar">クリア</button>
+          </div>
+
+          <div class="log-panel">
+            <div class="log-toolbar">
+              <div class="log-filters" role="group" aria-label="ログフィルタ">
+                <button type="button" class="filter-chip is-active" data-filter="ALL">すべて</button>
+                <button type="button" class="filter-chip" data-filter="DLL">DLL</button>
+                <button type="button" class="filter-chip" data-filter="ERR">エラー</button>
+              </div>
+
+              <div class="log-controls">
+                <label class="autoscroll-toggle">
+                  <input type="checkbox" id="autoScrollToggle" checked>
+                  <span>自動追従</span>
+                </label>
+                <button type="button" id="copyLogBtn" class="nb-btn nb-btn-xs nb-btn-cyan">コピー</button>
+              </div>
+            </div>
+
+            <div id="logFeed" class="log-feed" role="log" aria-live="polite"></div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- Ultra-Slim 1-Line Footer (1:1 parity with DH_ServerLauncher_JA) -->
+    <footer class="app-footer">
+      <span class="footer-brand">
+        <span class="fb-author">アサネオン</span>
+        <span class="fb-sep">/</span>
+        <span class="fb-google-grad">Build With Antigravity</span>
+      </span>
+      <div class="footer-right">
+        <button type="button" id="footerLicenseBtn" class="footer-license-btn" title="ライセンス情報を表示">LICENSE</button>
+        <span id="footerVersion" class="footer-version">DH_ClientLauncher_JA</span>
+        <div class="footer-dots" aria-hidden="true">
+          <span class="dot dot-b"></span>
+          <span class="dot dot-g"></span>
+          <span class="dot dot-y"></span>
+          <span class="dot dot-r"></span>
+          <span class="dot dot-p"></span>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- In-App Neo-Brutalist License Modal (1:1 parity with DH_ServerLauncher_JA) -->
+  <div id="licenseModalBackdrop" class="nb-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="licenseModalTitle" aria-hidden="true">
+    <div class="nb-modal-dialog">
+      <div class="nb-modal-stripe" aria-hidden="true"></div>
+      <div class="nb-modal-header">
+        <div class="nb-modal-title-group">
+          <span class="nb-modal-kicker">LICENSE</span>
+          <h2 id="licenseModalTitle" class="nb-modal-title">DH_Tool_JA ライセンス情報</h2>
+        </div>
+        <button type="button" id="licenseCloseBtn" class="win-ctrl-btn win-ctrl-close" title="閉じる" aria-label="閉じる">✕</button>
+      </div>
+      <div class="nb-modal-body">
+        <pre id="licenseModalText" class="license-pre">読み込み中...</pre>
+      </div>
+    </div>
+  </div>
+
+  <div id="toastContainer" class="toast-container" aria-live="assertive" aria-atomic="true"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

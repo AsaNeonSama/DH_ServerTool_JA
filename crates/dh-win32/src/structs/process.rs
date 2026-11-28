@@ -19,7 +19,21 @@ pub struct RemotePeEntry {
     pub oep: u64,
 }
 
-/// RAII handle owner for a child process spawned via `spawn_suspended_console`.
+/// Options controlling Win32 process creation flags and child environment for
+/// [`crate::process::spawn_suspended`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpawnOptions {
+    /// When `true`, passes `CREATE_NEW_CONSOLE` so console executables (e.g. UE4 dedicated server
+    /// with `-log`) receive a fresh detached console window.
+    /// When `false`, spawns with `CREATE_SUSPENDED` only so GUI applications (e.g.
+    /// `DreadHunger-Win64-Shipping.exe`) launch without popping up a blank console window.
+    pub create_console: bool,
+    /// Optional per-child environment variable overrides (`(key, value)`) merged case-insensitively
+    /// over the inherited environment via `CREATE_UNICODE_ENVIRONMENT` without mutating the parent.
+    pub env_overrides: Vec<(String, String)>,
+}
+
+/// RAII handle owner for a child process spawned via `spawn_suspended`.
 #[derive(Debug)]
 pub struct SpawnedProcess {
     pub(crate) process_handle: HANDLE,

@@ -2,8 +2,11 @@
 /dist/
 /.build-cache/
 /.dh_cache/
+crates/*/gen/
 patch_runtime.log
 config.json
+launcher_config.json
 todo.md
 *.exe
 *.log
+

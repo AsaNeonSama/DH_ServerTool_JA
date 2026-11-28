@@ -1,11 +1,11 @@
 ================================================================================
-DH_ServerTool_JA Custom Source-Available Non-Commercial License, Version 1.1
-DH_ServerTool_JA カスタム・ソース利用可能・非商用ライセンス バージョン 1.1
-DH_ServerTool_JA 自定义源码可用非商用许可证 1.1 版
+DH_Tool_JA Custom Source-Available Non-Commercial License, Version 1.1
+DH_Tool_JA カスタム・ソース利用可能・非商用ライセンス バージョン 1.1
+DH_Tool_JA 自定义源码可用非商用许可证 1.1 版
 ================================================================================
 
-Copyright (c) 2026 AsaNeonSama (アサネオン) — DH_ServerTool_JA Community Project
-Repository: https://github.com/AsaNeonSama/DH_ServerTool_JA
+Copyright (c) 2026 AsaNeonSama (アサネオン) — DH_Tool_JA Community Project
+Repository: https://github.com/AsaNeonSama/DH_Tool_JA
 Contact:    https://github.com/AsaNeonSama
 
 Version / バージョン / 版本说明:
@@ -45,7 +45,7 @@ Languages included:
 第一条｜定义
 --------------------------------------------------------------------------------
 
-1. “本项目”：指 DH_ServerTool_JA 仓库及官方发布物中的整体内容，包括授权材料、集成的通用第三方开源组件，以及为实现兼容与生态适配而涉及、引用或配套提供的相关内容。
+1. “本项目”：指 DH_Tool_JA 仓库及官方发布物中的整体内容，包括授权材料、集成的通用第三方开源组件，以及为实现兼容与生态适配而涉及、引用或配套提供的相关内容。
 
 2. “授权材料”：指本项目中由维护者与贡献者独立开发、且可与第三方材料分离的源代码、脚本、文档及由此生成的构建产物。本许可证仅就授权材料授予权利。
 
@@ -96,7 +96,7 @@ Languages included:
    维护者不对《Dread Hunger》及其社区生态主张排他性、商业性或对抗合法权利人的权利，也不对第 4 款所列内容主张权利。本许可证的限制仅用于防止闭源侵占、倒卖与独占。授权材料本身由维护者与贡献者为实现互操作独立开发，据维护者所知不含未经授权的第三方专有源代码。为生态兼容而涉及或随附的第三方材料（含派生文件与其他社区内容）按本条第 3 款区分处理，不纳入授权材料。
 
 7. 权利人联系通道与责任边界
-   任何权利人（含游戏权利人、UE4 资产权利人及社区原作者）如认为原项目官方仓库（https://github.com/AsaNeonSama/DH_ServerTool_JA）或其官方发布物中的内容侵害其权利，请按仓库内 TAKEDOWN.md 所述方式联系维护者，核实后将及时处理并移除。该文件属于维护者的处理方针，不构成本许可证条款。维护者无法控制或下架第三方仓库、分叉（Fork）、镜像及修改版所分发的内容；任何由第三方分发、改动、打包或公开运营引发的侵权争议与下架责任，均由该第三方自行承担，与维护者无关。
+   任何权利人（含游戏权利人、UE4 资产权利人及社区原作者）如认为原项目官方仓库（https://github.com/AsaNeonSama/DH_Tool_JA）或其官方发布物中的内容侵害其权利，请按仓库内 TAKEDOWN.md 所述方式联系维护者，核实后将及时处理并移除。该文件属于维护者的处理方针，不构成本许可证条款。维护者无法控制或下架第三方仓库、分叉（Fork）、镜像及修改版所分发的内容；任何由第三方分发、改动、打包或公开运营引发的侵权争议与下架责任，均由该第三方自行承担，与维护者无关。
 
 --------------------------------------------------------------------------------
 第三条｜授权、法定例外与专利商标
@@ -243,7 +243,7 @@ Languages included:
 第1条｜定義
 --------------------------------------------------------------------------------
 
-1. 「本プロジェクト」：DH_ServerTool_JA リポジトリおよび公式リリース物の全体をいい、許諾対象物、組み込まれた汎用の第三者オープンソースコンポーネント、ならびに互換性およびエコシステム適合のために言及・参照・付随提供される関連内容を含みます。
+1. 「本プロジェクト」：DH_Tool_JA リポジトリおよび公式リリース物の全体をいい、許諾対象物、組み込まれた汎用の第三者オープンソースコンポーネント、ならびに互換性およびエコシステム適合のために言及・参照・付随提供される関連内容を含みます。
 
 2. 「許諾対象物」：本プロジェクトのうち、メンテナーとコントリビューターが独自に開発し、第三者素材から分離可能なソースコード、スクリプト、ドキュメントおよびビルド成果物をいいます。本ライセンスが権利を許諾するのは許諾対象物のみです。
 
@@ -294,7 +294,7 @@ Languages included:
    メンテナーは『Dread Hunger』やそのコミュニティに対し排他的・商業的権利や適法な権利者に対抗する権利を主張せず、第4項に掲げるものにも権利を主張しません。本ライセンスの制限はクローズド化、転売、独占を防ぐ防御目的のみです。許諾対象物自体はメンテナーとコントリビューターが相互運用性のため独自に開発しており、メンテナーの知る限り無許諾の第三者専有ソースコードを含みません。エコシステム適合のため言及・付随する第三者素材（派生ファイルや他コミュニティ作品を含む）は本条第3項に従い区分して扱い、許諾対象物には含めません。
 
 7. 権利者向け連絡窓口および責任の境界
-   権利者（ゲーム権利者、UE4 資産権利者およびコミュニティ原作者を含む）が、元の公式リポジトリ（https://github.com/AsaNeonSama/DH_ServerTool_JA）またはその公式リリース物に含まれる内容による権利侵害を認める場合は、リポジトリ内の TAKEDOWN.md 記載の方法でメンテナーへ連絡してください。確認次第速やかに対応・削除します。同ファイルは運用方針であり、本ライセンスの条項ではありません。メンテナーは第三者のリポジトリ、フォーク、ミラーまたは改変版により配布される内容を管理・削除することはできず、第三者の配布・改変・同梱・公開運営から生じる権利侵害紛争および削除責任はすべて当該第三者が自ら負い、メンテナーは一切関係しません。
+   権利者（ゲーム権利者、UE4 資産権利者およびコミュニティ原作者を含む）が、元の公式リポジトリ（https://github.com/AsaNeonSama/DH_Tool_JA）またはその公式リリース物に含まれる内容による権利侵害を認める場合は、リポジトリ内の TAKEDOWN.md 記載の方法でメンテナーへ連絡してください。確認次第速やかに対応・削除します。同ファイルは運用方針であり、本ライセンスの条項ではありません。メンテナーは第三者のリポジトリ、フォーク、ミラーまたは改変版により配布される内容を管理・削除することはできず、第三者の配布・改変・同梱・公開運営から生じる権利侵害紛争および削除責任はすべて当該第三者が自ら負い、メンテナーは一切関係しません。
 
 --------------------------------------------------------------------------------
 第3条｜許諾、法定例外および商標・特許
@@ -448,7 +448,7 @@ By copying, modifying, or distributing this project, or publicly operating a mod
 Article 1 | Definitions
 --------------------------------------------------------------------------------
 
-1. "Project" means the overall contents of the DH_ServerTool_JA repository and its official releases, including the Licensed Material, integrated general-purpose third-party open-source components, and related materials involved, referenced, or accompanied for technical compatibility and community ecosystem interoperability.
+1. "Project" means the overall contents of the DH_Tool_JA repository and its official releases, including the Licensed Material, integrated general-purpose third-party open-source components, and related materials involved, referenced, or accompanied for technical compatibility and community ecosystem interoperability.
 
 2. "Licensed Material" means the source code, scripts, documentation, and resulting build outputs in the Project independently developed by the maintainer and contributors and separable from Third-Party Materials. This License grants rights in the Licensed Material only.
 
@@ -499,7 +499,7 @@ Article 2 | Unofficial Nature, Third-Party Assets, and Community Content
    The maintainer claims no exclusive, commercial, or adverse rights over "Dread Hunger" or its community ecosystem, and no rights in anything listed in Section 4. The restrictions here exist solely to prevent closed-source appropriation, resale, and monopolization. The Licensed Material itself was independently developed for interoperability and, to the maintainer's knowledge, contains no unauthorized third-party proprietary source code. Any Third-Party Materials (including Derived Files and other community content) referenced or accompanied for ecosystem compatibility are kept distinct under Section 3 and excluded from the Licensed Material.
 
 7. Rightsholder Contact and Scope of Responsibility
-   Any rightsholder (including Game Rightsholders, UE4 asset rightsholders, and community authors) believing content in the official Repository (https://github.com/AsaNeonSama/DH_ServerTool_JA) or its official releases infringes its rights should contact the maintainer as set out in TAKEDOWN.md; verified notices will be promptly addressed and removed. That file states handling policy and is not part of this License. The maintainer cannot control or remove content distributed via third-party repositories, forks, mirrors, or Modified Versions; any infringement dispute or takedown obligation arising from third-party distribution, modification, bundling, or Public Operation rests solely with that third party and has no connection to the maintainer.
+   Any rightsholder (including Game Rightsholders, UE4 asset rightsholders, and community authors) believing content in the official Repository (https://github.com/AsaNeonSama/DH_Tool_JA) or its official releases infringes its rights should contact the maintainer as set out in TAKEDOWN.md; verified notices will be promptly addressed and removed. That file states handling policy and is not part of this License. The maintainer cannot control or remove content distributed via third-party repositories, forks, mirrors, or Modified Versions; any infringement dispute or takedown obligation arising from third-party distribution, modification, bundling, or Public Operation rests solely with that third party and has no connection to the maintainer.
 
 --------------------------------------------------------------------------------
 Article 3 | Grant, Statutory Exceptions, Trademarks, and Patents

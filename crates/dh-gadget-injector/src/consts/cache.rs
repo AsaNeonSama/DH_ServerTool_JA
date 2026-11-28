@@ -5,7 +5,7 @@ pub const FRIDA_GADGET_VERSION: &str = env!("DH_FRIDA_GADGET_VERSION");
 /// Expected lowercase hex SHA-256 of the uncompressed Frida Gadget DLL.
 pub const FRIDA_GADGET_SHA256: &str = env!("DH_FRIDA_GADGET_SHA256");
 
-pub const CACHE_APP_DIR_NAME: &str = "DH_ServerTool_JA";
+pub const CACHE_APP_DIR_NAME: &str = "DH_Tool_JA";
 pub const FALLBACK_LOCAL_CACHE_DIR: &str = ".dh_cache";
 pub const RUN_DIR_PREFIX: &str = "run_";
 pub const GADGET_DLL_FILE_NAME: &str = "gadget.dll";

@@ -7,4 +7,4 @@ pub mod process;
 pub use error::{Result, Win32Error};
 pub use job::JobObject;
 pub use net_table::UdpLookupResult;
-pub use process::{ProcessInfo, RemotePeEntry, SpawnedProcess};
+pub use process::{ProcessInfo, RemotePeEntry, SpawnOptions, SpawnedProcess};

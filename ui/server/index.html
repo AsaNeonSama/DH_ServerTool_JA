@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DH_ServerLauncher_JA — Dread Hunger サーバーランチャー</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <div class="shell-inner">
+      <div class="neon-ribbon" data-tauri-drag-region aria-hidden="true"></div>
+
+      <!-- Frameless Draggable Neo-Brutalist Header -->
+      <header class="app-header" data-tauri-drag-region>
+        <div class="brand-group" data-tauri-drag-region>
+          <div class="brand-emblem-wrap" data-tauri-drag-region>
+            <div class="brand-emblem" data-tauri-drag-region>
+              <div class="brand-emblem-inner" data-tauri-drag-region>
+                <img src="./icon.png" alt="DH_ServerLauncher_JA" draggable="false" data-tauri-drag-region>
+              </div>
+            </div>
+          </div>
+          <div class="title-stack" data-tauri-drag-region>
+            <span class="kicker" data-tauri-drag-region>DH_TOOL_JA // SERVER LAUNCHER</span>
+            <h1 class="app-title" data-tauri-drag-region>DH_ServerLauncher_JA</h1>
+          </div>
+        </div>
+
+        <div class="header-right" data-tauri-drag-region>
+          <div class="header-pills" data-tauri-drag-region>
+            <div class="status-pill-wrap" data-tauri-drag-region>
+              <span class="status-pill is-loopback" data-tauri-drag-region>
+                <span class="pulse-dot" data-tauri-drag-region></span>
+                <span id="hdrBridgeText" data-tauri-drag-region>内部連携: 127.0.0.1:7893</span>
+              </span>
+            </div>
+            <div class="status-pill-wrap" data-tauri-drag-region>
+              <span id="hdrServerPill" class="status-pill is-stopped" data-tauri-drag-region>
+                <span class="pulse-dot" data-tauri-drag-region></span>
+                <span id="hdrServerText" data-tauri-drag-region>サーバー: 停止中</span>
+              </span>
+            </div>
+          </div>
+
+          <div class="win-controls">
+            <button type="button" id="btnWinMin" class="win-btn win-btn-min" title="最小化" aria-label="最小化">−</button>
+            <button type="button" id="btnWinClose" class="win-btn win-btn-close" title="終了" aria-label="終了">✕</button>
+          </div>
+        </div>
+      </header>
+
+      <!-- 4-Tab Navigation -->
+      <nav class="nav-tabs" aria-label="メインナビゲーション">
+        <div class="nav-tab-wrap is-active" data-tab-wrap="console">
+          <button type="button" class="nav-tab" data-tab="console">
+            <span class="nav-tab-left">
+              <span class="nav-tab-num">01</span>
+              <span>コンソール</span>
+            </span>
+            <span id="tabConsoleBadge" class="nav-tab-badge">LOCAL</span>
+          </button>
+        </div>
+        <div class="nav-tab-wrap" data-tab-wrap="mods">
+          <button type="button" class="nav-tab" data-tab="mods">
+            <span class="nav-tab-left">
+              <span class="nav-tab-num">02</span>
+              <span>サーバー起動・MOD</span>
+            </span>
+            <span id="tabModBadge" class="nav-tab-badge">MOD 5</span>
+          </button>
+        </div>
+        <div class="nav-tab-wrap" data-tab-wrap="monitor">
+          <button type="button" class="nav-tab" data-tab="monitor">
+            <span class="nav-tab-left">
+              <span class="nav-tab-num">03</span>
+              <span>稼働モニター</span>
+            </span>
+            <span id="tabMonBadge" class="nav-tab-badge">IDLE</span>
+          </button>
+        </div>
+        <div class="nav-tab-wrap" data-tab-wrap="settings">
+          <button type="button" class="nav-tab" data-tab="settings">
+            <span class="nav-tab-left">
+              <span class="nav-tab-num">04</span>
+              <span>基本設定</span>
+            </span>
+            <span id="tabSettingsBadge" class="nav-tab-badge">JSON</span>
+          </button>
+        </div>
+      </nav>
+
+      <!-- Global Alert Strip -->
+      <div id="globalAlertStrip" class="alert-strip" role="alert">
+        <span id="globalAlertText"></span>
+        <button type="button" id="btnAlertGotoSettings" class="nb-btn btn-xs btn-dark">基本設定を開く</button>
+      </div>
+
+      <!-- Main Zero-Outer-Scroll Content -->
+      <main class="main-content">
+        <!-- ==================== TAB 01: アプリ内蔵コンソール ==================== -->
+        <section id="tab-console" class="tab-panel is-active">
+          <div class="console-layout">
+            <!-- Left: Admin Console Controls -->
+            <div class="pane-col console-left-pane">
+              <div class="section-bar">
+                <div class="section-tag-wrap">
+                  <span class="section-tag">操作メニュー (管理コンソール)</span>
+                </div>
+                <div class="section-accent-line"></div>
+              </div>
+
+              <!-- 6 Neo-Brutalist Operation Tiles -->
+              <div id="consoleOpGrid" class="op-grid">
+                <div class="op-tile-wrap is-active" data-op-wrap="console_command">
+                  <button type="button" class="op-tile-btn op-blue" data-op="console_command">
+                    <span>コンソール命令</span>
+                    <span class="op-diamond"></span>
+                  </button>
+                </div>
+                <div class="op-tile-wrap" data-op-wrap="set_human">
+                  <button type="button" class="op-tile-btn op-yellow" data-op="set_human">
+                    <span>ステータス設定</span>
+                    <span class="op-diamond"></span>
+                  </button>
+                </div>
+                <div class="op-tile-wrap" data-op-wrap="add_item">
+                  <button type="button" class="op-tile-btn op-pink" data-op="add_item">
+                    <span>アイテム追加</span>
+                    <span class="op-diamond"></span>
+                  </button>
+                </div>
+                <div class="op-tile-wrap" data-op-wrap="set_storage">
+                  <button type="button" class="op-tile-btn op-cyan" data-op="set_storage">
+                    <span>ストレージ設定</span>
+                    <span class="op-diamond"></span>
+                  </button>
+                </div>
+                <div class="op-tile-wrap" data-op-wrap="send_thrall_msg">
+                  <button type="button" class="op-tile-btn op-lime" data-op="send_thrall_msg">
+                    <span>チャット</span>
+                    <span class="op-diamond"></span>
+                  </button>
+                </div>
+                <div class="op-tile-wrap" data-op-wrap="kick_player">
+                  <button type="button" class="op-tile-btn op-red" data-op="kick_player">
+                    <span>キック</span>
+                    <span class="op-diamond"></span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Dynamic Console Action Card -->
+              <div class="nb-card accent-blue console-form-card">
+                <div class="nb-card-stripe"></div>
+
+                <div class="console-form-fields">
+                  <!-- Target Player / Role -->
+                  <div id="consoleTargetGroup" class="field-group">
+                    <div class="field-label-row">
+                      <label class="field-label" for="conTargetRole">対象プレイヤー</label>
+                      <div class="seg-row">
+                        <button type="button" id="btnTargetRole" class="seg-btn is-active">役職選択</button>
+                        <button type="button" id="btnTargetCustom" class="seg-btn">名前入力</button>
+                      </div>
+                    </div>
+                    <select id="conTargetRole" class="nb-select-native"></select>
+                    <input id="conCustomTarget" class="nb-input" type="text" placeholder="プレイヤー名 / 役職キー (例: Captain)" style="display:none;">
+                  </div>
+
+                  <!-- Sub-form: console_command -->
+                  <div id="conPanelCommand" class="field-stack">
+                    <div class="field-group">
+                      <label class="field-label cyan" for="conCommandType">命令タイプ</label>
+                      <select id="conCommandType" class="nb-select-native"></select>
+                    </div>
+
+                    <div id="conSubSummon" class="field-group">
+                      <label class="field-label" for="conSummon">召喚対象</label>
+                      <select id="conSummon" class="nb-select-native"></select>
+                    </div>
+
+                    <div id="conSubThrall" class="field-group" style="display:none;">
+                      <label class="field-label" for="conIsThrall">身分 (傀儡時は骨の短剣自動付与)</label>
+                      <select id="conIsThrall" class="nb-select-native">
+                        <option value="1">傀儡</option>
+                        <option value="0">船員 (傀儡解除)</option>
+                      </select>
+                    </div>
+
+                    <div id="conSubSpellCharge" class="field-group" style="display:none;">
+                      <label class="field-label" for="conSpellCharge">スペールチャージ</label>
+                      <select id="conSpellCharge" class="nb-select-native"></select>
+                    </div>
+
+                    <div id="conSubBlizzard" class="field-group" style="display:none;">
+                      <label class="field-label" for="conBlizzard">暴風雪強度</label>
+                      <select id="conBlizzard" class="nb-select-native"></select>
+                    </div>
+
+                    <div id="conSubSlomo" class="field-group" style="display:none;">
+                      <label class="field-label" for="conSlomo">加速値設定</label>
+                      <select id="conSlomo" class="nb-select-native"></select>
+                    </div>
+
+                    <div id="conSubGod" class="field-group" style="display:none;">
+                      <label class="field-label" for="conGod">無敵スイッチ</label>
+                      <select id="conGod" class="nb-select-native">
+                        <option value="1">オン</option>
+                        <option value="0">オフ</option>
+                      </select>
+                    </div>
+
+                    <div id="conSubEndMatch" class="field-group" style="display:none;">
+                      <label class="field-label" for="conEndMatch">勝利陣営</label>
+                      <select id="conEndMatch" class="nb-select-native">
+                        <option value="1">探検家勝利</option>
+                        <option value="0">傀儡勝利</option>
+                      </select>
+                    </div>
+
+                    <div id="conSubRaw" class="field-group" style="display:none;">
+                      <label class="field-label pink" for="conRawCommand">カスタム命令</label>
+                      <input id="conRawCommand" class="nb-input" type="text" placeholder="例: slomo 2 / summon BP_Totem_C">
+                    </div>
+                  </div>
+
+                  <!-- Sub-form: set_human -->
+                  <div id="conPanelStatus" class="field-stack" style="display:none;">
+                    <div class="field-group">
+                      <label class="field-label cyan" for="conStatusProp">設定タイプ</label>
+                      <select id="conStatusProp" class="nb-select-native"></select>
+                    </div>
+                    <div id="conStatusToggleWrap" class="field-group">
+                      <label class="field-label" for="conStatusToggle">設定スイッチ</label>
+                      <select id="conStatusToggle" class="nb-select-native">
+                        <option value="1">オン</option>
+                        <option value="0">オフ</option>
+                      </select>
+                    </div>
+                    <div id="conStatusNumWrap" class="field-group" style="display:none;">
+                      <label class="field-label" for="conStatusNumber">数値設定 (0以上)</label>
+                      <input id="conStatusNumber" class="nb-input" type="number" min="0" step="any" value="100">
+                    </div>
+                  </div>
+
+                  <!-- Sub-form: add_item -->
+                  <div id="conPanelItem" class="field-stack" style="display:none;">
+                    <input id="conItemFilter" type="hidden" value="">
+                    <div class="field-group">
+                      <label class="field-label cyan" for="conItemSelect">追加アイテム (検索対応)</label>
+                      <select id="conItemSelect" class="nb-select-native" data-searchable="true"></select>
+                    </div>
+                    <div class="field-group">
+                      <label class="field-label" for="conItemCount">追加数</label>
+                      <div class="inline-count-row">
+                        <input id="conItemCount" class="nb-input input-count-narrow" type="number" min="1" step="1" value="1">
+                        <div id="conItemCountPresets" class="preset-grid-5"></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Sub-form: set_storage -->
+                  <div id="conPanelStorage" class="field-stack" style="display:none;">
+                    <div class="field-group">
+                      <label class="field-label cyan" for="conStorageLimit">ストレージ容量</label>
+                      <input id="conStorageLimit" class="nb-input" type="number" min="1" step="1" value="10">
+                      <div id="conStoragePresets" class="preset-grid-3"></div>
+                    </div>
+                  </div>
+
+                  <!-- Sub-form: send_thrall_msg -->
+                  <div id="conPanelChat" class="field-stack" style="display:none;">
+                    <div class="toggle-row compact-toggle">
+                      <span class="toggle-title">全体ブロードキャスト <span class="chip info">ON: 全員 / OFF: 個別</span></span>
+                      <label class="nb-switch">
+                        <input id="conChatBroadcast" type="checkbox" checked>
+                        <span class="nb-switch-track"></span>
+                      </label>
+                    </div>
+                    <div class="field-group">
+                      <label class="field-label" for="conChatMessage">送信メッセージ</label>
+                      <input id="conChatMessage" class="nb-input" type="text" placeholder="ゲーム内通知メッセージを入力...">
+                    </div>
+                  </div>
+
+                  <!-- Sub-form: kick_player -->
+                  <div id="conPanelKick" class="field-stack" style="display:none;">
+                    <div class="info-callout">対象プレイヤーをサーバーから即時キックします。</div>
+                  </div>
+                </div>
+
+                <!-- Pinned Bottom Actions (keeps left & right column bottom edges pixel-aligned) -->
+                <div class="console-form-footer">
+                  <div id="conAutoBroadcastWrap" class="toggle-row compact-toggle">
+                    <span class="toggle-title">操作内容をゲーム内へ自動ブロードキャスト</span>
+                    <label class="nb-switch">
+                      <input id="conAutoBroadcast" type="checkbox" checked>
+                      <span class="nb-switch-track"></span>
+                    </label>
+                  </div>
+
+                  <span class="nb-cta-wrap is-full">
+                    <button type="button" id="btnConsoleSubmit" class="nb-cta-btn cta-pink cta-lg">
+                      <span class="nb-cta-face">コンソールへ送信</span>
+                    </button>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: Flex-Filling Live Console Dispatch Log -->
+            <div class="pane-col pane-fill">
+              <div class="section-bar">
+                <div class="section-tag-wrap accent-pink">
+                  <span class="section-tag">コンソール実行ログ</span>
+                </div>
+                <div class="section-accent-line"></div>
+                <span id="conLoopbackPortLabel" class="chip dark">127.0.0.1:7893</span>
+                <button type="button" id="btnClearConsoleLogs" class="nb-btn btn-xs">クリア</button>
+              </div>
+
+              <div id="consoleLogBox" class="log-box log-fill">
+                <div class="log-empty">コンソール操作ログがここにリアルタイム表示されます。</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== TAB 02: サーバー起動・MOD ==================== -->
+        <section id="tab-mods" class="tab-panel">
+          <!-- Unified Internal Scrollable Setup & MOD Catalog -->
+          <div class="mods-scroll-area">
+            <div class="section-bar">
+              <div class="section-tag-wrap">
+                <span class="section-tag">マップ &amp; 試合ルール</span>
+              </div>
+              <div class="section-accent-line"></div>
+              <button type="button" id="btnResetRules" class="nb-btn btn-xs">ルール初期化</button>
+            </div>
+
+            <div class="nb-card accent-cyan compact-card">
+              <div class="nb-card-stripe"></div>
+
+              <div id="mapGrid" class="map-grid"></div>
+
+              <div class="rules-grid">
+                <div class="field-group">
+                  <label class="field-label" for="ruleMaxPlayers">最大人数 (1-8)</label>
+                  <input id="ruleMaxPlayers" class="nb-input input-compact" type="number" min="1" max="8" step="1" value="8">
+                </div>
+                <div class="field-group">
+                  <label class="field-label" for="ruleDaysBlizzard">暴風雪前日数 (2-7)</label>
+                  <input id="ruleDaysBlizzard" class="nb-input input-compact" type="number" min="2" max="7" step="1" value="3">
+                </div>
+                <div class="field-group">
+                  <label class="field-label" for="ruleDayMinutes">1日時間/分 (5-16)</label>
+                  <input id="ruleDayMinutes" class="nb-input input-compact" type="number" min="5" max="16" step="1" value="9">
+                </div>
+                <div class="field-group">
+                  <label class="field-label" for="ruleThralls">傀儡人数 (0-8)</label>
+                  <input id="ruleThralls" class="nb-input input-compact" type="number" min="0" max="8" step="1" value="2">
+                </div>
+                <div class="field-group">
+                  <label class="field-label cyan" for="rulePredatorDmg">動物ダメージ (0.25-3)</label>
+                  <input id="rulePredatorDmg" class="nb-input input-compact" type="number" min="0.25" max="3.0" step="0.25" value="1">
+                </div>
+                <div class="field-group">
+                  <label class="field-label cyan" for="ruleCold">寒さ強度 (0.25-3)</label>
+                  <input id="ruleCold" class="nb-input input-compact" type="number" min="0.25" max="3.0" step="0.25" value="1">
+                </div>
+                <div class="field-group">
+                  <label class="field-label cyan" for="ruleHunger">空腹強度 (0.25-3)</label>
+                  <input id="ruleHunger" class="nb-input input-compact" type="number" min="0.25" max="3.0" step="0.25" value="1">
+                </div>
+                <div class="field-group">
+                  <label class="field-label cyan" for="ruleCoal">石炭燃焼 (0.1-2)</label>
+                  <input id="ruleCoal" class="nb-input input-compact" type="number" min="0.1" max="2.0" step="0.1" value="1">
+                </div>
+              </div>
+
+              <div id="ueArgPreview" class="ue-preview selectable"></div>
+            </div>
+
+            <div class="default-mods-row">
+              <span class="chip dark">自動注入 (常時有効)</span>
+              <div id="defaultModsStrip" class="default-mods-chips"></div>
+            </div>
+
+            <!-- Partition 1: Client-Cooperation Required MODs -->
+            <div class="section-bar">
+              <div class="section-tag-wrap accent-purple">
+                <span class="section-tag is-purple">クライアント導入必須 MOD</span>
+              </div>
+              <div class="section-accent-line"></div>
+              <span id="clientModCountChip" class="chip purple">0 件選択中</span>
+            </div>
+
+            <div class="nb-card accent-purple compact-card">
+              <div class="nb-card-stripe"></div>
+              <div id="clientRequiredModGrid" class="mod-grid client-grid"></div>
+            </div>
+
+            <!-- Partition 2: Practical Server-Only MODs (1..13) -->
+            <div class="section-bar">
+              <div class="section-tag-wrap">
+                <span class="section-tag">実用系 MOD (サーバーのみ)</span>
+              </div>
+              <div class="section-accent-line"></div>
+              <span id="practicalModCountChip" class="chip info">0 件選択中</span>
+            </div>
+
+            <div class="nb-card accent-blue compact-card">
+              <div class="nb-card-stripe"></div>
+              <div id="practicalModGrid" class="mod-grid"></div>
+            </div>
+
+            <!-- Partition 3: Fun / Variant Server-Only MODs (14..22) -->
+            <div class="section-bar">
+              <div class="section-tag-wrap accent-yellow">
+                <span class="section-tag">バラエティ・特殊 MOD (サーバーのみ)</span>
+              </div>
+              <div class="section-accent-line"></div>
+              <span id="funModCountChip" class="chip warn">0 件選択中</span>
+            </div>
+
+            <div class="nb-card accent-yellow compact-card">
+              <div class="nb-card-stripe"></div>
+              <div id="funModGrid" class="mod-grid"></div>
+            </div>
+          </div>
+
+          <!-- Fixed Bottom Launch Bar -->
+          <div class="launch-footer-bar">
+            <div id="modSummaryBar" class="launch-summary-text"></div>
+            <div class="btn-row">
+              <button type="button" id="btnClearMods" class="nb-btn btn-xs">選択クリア</button>
+              <span class="nb-cta-wrap">
+                <button type="button" id="btnLaunchFromSetup" class="nb-cta-btn cta-pink">
+                  <span class="nb-cta-face">この設定でサーバー起動</span>
+                </button>
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== TAB 03: 稼働モニター ==================== -->
+        <section id="tab-monitor" class="tab-panel">
+          <div class="monitor-top-band">
+            <div class="section-bar">
+              <div class="section-tag-wrap">
+                <span class="section-tag">サーバー操作 &amp; 稼働ステータス</span>
+              </div>
+              <div class="section-accent-line"></div>
+              <div id="monLogFileBadge" class="chip dark">パッチログ: 未生成</div>
+              <button type="button" id="btnOpenLogsDir" class="nb-btn btn-xs">ログフォルダ</button>
+            </div>
+
+            <div class="nb-card accent-cyan compact-card">
+              <div class="nb-card-stripe"></div>
+
+              <div class="monitor-actions-row">
+                <div class="btn-row monitor-primary-actions">
+                  <span class="nb-cta-wrap">
+                    <button type="button" id="btnMonLaunch" class="nb-cta-btn cta-green">
+                      <span class="nb-cta-face">サーバー起動</span>
+                    </button>
+                  </span>
+                  <button type="button" id="btnMonRestart" class="nb-btn btn-yellow" disabled>今すぐ再起動</button>
+                  <button type="button" id="btnMonStop" class="nb-btn btn-red" disabled>サーバー停止</button>
+                </div>
+
+                <div id="countdownInline" class="countdown-inline" role="status" aria-live="polite">
+                  <span class="countdown-inline-dot" aria-hidden="true"></span>
+                  <span id="countdownHeadline" class="countdown-inline-text">自動再起動 10秒</span>
+                  <span id="countdownPort" class="chip dark countdown-inline-port" style="display:none;">Port 7897</span>
+                  <button type="button" id="btnCountdownReconfig" class="nb-btn btn-xs btn-cyan">設定変更に戻る</button>
+                </div>
+              </div>
+
+              <div class="telemetry-grid">
+                <div class="telemetry-tile">
+                  <span class="telemetry-label">ステータス / PID</span>
+                  <span id="teleStatus" class="telemetry-value">停止中</span>
+                  <span id="telePid" class="telemetry-sub">PID: —</span>
+                </div>
+                <div class="telemetry-tile">
+                  <span class="telemetry-label">稼働ポート</span>
+                  <span id="telePort" class="telemetry-value">—</span>
+                  <span id="teleUdp" class="telemetry-sub">UDP待機中</span>
+                </div>
+                <div class="telemetry-tile">
+                  <span class="telemetry-label">マップ</span>
+                  <span id="teleMap" class="telemetry-value">—</span>
+                  <span id="teleRound" class="telemetry-sub">ラウンド: #0</span>
+                </div>
+                <div class="telemetry-tile">
+                  <span class="telemetry-label">有効MOD / 注入進捗</span>
+                  <span id="teleMods" class="telemetry-value">0 / 0</span>
+                  <span id="teleWatchdog" class="telemetry-sub">自動再起動: ON</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="monitor-split">
+            <div class="pane-col pane-fill">
+              <div class="section-bar">
+                <div class="section-tag-wrap accent-purple">
+                  <span class="section-tag">MOD注入プログレス</span>
+                </div>
+                <div class="section-accent-line"></div>
+                <span id="injectProgressChip" class="chip info">0 / 0</span>
+              </div>
+
+              <div class="nb-card compact-card pane-card-fill">
+                <div class="progress-track">
+                  <div id="injectProgressBar" class="progress-fill"></div>
+                </div>
+                <div id="patchProgressList" class="patch-list">
+                  <div class="log-empty">サーバー起動時に Frida 注入進捗が表示されます。</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="pane-col pane-fill">
+              <div class="section-bar">
+                <div class="section-tag-wrap accent-pink">
+                  <span class="section-tag">稼働・注入イベントログ</span>
+                </div>
+                <div class="section-accent-line"></div>
+                <button type="button" id="btnClearServerLogs" class="nb-btn btn-xs">クリア</button>
+              </div>
+
+              <div id="serverLogBox" class="log-box log-fill">
+                <div class="log-empty">サーバー起動・ウォッチドッグ・再起動イベントがここに表示されます。</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== TAB 04: 基本設定 (./launcher_config.json) ==================== -->
+        <section id="tab-settings" class="tab-panel">
+          <div class="section-bar">
+            <div class="section-tag-wrap accent-pink">
+              <span class="section-tag">基本設定 (./launcher_config.json)</span>
+            </div>
+            <div class="section-accent-line"></div>
+          </div>
+
+          <div class="nb-card accent-blue compact-card settings-card">
+            <div class="nb-card-stripe"></div>
+
+            <div class="settings-fields-area">
+              <div class="field-grid">
+                <div class="field-group full-span">
+                  <div class="field-label-row">
+                    <label class="field-label" for="cfgShippingExe">サーバー実行ファイル (相対パス推奨)</label>
+                    <div class="btn-row">
+                      <span id="exeExistsChip" class="chip err">未検出</span>
+                      <span id="legacyFridaChip" class="chip warn" style="display:none;">旧 frida.dll 検出</span>
+                    </div>
+                  </div>
+                  <div class="input-row">
+                    <input id="cfgShippingExe" class="nb-input" type="text" placeholder="./DreadHunger/Binaries/Win64/DreadHungerServer-Win64-Shipping.exe">
+                    <button type="button" id="btnPickExe" class="nb-btn btn-yellow">ファイル選択</button>
+                  </div>
+                </div>
+
+                <div class="field-group">
+                  <label class="field-label cyan" for="cfgPort1">ゲームサーバー UDPポート 1</label>
+                  <input id="cfgPort1" class="nb-input" type="number" min="1024" max="65535">
+                </div>
+
+                <div class="field-group">
+                  <label class="field-label cyan" for="cfgPort2">ゲームサーバー UDPポート 2 (切替用)</label>
+                  <input id="cfgPort2" class="nb-input" type="number" min="1024" max="65535">
+                </div>
+
+                <div class="field-group">
+                  <label class="field-label" for="cfgPatchPort">内部コンソール連携 TCPポート (127.0.0.1)</label>
+                  <input id="cfgPatchPort" class="nb-input" type="number" min="1024" max="65535">
+                </div>
+
+                <div class="field-group">
+                  <label class="field-label" for="cfgRestartWait">再起動カウントダウン (秒)</label>
+                  <input id="cfgRestartWait" class="nb-input" type="number" min="1" max="300">
+                </div>
+
+                <div class="field-group full-span">
+                  <div class="toggle-row compact-toggle">
+                    <span class="toggle-title">再起動時のポート切替 <span class="chip info">ON: 2ポート交互 / OFF: ポート1固定</span></span>
+                    <label class="nb-switch">
+                      <input id="cfgSwitchPort" type="checkbox">
+                      <span class="nb-switch-track"></span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="field-group full-span">
+                  <div class="toggle-row compact-toggle">
+                    <span class="toggle-title">自動ブロードキャスト既定値 <span class="chip">コンソール操作時にゲーム内自動告知</span></span>
+                    <label class="nb-switch">
+                      <input id="cfgAutoBroadcast" type="checkbox">
+                      <span class="nb-switch-track"></span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="field-group full-span">
+                  <div class="toggle-row compact-toggle">
+                    <span class="toggle-title">自動再起動ウォッチドッグ <span class="chip">試合終了・UDP停止検知で自動再起動</span></span>
+                    <label class="nb-switch">
+                      <input id="cfgWatchdog" type="checkbox" checked>
+                      <span class="nb-switch-track"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-action-bar">
+              <span class="nb-cta-wrap">
+                <button type="button" id="btnSaveConfig" class="nb-cta-btn cta-blue">
+                  <span class="nb-cta-face">./launcher_config.json に保存</span>
+                </button>
+              </span>
+              <button type="button" id="btnResetConfig" class="nb-btn">デフォルトに戻す</button>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <!-- Ultra-Slim 1-Line Footer -->
+      <footer class="app-footer">
+        <span class="footer-brand">
+          <span class="fb-author">アサネオン</span>
+          <span class="fb-sep">/</span>
+          <span class="fb-google-grad">Build With Antigravity</span>
+        </span>
+        <div class="footer-right">
+          <button type="button" id="btnShowLicense" class="footer-license-btn" title="ライセンス情報を表示">LICENSE</button>
+          <span id="footerVersion" class="footer-version">DH_ServerLauncher_JA v2.1.0</span>
+          <div class="footer-dots" aria-hidden="true">
+            <span class="dot dot-b"></span>
+            <span class="dot dot-g"></span>
+            <span class="dot dot-y"></span>
+            <span class="dot dot-r"></span>
+            <span class="dot dot-p"></span>
+          </div>
+        </div>
+      </footer>
+    </div>
+  </div>
+
+  <!-- In-App Neo-Brutalist License Modal -->
+  <div id="licenseModalBackdrop" class="nb-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="licenseModalTitle" aria-hidden="true">
+    <div class="nb-modal-dialog">
+      <div class="nb-modal-stripe" aria-hidden="true"></div>
+      <div class="nb-modal-header">
+        <div class="nb-modal-title-group">
+          <span class="nb-modal-kicker">LICENSE</span>
+          <h2 id="licenseModalTitle" class="nb-modal-title">DH_Tool_JA ライセンス情報</h2>
+        </div>
+        <button type="button" id="btnCloseLicenseModal" class="win-btn win-btn-close" title="閉じる" aria-label="閉じる">✕</button>
+      </div>
+      <div class="nb-modal-body">
+        <pre id="licenseModalText" class="license-pre selectable">読み込み中...</pre>
+      </div>
+    </div>
+  </div>
+
+  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

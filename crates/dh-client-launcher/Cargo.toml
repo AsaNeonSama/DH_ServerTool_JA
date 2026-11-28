@@ -1,0 +1,43 @@
+[package]
+name = "dh-client-launcher"
+version = "0.1.0"
+edition = "2021"
+license-file.workspace = true
+repository.workspace = true
+description = "Dread Hunger Client Launcher with Built-in & Custom DLL + Frida JS Early Injection (DH_Tool_JA)"
+authors = ["アサネオン / Build With Antigravity"]
+build = "build.rs"
+
+[lib]
+name = "dh_client_launcher"
+path = "src/lib.rs"
+
+[[bin]]
+name = "DH_ClientLauncher_JA"
+path = "src/main.rs"
+
+[dependencies]
+dh-win32 = { path = "../dh-win32" }
+dh-gadget-injector = { path = "../dh-gadget-injector" }
+
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+zstd = { version = "0.13", default-features = false }
+
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.39"
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
+windows-core = "0.62"
+
+[build-dependencies]
+sha2 = "0.10"
+tauri-build = { version = "2", features = [] }
+zstd = { version = "0.13", default-features = false }
+
+[lints]
+workspace = true

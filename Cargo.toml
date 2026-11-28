@@ -3,14 +3,15 @@ resolver = "2"
 members = [
     "crates/dh-win32",
     "crates/dh-gadget-injector",
-    "crates/dh-server-tool",
+    "crates/dh-server-launcher",
     "crates/dh-client-eos-fix",
     "crates/dh-client-voice",
+    "crates/dh-client-launcher",
 ]
 
 [workspace.package]
 license-file = "LICENSE"
-repository = "https://github.com/AsaNeonSama/DH_ServerTool_JA"
+repository = "https://github.com/AsaNeonSama/DH_Tool_JA"
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "warn"

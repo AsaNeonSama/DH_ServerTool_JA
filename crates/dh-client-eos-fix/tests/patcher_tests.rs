@@ -40,7 +40,8 @@ fn target_process_name_matching_is_case_insensitive_and_strict() {
     assert!(!is_target_process_path(
         "DreadHungerServer-Win64-Shipping.exe"
     ));
-    assert!(!is_target_process_path("DH_ServerTool_JA.exe"));
+    assert!(!is_target_process_path("DH_ServerLauncher_JA.exe"));
+    assert!(!is_target_process_path("DH_ClientLauncher_JA.exe"));
     assert!(!is_target_process_path("notepad.exe"));
     assert!(!is_target_process_path(""));
 }

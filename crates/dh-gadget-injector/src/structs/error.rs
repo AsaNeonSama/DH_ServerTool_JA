@@ -18,14 +18,21 @@ pub enum InjectorError {
     #[error("no writable cache directory available")]
     NoWritableCacheDir,
 
-    #[error(
-        "gadget DLL path too long for remote stub ({len} UTF-16 code units, max {max}): {path}"
-    )]
+    #[error("DLL path too long for remote stub ({len} UTF-16 code units, max {max}): {path}")]
     PathTooLong {
         path: PathBuf,
         len: usize,
         max: usize,
     },
+
+    #[error("DLL to inject not found: {path}")]
+    DllNotFound { path: PathBuf },
+
+    #[error("too many DLLs requested for OEP injection ({count}, max {max})")]
+    TooManyDlls { count: usize, max: usize },
+
+    #[error("LoadLibraryW returned NULL in target process for DLL: {path}")]
+    DllLoadFailed { path: PathBuf },
 
     #[error("remote injection failed: {0}")]
     Inject(String),

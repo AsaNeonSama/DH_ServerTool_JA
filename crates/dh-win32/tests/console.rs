@@ -21,5 +21,5 @@ fn clipboard_roundtrip_ascii_and_japanese() {
 
 #[test]
 fn init_console_does_not_panic_when_redirected() {
-    init_console("DH_ServerTool_JA テスト");
+    init_console("DH_Tool_JA テスト");
 }

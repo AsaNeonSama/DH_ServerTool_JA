@@ -8,9 +8,11 @@ pub mod structs;
 
 pub use net_table::{find_udp_listener_pid, is_tcp_port_listening};
 pub use process::{
-    build_command_line, find_processes_by_name, is_process_alive, list_processes,
-    read_remote_peb_and_oep, spawn_suspended_console, terminate_process,
+    build_command_line, build_unicode_environment_block, find_processes_by_name, is_process_alive,
+    list_processes, read_remote_peb_and_oep, spawn_suspended, spawn_suspended_console,
+    spawn_suspended_gui, terminate_process,
 };
 pub use structs::{
-    JobObject, ProcessInfo, RemotePeEntry, Result, SpawnedProcess, UdpLookupResult, Win32Error,
+    JobObject, ProcessInfo, RemotePeEntry, Result, SpawnOptions, SpawnedProcess, UdpLookupResult,
+    Win32Error,
 };

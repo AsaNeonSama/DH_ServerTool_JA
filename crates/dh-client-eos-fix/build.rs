@@ -25,7 +25,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 #[cfg(windows)]
 fn embed_windows_resources() -> Result<(), Box<dyn Error>> {
     let mut res: winresource::WindowsResource = winresource::WindowsResource::new();
-    res.set("ProductName", "DH_ServerTool_JA");
+    res.set("ProductName", "DH_Tool_JA");
     let file_description: &str = if env::var_os("CARGO_FEATURE_PRIVATE_URI").is_some() {
         "Dread Hunger Client EOS & Reconnect Fix (Plan B: Private URI)"
     } else {
