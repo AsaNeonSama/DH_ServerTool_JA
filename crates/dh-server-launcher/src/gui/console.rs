@@ -1,4 +1,4 @@
-use rand::Rng;
+use rand::RngExt;
 
 use crate::console::dispatch;
 use crate::consts::console::{status_code, PLAYER_NAME_LIST};
@@ -151,7 +151,7 @@ fn resolve_command_random_tokens(command: &str) -> String {
     if !command.contains(CANNIBAL_RANDOM_KEY) {
         return command.to_string();
     }
-    let idx: usize = rand::thread_rng().gen_range(0..CANNIBAL_VARIANTS.len());
+    let idx: usize = rand::rng().random_range(0..CANNIBAL_VARIANTS.len());
     let chosen: &str = CANNIBAL_VARIANTS[idx];
     command.replace(CANNIBAL_RANDOM_KEY, chosen)
 }

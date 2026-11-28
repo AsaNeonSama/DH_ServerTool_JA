@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -14,8 +14,8 @@ use crate::consts::builtin_dlls::{
     BUILTIN_EOS_PLAN_B_SUBDIR_PREFIX, BUILTIN_VOICE_CLIENT_FILE_NAME, BUILTIN_VOICE_ID,
     BUILTIN_VOICE_LABEL, BUILTIN_VOICE_SUBDIR_PREFIX, EMBEDDED_EOS_FIX_PLAN_A_ZST,
     EMBEDDED_EOS_FIX_PLAN_B_ZST, EMBEDDED_VOICE_CLIENT_ZST, EOS_FIX_PLAN_A_RAW_LEN,
-    EOS_FIX_PLAN_A_SHA256, EOS_FIX_PLAN_B_RAW_LEN, EOS_FIX_PLAN_B_SHA256, VOICE_CLIENT_RAW_LEN,
-    VOICE_CLIENT_SHA256,
+    EOS_FIX_PLAN_A_SHA256, EOS_FIX_PLAN_B_RAW_LEN, EOS_FIX_PLAN_B_SHA256, SHA256_READ_BUFFER_SIZE,
+    VOICE_CLIENT_RAW_LEN, VOICE_CLIENT_SHA256,
 };
 use crate::consts::discovery::{
     EOS_PLAN_A_DESCRIPTION, EOS_PLAN_B_DESCRIPTION, VOICE_CLIENT_DESCRIPTION,
@@ -126,7 +126,14 @@ fn sha256_bytes_hex(bytes: &[u8]) -> String {
 fn sha256_file_hex(path: &Path) -> std::io::Result<String> {
     let mut file: File = File::open(path)?;
     let mut hasher: Sha256 = Sha256::new();
-    let _copied: u64 = std::io::copy(&mut file, &mut hasher)?;
+    let mut buf: [u8; SHA256_READ_BUFFER_SIZE] = [0u8; SHA256_READ_BUFFER_SIZE];
+    loop {
+        let n: usize = file.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
     let digest: [u8; 32] = hasher.finalize().into();
     Ok(digest_to_hex(digest))
 }

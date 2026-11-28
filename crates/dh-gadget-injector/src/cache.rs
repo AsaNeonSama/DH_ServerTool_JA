@@ -2,12 +2,13 @@ use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::fmt::Write as _;
 use std::fs::{self, File, ReadDir};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use rand::RngCore;
+use rand::rngs::{SysError, SysRng};
+use rand::TryRng;
 use sha2::{Digest, Sha256};
 
 use crate::consts::cache::{
@@ -32,7 +33,14 @@ fn digest_to_hex(digest: [u8; 32]) -> String {
 fn sha256_file_hex(path: &Path) -> std::io::Result<String> {
     let mut file: File = File::open(path)?;
     let mut hasher: Sha256 = Sha256::new();
-    std::io::copy(&mut file, &mut hasher)?;
+    let mut buf: [u8; 8192] = [0u8; 8192];
+    loop {
+        let read_len: usize = file.read(&mut buf)?;
+        if read_len == 0 {
+            break;
+        }
+        hasher.update(&buf[..read_len]);
+    }
     let digest: [u8; 32] = hasher.finalize().into();
     Ok(digest_to_hex(digest))
 }
@@ -168,7 +176,9 @@ impl GadgetCache {
             }
 
             let mut suffix: [u8; 4] = [0u8; 4];
-            rand::rngs::OsRng.fill_bytes(&mut suffix);
+            SysRng
+                .try_fill_bytes(&mut suffix)
+                .map_err(|e: SysError| InjectorError::Io(std::io::Error::other(e.to_string())))?;
             let tmp_name: String = format!(
                 "frida_gadget_{FRIDA_GADGET_VERSION}_{short_hash}.{}.{:02x}{:02x}{:02x}{:02x}.tmp",
                 std::process::id(),

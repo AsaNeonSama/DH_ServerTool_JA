@@ -4,7 +4,7 @@ use std::ptr::{copy_nonoverlapping, read_unaligned};
 use std::time::Duration;
 
 use windows::core::PCWSTR;
-use windows::Win32::Foundation::{GlobalFree, HANDLE, HGLOBAL, HWND};
+use windows::Win32::Foundation::{GlobalFree, HANDLE, HGLOBAL};
 use windows::Win32::System::Console::{
     GetConsoleMode, GetStdHandle, SetConsoleCP, SetConsoleMode, SetConsoleOutputCP,
     SetConsoleTitleW, CONSOLE_MODE, ENABLE_VIRTUAL_TERMINAL_PROCESSING, STD_INPUT_HANDLE,
@@ -57,7 +57,7 @@ impl Drop for GlobalAllocGuard {
         if !self.transferred && !self.handle.0.is_null() {
             // SAFETY: Ownership was not transferred to the clipboard, so freeing `self.handle` prevents a leak.
             unsafe {
-                let _ = GlobalFree(self.handle);
+                let _ = GlobalFree(Some(self.handle));
             }
             self.handle = HGLOBAL::default();
         }
@@ -160,8 +160,8 @@ pub fn set_input_mode(mode: u32) -> bool {
 
 fn open_clipboard_with_retry() -> Result<ClipboardGuard> {
     for attempt in 0u8..CLIPBOARD_RETRY_ATTEMPTS {
-        // SAFETY: Passing `HWND::default()` (NULL) associates clipboard ownership with the current task.
-        match unsafe { OpenClipboard(HWND::default()) } {
+        // SAFETY: Passing `None` (NULL HWND) associates clipboard ownership with the current task.
+        match unsafe { OpenClipboard(None) } {
             Ok(()) => return Ok(ClipboardGuard),
             Err(e) => {
                 if attempt.saturating_add(1) >= CLIPBOARD_RETRY_ATTEMPTS {
@@ -201,7 +201,7 @@ pub fn set_clipboard_text(text: &str) -> Result<()> {
     unsafe { EmptyClipboard() }
         .map_err(|e: windows::core::Error| from_windows_err("EmptyClipboard", &e))?;
     // SAFETY: Clipboard is open and `alloc_guard.handle` is a valid unlocked `GMEM_MOVEABLE` UTF-16LE buffer.
-    unsafe { SetClipboardData(CF_UNICODETEXT, HANDLE(alloc_guard.handle.0)) }
+    unsafe { SetClipboardData(CF_UNICODETEXT, Some(HANDLE(alloc_guard.handle.0))) }
         .map_err(|e: windows::core::Error| from_windows_err("SetClipboardData", &e))?;
     // Ownership transfers to the system only after `SetClipboardData` succeeds.
     alloc_guard.mark_transferred();

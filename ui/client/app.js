@@ -147,24 +147,44 @@
     msg.className = "toast-message";
     msg.textContent = message;
 
+    let autoTimer = null;
+    function dismissToast() {
+      if (!toast.isConnected || toast.dataset.closing === "1") {
+        return;
+      }
+      toast.dataset.closing = "1";
+      if (autoTimer !== null) {
+        window.clearTimeout(autoTimer);
+        autoTimer = null;
+      }
+      const reducedMotion =
+        window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (reducedMotion) {
+        toast.remove();
+        return;
+      }
+      const removeSafely = function () {
+        if (toast.isConnected) {
+          toast.remove();
+        }
+      };
+      toast.addEventListener("animationend", removeSafely, { once: true });
+      toast.classList.add("is-leaving");
+      window.setTimeout(removeSafely, 260);
+    }
+
     const closeBtn = document.createElement("button");
     closeBtn.type = "button";
     closeBtn.className = "toast-close";
     closeBtn.setAttribute("aria-label", "閉じる");
     closeBtn.textContent = "×";
-    closeBtn.addEventListener("click", function () {
-      toast.remove();
-    });
+    closeBtn.addEventListener("click", dismissToast);
 
     toast.appendChild(msg);
     toast.appendChild(closeBtn);
     els.toastContainer.appendChild(toast);
 
-    window.setTimeout(function () {
-      if (toast.isConnected) {
-        toast.remove();
-      }
-    }, 3600);
+    autoTimer = window.setTimeout(dismissToast, 3600);
   }
 
   function formatNow() {

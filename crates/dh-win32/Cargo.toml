@@ -8,7 +8,7 @@ description = "Typed Win32 wrappers for DH_Tool_JA (Job Objects, processes, PEB/
 
 [dependencies]
 thiserror = "2"
-windows = { version = "0.58", features = [
+windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_NetworkManagement_IpHelper",
     "Win32_Networking_WinSock",
@@ -20,6 +20,7 @@ windows = { version = "0.58", features = [
     "Win32_System_JobObjects",
     "Win32_System_LibraryLoader",
     "Win32_System_Memory",
+    "Win32_System_SystemInformation",
     "Win32_System_Threading",
 ] }
 

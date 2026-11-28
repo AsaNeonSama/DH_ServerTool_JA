@@ -8,9 +8,9 @@ use std::ffi::c_void;
 #[cfg(windows)]
 use std::sync::OnceLock;
 #[cfg(windows)]
-use windows::core::{PCSTR, PCWSTR};
+use windows::core::{BOOL, PCSTR, PCWSTR};
 #[cfg(windows)]
-use windows::Win32::Foundation::{BOOL, HMODULE};
+use windows::Win32::Foundation::HMODULE;
 #[cfg(windows)]
 use windows::Win32::System::LibraryLoader::{
     DisableThreadLibraryCalls, GetProcAddress, LoadLibraryW,

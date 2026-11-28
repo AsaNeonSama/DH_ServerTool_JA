@@ -30,12 +30,6 @@
         <div class="header-right" data-tauri-drag-region>
           <div class="header-pills" data-tauri-drag-region>
             <div class="status-pill-wrap" data-tauri-drag-region>
-              <span class="status-pill is-loopback" data-tauri-drag-region>
-                <span class="pulse-dot" data-tauri-drag-region></span>
-                <span id="hdrBridgeText" data-tauri-drag-region>内部連携: 127.0.0.1:7893</span>
-              </span>
-            </div>
-            <div class="status-pill-wrap" data-tauri-drag-region>
               <span id="hdrServerPill" class="status-pill is-stopped" data-tauri-drag-region>
                 <span class="pulse-dot" data-tauri-drag-region></span>
                 <span id="hdrServerText" data-tauri-drag-region>サーバー: 停止中</span>
@@ -503,38 +497,17 @@
             </div>
           </div>
 
-          <div class="monitor-split">
-            <div class="pane-col pane-fill">
-              <div class="section-bar">
-                <div class="section-tag-wrap accent-purple">
-                  <span class="section-tag">MOD注入プログレス</span>
-                </div>
-                <div class="section-accent-line"></div>
-                <span id="injectProgressChip" class="chip info">0 / 0</span>
+          <div class="monitor-log-pane pane-col pane-fill">
+            <div class="section-bar">
+              <div class="section-tag-wrap accent-pink">
+                <span class="section-tag">稼働・注入イベントログ</span>
               </div>
-
-              <div class="nb-card compact-card pane-card-fill">
-                <div class="progress-track">
-                  <div id="injectProgressBar" class="progress-fill"></div>
-                </div>
-                <div id="patchProgressList" class="patch-list">
-                  <div class="log-empty">サーバー起動時に Frida 注入進捗が表示されます。</div>
-                </div>
-              </div>
+              <div class="section-accent-line"></div>
+              <button type="button" id="btnClearServerLogs" class="nb-btn btn-xs">クリア</button>
             </div>
 
-            <div class="pane-col pane-fill">
-              <div class="section-bar">
-                <div class="section-tag-wrap accent-pink">
-                  <span class="section-tag">稼働・注入イベントログ</span>
-                </div>
-                <div class="section-accent-line"></div>
-                <button type="button" id="btnClearServerLogs" class="nb-btn btn-xs">クリア</button>
-              </div>
-
-              <div id="serverLogBox" class="log-box log-fill">
-                <div class="log-empty">サーバー起動・ウォッチドッグ・再起動イベントがここに表示されます。</div>
-              </div>
+            <div id="serverLogBox" class="log-box log-fill">
+              <div class="log-empty">サーバー起動・ウォッチドッグ・再起動イベントがここに表示されます。</div>
             </div>
           </div>
         </section>

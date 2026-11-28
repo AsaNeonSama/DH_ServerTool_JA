@@ -4,7 +4,8 @@ use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use rand::RngCore;
+use rand::rngs::{SysError, SysRng};
+use rand::TryRng;
 use sha2::{Digest, Sha256};
 
 use crate::consts::mods::{
@@ -215,7 +216,9 @@ pub fn extract_content_mod_assets(
     }
 
     let mut suffix: [u8; 4] = [0u8; 4];
-    rand::rngs::OsRng.fill_bytes(&mut suffix);
+    SysRng
+        .try_fill_bytes(&mut suffix)
+        .map_err(|e: SysError| format!("failed to generate random temp suffix: {e}"))?;
     let tmp_dir: PathBuf = content_root.join(format!(
         ".{}_{short_hash}.{}.{:02x}{:02x}{:02x}{:02x}.tmp",
         bundle.mod_id,

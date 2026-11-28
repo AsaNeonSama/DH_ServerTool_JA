@@ -357,7 +357,7 @@ pub fn spawn_suspended(
     unsafe {
         CreateProcessW(
             PCWSTR::from_raw(app_wide.as_ptr()),
-            PWSTR::from_raw(cmd_wide.as_mut_ptr()),
+            Some(PWSTR::from_raw(cmd_wide.as_mut_ptr())),
             None,
             None,
             false,

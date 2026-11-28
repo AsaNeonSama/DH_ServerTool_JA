@@ -3,13 +3,12 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use chrono::Local;
 use dh_gadget_injector::{
     spawn_and_inject_with_cancel, ActiveInjectionSession, DllEventCallback, DllInjectionEvent,
     DllLoadResult, EventCallback, InjectLaunchRequest, InjectorEvent, LogLevel, OepStubInjector,
     PatchMod, MAX_INJECT_DLLS,
 };
-use dh_win32::{terminate_process, ProcessInfo};
+use dh_win32::{get_local_time, terminate_process, LocalTimeParts, ProcessInfo};
 use tauri::{AppHandle, Emitter};
 use tokio::time::Interval;
 
@@ -67,7 +66,11 @@ pub fn steam_launch_env_overrides() -> Vec<(String, String)> {
 /// Formats the current local timestamp as `HH:MM:SS.mmm` for log entries.
 #[must_use]
 pub fn format_log_timestamp() -> String {
-    Local::now().format("%H:%M:%S%.3f").to_string()
+    let now: LocalTimeParts = get_local_time();
+    format!(
+        "{:02}:{:02}:{:02}.{:03}",
+        now.hour, now.minute, now.second, now.millisecond
+    )
 }
 
 /// Constructs a structured [`LauncherLogEvent`] with the current local timestamp.

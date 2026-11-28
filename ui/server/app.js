@@ -113,6 +113,32 @@
     const toast = document.createElement("div");
     toast.className = "toast " + (type || "success");
 
+    let autoDismissTimer = null;
+    let fallbackTimer = null;
+
+    function dismissToast() {
+      if (toast.dataset.closing === "1") return;
+      toast.dataset.closing = "1";
+      if (autoDismissTimer !== null) {
+        window.clearTimeout(autoDismissTimer);
+        autoDismissTimer = null;
+      }
+      const removeNow = function () {
+        if (fallbackTimer !== null) {
+          window.clearTimeout(fallbackTimer);
+          fallbackTimer = null;
+        }
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      };
+      if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        removeNow();
+        return;
+      }
+      toast.addEventListener("animationend", removeNow, { once: true });
+      toast.classList.add("is-leaving");
+      fallbackTimer = window.setTimeout(removeNow, 260);
+    }
+
     const msgSpan = document.createElement("span");
     msgSpan.className = "toast-msg";
     msgSpan.textContent = String(message || "");
@@ -121,17 +147,13 @@
     closeBtn.type = "button";
     closeBtn.className = "toast-close";
     closeBtn.textContent = "×";
-    closeBtn.addEventListener("click", function () {
-      if (toast.parentNode) toast.parentNode.removeChild(toast);
-    });
+    closeBtn.addEventListener("click", dismissToast);
 
     toast.appendChild(msgSpan);
     toast.appendChild(closeBtn);
     container.appendChild(toast);
 
-    window.setTimeout(function () {
-      if (toast.parentNode) toast.parentNode.removeChild(toast);
-    }, 4200);
+    autoDismissTimer = window.setTimeout(dismissToast, 4200);
   }
 
   async function callBackend(cmd, args) {
@@ -1385,61 +1407,6 @@
     } else {
       inlineCountdown.classList.remove("is-visible");
     }
-
-    byId("injectProgressChip").textContent = injected + " / " + totalPatches;
-    const pct = totalPatches > 0 ? Math.min(100, Math.round((injected / totalPatches) * 100)) : 0;
-    byId("injectProgressBar").style.width = pct + "%";
-
-    const listEl = byId("patchProgressList");
-    listEl.textContent = "";
-    if (!st.patchProgress || st.patchProgress.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "log-empty";
-      empty.textContent = "サーバーを起動すると、Frida Gadget 注入進捗がリアルタイムに表示されます。";
-      listEl.appendChild(empty);
-    } else {
-      st.patchProgress.forEach(function (item) {
-        const row = document.createElement("div");
-        row.className =
-          "patch-item" +
-          (item.status === "loaded" ? " is-loaded" : item.status === "error" ? " is-error" : "");
-
-        const left = document.createElement("div");
-        left.className = "patch-item-left";
-
-        const idxChip = document.createElement("span");
-        idxChip.className =
-          item.category === "client_required"
-            ? "chip purple"
-            : item.category === "default"
-            ? "chip dark"
-            : "chip info";
-        idxChip.textContent = "#" + item.index;
-
-        const nameEl = document.createElement("span");
-        nameEl.className = "patch-item-name";
-        nameEl.textContent = item.label + " (" + item.fileName + ")";
-
-        left.appendChild(idxChip);
-        left.appendChild(nameEl);
-
-        const stChip = document.createElement("span");
-        if (item.status === "loaded") {
-          stChip.className = "chip ok";
-          stChip.textContent = "注入完了";
-        } else if (item.status === "error") {
-          stChip.className = "chip err";
-          stChip.textContent = "エラー";
-        } else {
-          stChip.className = "chip";
-          stChip.textContent = "待機中";
-        }
-
-        row.appendChild(left);
-        row.appendChild(stChip);
-        listEl.appendChild(row);
-      });
-    }
   }
 
   // ==================== Tab 04: Basic Settings ====================
@@ -1462,7 +1429,6 @@
 
   function renderBridgeLabels() {
     const activePort = state.config ? state.config.consolePatchPort : 7893;
-    byId("hdrBridgeText").textContent = "内部連携: 127.0.0.1:" + activePort;
     byId("conLoopbackPortLabel").textContent = "127.0.0.1:" + activePort;
     byId("tabConsoleBadge").textContent = ":" + activePort;
   }

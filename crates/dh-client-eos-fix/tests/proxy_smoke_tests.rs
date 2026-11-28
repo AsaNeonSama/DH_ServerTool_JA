@@ -5,8 +5,8 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use dh_client_eos_fix::consts::proxy::DSOUND_EXPORTS;
-use windows::core::{PCSTR, PCWSTR};
-use windows::Win32::Foundation::{FreeLibrary, BOOL, HMODULE};
+use windows::core::{BOOL, PCSTR, PCWSTR};
+use windows::Win32::Foundation::{FreeLibrary, HMODULE};
 use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 
 type DirectSoundEnumerateWFn = unsafe extern "system" fn(

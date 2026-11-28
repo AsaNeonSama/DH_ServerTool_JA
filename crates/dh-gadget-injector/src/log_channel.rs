@@ -3,7 +3,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use rand::RngCore;
+use rand::rngs::{SysError, SysRng};
+use rand::TryRng;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{oneshot, Mutex, OwnedSemaphorePermit, Semaphore};
@@ -51,14 +52,16 @@ impl Drop for LogServerHandle {
     }
 }
 
-fn generate_session_nonce() -> String {
+fn generate_session_nonce() -> Result<String> {
     let mut bytes: [u8; SESSION_NONCE_BYTES] = [0u8; SESSION_NONCE_BYTES];
-    rand::rngs::OsRng.fill_bytes(&mut bytes);
+    SysRng.try_fill_bytes(&mut bytes).map_err(|e: SysError| {
+        crate::error::InjectorError::Inject(format!("OS CSPRNG failed to generate nonce: {e}"))
+    })?;
     let mut hex: String = String::with_capacity(SESSION_NONCE_BYTES * 2);
     for b in bytes {
         let _ = write!(&mut hex, "{b:02x}");
     }
-    hex
+    Ok(hex)
 }
 
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
@@ -266,7 +269,7 @@ pub async fn start_log_server(
 ) -> Result<(LogServerHandle, oneshot::Receiver<InitHandshakeOutcome>)> {
     let listener: TcpListener = TcpListener::bind("127.0.0.1:0").await?;
     let port: u16 = listener.local_addr()?.port();
-    let session_nonce: String = generate_session_nonce();
+    let session_nonce: String = generate_session_nonce()?;
 
     let (init_tx, init_rx): (
         oneshot::Sender<InitHandshakeOutcome>,

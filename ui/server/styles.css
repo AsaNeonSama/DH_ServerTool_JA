@@ -101,6 +101,8 @@ code,
   background-size: 200% 100%;
   animation: neonFlow 6s linear infinite;
   border-bottom: 3.5px solid var(--ink);
+  cursor: move;
+  user-select: none;
 }
 
 @keyframes neonFlow {
@@ -127,6 +129,14 @@ code,
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  user-select: none;
+  cursor: move;
+}
+
+.brand-group,
+.header-right,
+.header-pills {
+  pointer-events: none;
 }
 
 .brand-group {
@@ -240,6 +250,8 @@ code,
   gap: 7px;
   margin-left: 2px;
   flex-shrink: 0;
+  pointer-events: auto;
+  cursor: default;
 }
 
 .win-btn {
@@ -252,6 +264,7 @@ code,
   font-weight: 900;
   line-height: 1;
   cursor: pointer;
+  pointer-events: auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -284,11 +297,6 @@ code,
 }
 
 .win-btn-close:hover {
-  background: var(--yellow);
-  color: var(--ink);
-}
-
-.status-pill.is-loopback {
   background: var(--yellow);
   color: var(--ink);
 }
@@ -485,14 +493,12 @@ code,
 
 .console-form-fields::-webkit-scrollbar,
 .mods-scroll-area::-webkit-scrollbar,
-.patch-list::-webkit-scrollbar,
 .settings-fields-area::-webkit-scrollbar {
   width: 10px;
 }
 
 .console-form-fields::-webkit-scrollbar-track,
 .mods-scroll-area::-webkit-scrollbar-track,
-.patch-list::-webkit-scrollbar-track,
 .settings-fields-area::-webkit-scrollbar-track {
   background: #eceae0;
   border-left: 2px solid var(--ink);
@@ -500,7 +506,6 @@ code,
 
 .console-form-fields::-webkit-scrollbar-thumb,
 .mods-scroll-area::-webkit-scrollbar-thumb,
-.patch-list::-webkit-scrollbar-thumb,
 .settings-fields-area::-webkit-scrollbar-thumb {
   background: var(--ink);
 }
@@ -617,13 +622,11 @@ code,
   align-items: stretch;
 }
 
-.monitor-split {
+.monitor-log-pane {
   flex: 1;
   min-height: 0;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  align-items: stretch;
+  height: auto;
+  width: 100%;
 }
 
 .nb-card {
@@ -667,14 +670,6 @@ code,
   display: flex;
   flex-direction: column;
   gap: 7px;
-}
-
-.nb-card.pane-card-fill {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 0;
 }
 
 .nb-card.accent-blue { box-shadow: 5px 5px 0 var(--blue); }
@@ -2188,61 +2183,6 @@ code,
   text-overflow: ellipsis;
 }
 
-.progress-track {
-  flex-shrink: 0;
-  height: 14px;
-  width: 100%;
-  background: #eceae0;
-  border: 2.5px solid var(--ink);
-  margin-bottom: 8px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  width: 0%;
-  background: var(--neon-strip);
-  transition: width 0.2s ease;
-}
-
-.patch-list {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  overflow-y: auto;
-  padding-right: 3px;
-}
-
-.patch-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 5px 9px;
-  border: 2px solid var(--ink);
-  background: var(--paper);
-  font-size: 11.5px;
-}
-
-.patch-item.is-loaded { background: #e9fff4; }
-.patch-item.is-error { background: #ffe6ee; border-color: var(--red); }
-
-.patch-item-left {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.patch-item-name {
-  font-weight: 900;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* Structured Flex-Filling Log Boxes */
 .log-box {
   background: var(--ink);
@@ -2583,7 +2523,12 @@ code,
   justify-content: space-between;
   gap: 12px;
   clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
-  animation: toastIn 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  animation: toastIn 0.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.toast.is-leaving {
+  pointer-events: none;
+  animation: toastOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
 }
 
 .toast.success {
@@ -2624,8 +2569,12 @@ code,
   100% { opacity: 1; transform: translate(0, 0); }
 }
 
+@keyframes toastOut {
+  0% { opacity: 1; transform: translate(0, 0); }
+  100% { opacity: 0; transform: translate(28px, 12px); }
+}
+
 @media (max-width: 860px) {
-  .monitor-split,
   .console-layout {
     grid-template-columns: 1fr;
   }
@@ -2645,7 +2594,9 @@ code,
 
 @media (prefers-reduced-motion: reduce) {
   .neon-ribbon,
-  .pulse-dot {
+  .pulse-dot,
+  .toast,
+  .toast.is-leaving {
     animation: none !important;
   }
 }

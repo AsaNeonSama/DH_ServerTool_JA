@@ -8,21 +8,30 @@ pub mod server;
 pub mod structs;
 
 pub mod format {
-    use chrono::Local;
+    use dh_win32::{get_local_time, LocalTimeParts};
 
     #[must_use]
     pub fn format_local_time() -> String {
-        Local::now().format("%H:%M:%S").to_string()
+        let now: LocalTimeParts = get_local_time();
+        format!("{:02}:{:02}:{:02}", now.hour, now.minute, now.second)
     }
 
     #[must_use]
     pub fn format_log_date_time() -> String {
-        Local::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string()
+        let now: LocalTimeParts = get_local_time();
+        format!(
+            "{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}",
+            now.year, now.month, now.day, now.hour, now.minute, now.second, now.millisecond
+        )
     }
 
     #[must_use]
     pub fn format_log_filename_timestamp() -> String {
-        Local::now().format("%Y%m%d_%H%M%S").to_string()
+        let now: LocalTimeParts = get_local_time();
+        format!(
+            "{:04}{:02}{:02}_{:02}{:02}{:02}",
+            now.year, now.month, now.day, now.hour, now.minute, now.second
+        )
     }
 
     #[must_use]

@@ -33,7 +33,7 @@ fn lock_fixed_window_style(main_window: &tauri::WebviewWindow) {
                     let _: isize = SetWindowLongPtrW(hwnd, GWL_STYLE, locked_style);
                     let _: windows::core::Result<()> = SetWindowPos(
                         hwnd,
-                        HWND::default(),
+                        None,
                         0,
                         0,
                         0,

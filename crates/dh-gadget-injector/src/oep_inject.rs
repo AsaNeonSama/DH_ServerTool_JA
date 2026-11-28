@@ -601,7 +601,7 @@ fn alloc_remote_rw_pages(handle: HANDLE, size: usize) -> Result<u64> {
     if ptr.is_null() {
         return Err(InjectorError::Inject(format!(
             "VirtualAllocEx(PAGE_READWRITE, {size}) failed: {}",
-            windows::core::Error::from_win32()
+            windows::core::Error::from_thread()
         )));
     }
     Ok(ptr as usize as u64)

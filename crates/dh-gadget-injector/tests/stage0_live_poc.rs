@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::fs::{self, File, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -21,7 +21,14 @@ const GAME_SERVER_PORT: u16 = 17899;
 fn sha256_file_hex(path: &Path) -> std::io::Result<String> {
     let mut file: File = File::open(path)?;
     let mut hasher: Sha256 = Sha256::new();
-    std::io::copy(&mut file, &mut hasher)?;
+    let mut buf: [u8; 8192] = [0u8; 8192];
+    loop {
+        let read_len: usize = file.read(&mut buf)?;
+        if read_len == 0 {
+            break;
+        }
+        hasher.update(&buf[..read_len]);
+    }
     let digest: [u8; 32] = hasher.finalize().into();
     let mut out: String = String::with_capacity(64);
     for b in digest {

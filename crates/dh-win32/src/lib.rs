@@ -5,6 +5,7 @@ pub mod job;
 pub mod net_table;
 pub mod process;
 pub mod structs;
+pub mod time;
 
 pub use net_table::{find_udp_listener_pid, is_tcp_port_listening};
 pub use process::{
@@ -13,6 +14,7 @@ pub use process::{
     spawn_suspended_gui, terminate_process,
 };
 pub use structs::{
-    JobObject, ProcessInfo, RemotePeEntry, Result, SpawnOptions, SpawnedProcess, UdpLookupResult,
-    Win32Error,
+    JobObject, LocalTimeParts, ProcessInfo, RemotePeEntry, Result, SpawnOptions, SpawnedProcess,
+    UdpLookupResult, Win32Error,
 };
+pub use time::get_local_time;
