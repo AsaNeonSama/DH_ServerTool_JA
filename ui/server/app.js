@@ -1700,10 +1700,10 @@
       const req = buildConsoleActionRequest();
       if (!req) return;
       const btn = byId("btnConsoleSubmit");
-      const face = btn.querySelector(".nb-cta-face") || btn;
       state.submittingConsole = true;
       btn.disabled = true;
-      face.textContent = "送信中...";
+      btn.classList.add("is-sending");
+      btn.setAttribute("aria-busy", "true");
       try {
         const res = await callBackend("execute_admin_console_action", { request: req });
         const toastType = res.ok
@@ -1714,8 +1714,9 @@
         showToast(String(err), "error");
       } finally {
         state.submittingConsole = false;
+        btn.classList.remove("is-sending");
+        btn.removeAttribute("aria-busy");
         btn.disabled = false;
-        face.textContent = "コンソールへ送信";
       }
     });
 

@@ -8,6 +8,8 @@ pub struct MatchContext {
     pub world: *mut c_void,
     /// Live `UDH_GameInstance*`.
     pub game_instance: *mut c_void,
+    /// Live `UDH_MessageBus*` (`game_instance + 0x518`).
+    pub message_bus: *mut c_void,
     /// Live `UDH_OnlineVoice*` (`game_instance + 0x520`).
     pub online_voice: *mut c_void,
     /// Live local `APlayerController*` (may be null briefly during seamless transitions).
@@ -25,4 +27,11 @@ pub struct SpeakerEntry {
     pub id_utf16: Vec<u16>,
     /// Monotonic timestamp of the most recent audible decoded voice frame.
     pub last_heard: Instant,
+    /// Smoothed perceptual audio energy (`0.0..=1.0`) feeding HUD volume meters.
+    pub energy: f32,
+    /// Whether `UDH_MessageBus::OnVoiceChatParticipantChangedDelegate` currently considers this
+    /// remote speaker active (controls ESC-menu speaking icon ON/refresh/OFF broadcasts).
+    pub notified_speaking: bool,
+    /// Monotonic timestamp of the most recent delegate broadcast emitted for this speaker.
+    pub last_notify_at: Instant,
 }

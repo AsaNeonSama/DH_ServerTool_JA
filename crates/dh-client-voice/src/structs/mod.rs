@@ -28,10 +28,11 @@ pub use state::{MatchContext, SpeakerEntry};
 pub use ue4::{
     BeforeRecvAudioRenderedFn, EngineLoopTickFn, FMemoryFreeFn, FString, GetAudioMutedFn,
     GetDhPlayerStateFromUniqueIdFn, GetFirstLocalPcFn, GetGameWorldFn, GetLocalDhPlayerStateFn,
-    GetNetDriverSocketFn, GetPrivateStaticClassFn, GetVoiceChatUserFn, GetWantsToTalkFn,
-    IsInVoipRangeFn, IsParticipantSpeakingFn, IsPlayerInVoiceChatFn, SetAudioInputVolumeFn,
-    SetAudioMutedFn, SetWantsToTalkFn, SocketCloseFn, SocketRecvFromFn, SocketSendToFn,
-    TArrayViewI16, UniqueNetIdIsValidFn, UniqueNetIdToStringFn,
+    GetNetDriverSocketFn, GetParticipantAudioEnergyFn, GetPrivateStaticClassFn, GetVoiceChatUserFn,
+    GetWantsToTalkFn, IsInVoipRangeFn, IsParticipantSpeakingFn, IsPlayerInVoiceChatFn,
+    ProcessMulticastDelegateFn, SetAudioInputVolumeFn, SetAudioMutedFn, SetWantsToTalkFn,
+    SocketCloseFn, SocketRecvFromFn, SocketSendToFn, TArrayViewI16, UniqueNetIdIsValidFn,
+    UniqueNetIdToStringFn,
 };
 pub use wasapi::{
     CaptureFrameFactory, CaptureFrameHandler, LinearResampler, RenderReferenceRing,

@@ -7,10 +7,11 @@ use nnnoiseless::DenoiseState;
 
 use crate::consts::dsp::{
     AEC3_INITIAL_DELAY_MS, AGC_ADAPT_MIN_RMS, AGC_ATTACK_ALPHA, AGC_MAX_GAIN, AGC_MIN_GAIN,
-    AGC_RELEASE_ALPHA, AGC_TARGET_RMS, DSP_FRAME_SAMPLES_10MS, HPF_80HZ_A1, HPF_80HZ_A2,
-    HPF_80HZ_B0, HPF_80HZ_B1, HPF_80HZ_B2, LIMITER_CEILING, LIMITER_KNEE_THRESHOLD,
-    PCM_S16_INV_SCALE, VAD_GATE_ATTACK_ALPHA, VAD_GATE_RELEASE_ALPHA, VAD_GATE_SILENCE_EPSILON,
-    VAD_HOLDOVER_FRAMES, VAD_MIN_RMS_THRESHOLD, VAD_OPEN_PROB_THRESHOLD, VOICE_SAMPLE_RATE_HZ,
+    AGC_RELEASE_ALPHA, AGC_TARGET_RMS, DSP_FRAME_SAMPLES_10MS, ENERGY_CEIL_DBFS, ENERGY_FLOOR_DBFS,
+    ENERGY_RMS_EPSILON, ENERGY_SILENCE_EPSILON, HPF_80HZ_A1, HPF_80HZ_A2, HPF_80HZ_B0, HPF_80HZ_B1,
+    HPF_80HZ_B2, LIMITER_CEILING, LIMITER_KNEE_THRESHOLD, PCM_S16_INV_SCALE, VAD_GATE_ATTACK_ALPHA,
+    VAD_GATE_RELEASE_ALPHA, VAD_GATE_SILENCE_EPSILON, VAD_HOLDOVER_FRAMES, VAD_MIN_RMS_THRESHOLD,
+    VAD_OPEN_PROB_THRESHOLD, VOICE_SAMPLE_RATE_HZ,
 };
 pub use crate::structs::dsp::{
     AgcLimiterState, BiquadHpfState, DspFrameResult, DspPipeline, VadGateState,
@@ -48,6 +49,95 @@ pub fn soft_knee_limit(sample: f32) -> f32 {
     let excess: f32 = abs_val - LIMITER_KNEE_THRESHOLD;
     let compressed: f32 = LIMITER_KNEE_THRESHOLD + headroom * (excess / (excess + headroom));
     compressed.copysign(sample)
+}
+
+/// Maps a linear normalized RMS value (`0.0..=1.0`) onto Dread Hunger's HUD microphone volume
+/// meter range (`0.0..=1.0`) using a perceptual dBFS curve (`-52 dBFS -> 0.0`, `-8 dBFS -> 1.0`).
+#[must_use]
+pub fn rms_to_meter_energy(rms: f32) -> f32 {
+    if !rms.is_finite() || rms <= ENERGY_RMS_EPSILON {
+        return 0.0;
+    }
+    let dbfs: f32 = 20.0 * rms.log10();
+    let span: f32 = ENERGY_CEIL_DBFS - ENERGY_FLOOR_DBFS;
+    if span <= 0.0 {
+        return 0.0;
+    }
+    ((dbfs - ENERGY_FLOOR_DBFS) / span).clamp(0.0, 1.0)
+}
+
+/// Computes perceptual HUD microphone volume meter energy (`0.0..=1.0`) from a slice of
+/// signed 16-bit PCM samples.
+#[must_use]
+pub fn pcm_i16_rms_energy(samples: &[i16]) -> f32 {
+    if samples.is_empty() {
+        return 0.0;
+    }
+    let Ok(count_u32): Result<u32, std::num::TryFromIntError> = u32::try_from(samples.len()) else {
+        return 0.0;
+    };
+    let inv_scale: f64 = f64::from(PCM_S16_INV_SCALE);
+    let mut sum_sq: f64 = 0.0;
+    for sample in samples {
+        let norm: f64 = f64::from(*sample) * inv_scale;
+        sum_sq += norm * norm;
+    }
+    let rms_f64: f64 = (sum_sq / f64::from(count_u32)).sqrt();
+    let rms: f32 = f64_to_f32_clamped(rms_f64).max(0.0);
+    rms_to_meter_energy(rms)
+}
+
+/// Smooths a microphone meter value with fast attack (`target >= prev`) and gentle exponential
+/// release (`target < prev`), flushing tiny sub-threshold residuals cleanly to `0.0`.
+#[must_use]
+pub fn smooth_meter_energy(prev: f32, target: f32, attack_alpha: f32, release_alpha: f32) -> f32 {
+    let safe_prev: f32 = if prev.is_finite() {
+        prev.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let safe_target: f32 = if target.is_finite() {
+        target.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let alpha: f32 = if safe_target >= safe_prev {
+        attack_alpha.clamp(0.0, 1.0)
+    } else {
+        release_alpha.clamp(0.0, 1.0)
+    };
+    let next: f32 = (safe_prev + alpha * (safe_target - safe_prev)).clamp(0.0, 1.0);
+    if next < ENERGY_SILENCE_EPSILON {
+        0.0
+    } else {
+        next
+    }
+}
+
+/// Smoothly decays a stored meter energy value linearly to `0.0` over `window_ms` milliseconds
+/// after the last audio update so the HUD bar glides down instead of snapping to zero.
+#[must_use]
+pub fn decay_meter_energy(energy: f32, elapsed_ms: u64, window_ms: u64) -> f32 {
+    if !energy.is_finite() || energy <= ENERGY_SILENCE_EPSILON || window_ms == 0 {
+        return 0.0;
+    }
+    if elapsed_ms >= window_ms {
+        return 0.0;
+    }
+    let remaining_ms: u64 = window_ms - elapsed_ms;
+    let Ok(rem_u32): Result<u32, std::num::TryFromIntError> = u32::try_from(remaining_ms) else {
+        return 0.0;
+    };
+    let Ok(win_u32): Result<u32, std::num::TryFromIntError> = u32::try_from(window_ms) else {
+        return 0.0;
+    };
+    let ratio: f32 = f64_to_f32_clamped(f64::from(rem_u32) / f64::from(win_u32)).clamp(0.0, 1.0);
+    let decayed: f32 = (energy.clamp(0.0, 1.0) * ratio).clamp(0.0, 1.0);
+    if decayed < ENERGY_SILENCE_EPSILON {
+        0.0
+    } else {
+        decayed
+    }
 }
 
 impl BiquadHpfState {

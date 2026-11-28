@@ -10,13 +10,16 @@ use dh_voice_client::consts::opus::{
     SIG_OPUS_ENCODER_INIT, SIG_OPUS_GET_VERSION_STRING,
 };
 use dh_voice_client::consts::patch::{
-    DETOUR_ENGINE_LOOP_TICK, DETOUR_GET_WANTS_TO_TALK, DETOUR_IS_PARTICIPANT_SPEAKING,
-    DETOUR_IS_PLAYER_IN_VOICE_CHAT, DETOUR_SET_WANTS_TO_TALK, DETOUR_SOCKET_CLOSE,
-    DETOUR_SOCKET_RECV_FROM, DETOUR_SOCKET_SEND_TO, EOS_BEFORE_RECV_AUDIO_GUARD,
-    EOS_RECV_GUARD_STUB_LEN, STANDARD_DETOUR_COUNT, TOTAL_PATCH_COUNT, X64_ABS_JMP_LEN,
+    DETOUR_ENGINE_LOOP_TICK, DETOUR_GET_PARTICIPANT_AUDIO_ENERGY, DETOUR_GET_WANTS_TO_TALK,
+    DETOUR_IS_PARTICIPANT_SPEAKING, DETOUR_IS_PLAYER_IN_VOICE_CHAT, DETOUR_SET_WANTS_TO_TALK,
+    DETOUR_SOCKET_CLOSE, DETOUR_SOCKET_RECV_FROM, DETOUR_SOCKET_SEND_TO,
+    EOS_BEFORE_RECV_AUDIO_GUARD, EOS_RECV_GUARD_STUB_LEN, STANDARD_DETOUR_COUNT, TOTAL_PATCH_COUNT,
+    X64_ABS_JMP_LEN,
 };
 use dh_voice_client::consts::proxy::{X3DAUDIO_EXPORTS, X3DAUDIO_EXPORT_COUNT};
-use dh_voice_client::consts::ue4::RVA_UIPNETDRIVER_GET_SOCKET;
+use dh_voice_client::consts::ue4::{
+    RVA_PROCESS_MULTICAST_DELEGATE, RVA_UIPNETDRIVER_GET_SOCKET, SIG_PROCESS_MULTICAST_DELEGATE,
+};
 use dh_voice_client::{
     encode_abs_jmp_stub, encode_eos_recv_guard_stub, encode_jmp_rel32, encode_original_trampoline,
     is_target_process_path, DetourSpec, FString, TArrayViewI16, TrampolineError,
@@ -66,7 +69,7 @@ fn struct_layouts_match_ue4_abi() {
     assert_eq!(std::mem::size_of::<FString>(), 0x10);
     assert_eq!(std::mem::size_of::<TArrayViewI16>(), 0x10);
     assert_eq!(TOTAL_PATCH_COUNT, 1 + STANDARD_DETOUR_COUNT);
-    assert_eq!(TOTAL_PATCH_COUNT, 9);
+    assert_eq!(TOTAL_PATCH_COUNT, 10);
 }
 
 #[test]
@@ -151,7 +154,7 @@ fn client_binary_signatures_and_libopus_match_reference_executable() {
         EOS_BEFORE_RECV_AUDIO_GUARD.name
     );
 
-    // 2. All 8 Plan A standard function detours
+    // 2. All 9 Plan A standard function detours
     let detours: [&DetourSpec; STANDARD_DETOUR_COUNT] = [
         &DETOUR_SOCKET_RECV_FROM,
         &DETOUR_SOCKET_SEND_TO,
@@ -161,6 +164,7 @@ fn client_binary_signatures_and_libopus_match_reference_executable() {
         &DETOUR_GET_WANTS_TO_TALK,
         &DETOUR_IS_PARTICIPANT_SPEAKING,
         &DETOUR_IS_PLAYER_IN_VOICE_CHAT,
+        &DETOUR_GET_PARTICIPANT_AUDIO_ENERGY,
     ];
     for spec in detours {
         let off: usize =
@@ -173,13 +177,21 @@ fn client_binary_signatures_and_libopus_match_reference_executable() {
         );
     }
 
-    // 3. `UIpNetDriver::GetSocket` entry prologue verification
+    // 3. `UIpNetDriver::GetSocket` and `ProcessMulticastDelegate` entry prologue verification
     let get_sock_off: usize = rva_to_file_offset(&bytes, RVA_UIPNETDRIVER_GET_SOCKET)
         .expect("UIpNetDriver::GetSocket RVA maps to file");
     assert_eq!(
         &bytes[get_sock_off..get_sock_off + 5],
         &[0x48, 0x89, 0x5C, 0x24, 0x08],
         "UIpNetDriver::GetSocket prologue mismatch"
+    );
+
+    let multicast_off: usize = rva_to_file_offset(&bytes, RVA_PROCESS_MULTICAST_DELEGATE)
+        .expect("ProcessMulticastDelegate RVA maps to file");
+    assert_eq!(
+        &bytes[multicast_off..multicast_off + SIG_PROCESS_MULTICAST_DELEGATE.len()],
+        &SIG_PROCESS_MULTICAST_DELEGATE,
+        "ProcessMulticastDelegate prologue mismatch at RVA 0x{RVA_PROCESS_MULTICAST_DELEGATE:X}"
     );
 
     // 4. All 9 in-process `libopus 1.1-beta` function signatures

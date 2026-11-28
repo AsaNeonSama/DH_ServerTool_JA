@@ -5,15 +5,18 @@ use std::time::{Duration, Instant};
 
 use dh_voice_proto::is_dhv2_packet;
 
-use crate::consts::dsp::OPUS_FRAME_SAMPLES_20MS;
+use crate::consts::dsp::{
+    OPUS_FRAME_SAMPLES_20MS, REMOTE_ENERGY_ATTACK_ALPHA, REMOTE_ENERGY_RELEASE_ALPHA,
+};
 use crate::consts::engine::{
     FSOCKET_TYPE_DATAGRAM, MAX_DHV2_DRAIN_PER_RECV, MAX_UE4_UID_UTF16_LEN, SOCKET_RECV_FLAG_PEEK,
 };
 use crate::consts::ue4::{
-    FALLBACK_VOIP_MAX_RANGE, MATCH_REASSERT_TICK_INTERVAL, MAX_TRACKED_SPEAKERS,
-    OFFSET_CONTROLLER_PLAYER_STATE, OFFSET_DH_GAME_INSTANCE_ONLINE_VOICE,
+    FALLBACK_VOIP_MAX_RANGE, MATCH_REASSERT_TICK_INTERVAL, MAX_SANE_DELEGATE_LISTENERS,
+    MAX_TRACKED_SPEAKERS, OFFSET_CONTROLLER_PLAYER_STATE, OFFSET_DH_GAME_INSTANCE_MESSAGE_BUS,
+    OFFSET_DH_GAME_INSTANCE_ONLINE_VOICE, OFFSET_DH_MESSAGE_BUS_ON_VOICE_CHAT_PARTICIPANT_CHANGED,
     OFFSET_DH_ONLINE_VOICE_MAX_RANGE, OFFSET_DH_ONLINE_VOICE_WANTS_TO_TALK,
-    OFFSET_FSOCKET_BSD_RAW_SOCKET, OFFSET_FSOCKET_BSD_SOCKET_TYPE,
+    OFFSET_FSOCKET_BSD_RAW_SOCKET, OFFSET_FSOCKET_BSD_SOCKET_TYPE, OFFSET_MULTICAST_DELEGATE_NUM,
     OFFSET_NET_DRIVER_SERVER_CONNECTION, OFFSET_PS_CAN_HEAR_GHOSTS, OFFSET_PS_IS_GHOST,
     OFFSET_PS_IS_MUTED, OFFSET_PS_UNIQUE_NET_ID_PTR, OFFSET_UCLASS_BASE_CHAIN_ARRAY,
     OFFSET_UCLASS_BASE_CHAIN_DEPTH, OFFSET_UOBJECT_CLASS, OFFSET_UWORLD_GAME_STATE,
@@ -21,18 +24,21 @@ use crate::consts::ue4::{
     RVA_ADH_PLAYERSTATE_STATIC_CLASS, RVA_DH_GET_LOCAL_PLAYER_STATE,
     RVA_DH_GET_PS_FROM_UNIQUE_ID_STR, RVA_DH_ONLINE_VOICE_BEFORE_RECV_AUDIO,
     RVA_DH_ONLINE_VOICE_GET_VOICE_CHAT_USER, RVA_DH_ONLINE_VOICE_IS_IN_VOIP_RANGE,
-    RVA_FMEMORY_FREE, RVA_GENGINE, RVA_UDH_GAMEINSTANCE_STATIC_CLASS,
-    RVA_UGAMEENGINE_GET_GAME_WORLD, RVA_UGAMEINSTANCE_GET_FIRST_LOCAL_PC,
-    RVA_UIPNETDRIVER_GET_SOCKET, RVA_UIPNETDRIVER_STATIC_CLASS, SPEAKER_ACTIVE_WINDOW_MS,
-    SPEAKER_PRUNE_WINDOW_MS, SPEECH_PEAK_THRESHOLD, VTABLE_OFF_UNIQUE_NET_ID_IS_VALID,
+    RVA_FMEMORY_FREE, RVA_GENGINE, RVA_PROCESS_MULTICAST_DELEGATE,
+    RVA_UDH_GAMEINSTANCE_STATIC_CLASS, RVA_UGAMEENGINE_GET_GAME_WORLD,
+    RVA_UGAMEINSTANCE_GET_FIRST_LOCAL_PC, RVA_UIPNETDRIVER_GET_SOCKET,
+    RVA_UIPNETDRIVER_STATIC_CLASS, SPEAKER_ACTIVE_WINDOW_MS, SPEAKER_PRUNE_WINDOW_MS,
+    SPEAKER_UI_REFRESH_INTERVAL_MS, SPEECH_PEAK_THRESHOLD, VTABLE_OFF_UNIQUE_NET_ID_IS_VALID,
     VTABLE_OFF_UNIQUE_NET_ID_TO_STRING, VTABLE_OFF_VOICE_CHAT_GET_INPUT_MUTED,
     VTABLE_OFF_VOICE_CHAT_GET_OUTPUT_MUTED, VTABLE_OFF_VOICE_CHAT_SET_INPUT_MUTED,
     VTABLE_OFF_VOICE_CHAT_SET_INPUT_VOLUME, VTABLE_OFF_VOICE_CHAT_SET_OUTPUT_MUTED,
 };
+use crate::dsp::{decay_meter_energy, pcm_i16_rms_energy, smooth_meter_energy};
 use crate::engine::{
     drain_ready_playout_frames, on_dhv2_datagram_received, on_socket_close_observed,
-    on_socket_send_to_observed, set_local_wants_to_talk, set_match_game_socket_ptr,
-    start_match_session, stop_match_session, tick_hello_keepalive,
+    on_socket_send_to_observed, read_local_mic_energy, reset_local_mic_energy,
+    set_local_wants_to_talk, set_match_game_socket_ptr, start_match_session, stop_match_session,
+    tick_hello_keepalive,
 };
 use crate::logger::log_line;
 use crate::structs::engine::DecodedPlayoutFrame;
@@ -41,10 +47,11 @@ use crate::structs::state::{MatchContext, SpeakerEntry};
 use crate::structs::ue4::{
     BeforeRecvAudioRenderedFn, EngineLoopTickFn, FMemoryFreeFn, FString, GetAudioMutedFn,
     GetDhPlayerStateFromUniqueIdFn, GetFirstLocalPcFn, GetGameWorldFn, GetLocalDhPlayerStateFn,
-    GetNetDriverSocketFn, GetPrivateStaticClassFn, GetVoiceChatUserFn, GetWantsToTalkFn,
-    IsInVoipRangeFn, IsParticipantSpeakingFn, IsPlayerInVoiceChatFn, SetAudioInputVolumeFn,
-    SetAudioMutedFn, SetWantsToTalkFn, SocketCloseFn, SocketRecvFromFn, SocketSendToFn,
-    TArrayViewI16, UniqueNetIdIsValidFn, UniqueNetIdToStringFn,
+    GetNetDriverSocketFn, GetParticipantAudioEnergyFn, GetPrivateStaticClassFn, GetVoiceChatUserFn,
+    GetWantsToTalkFn, IsInVoipRangeFn, IsParticipantSpeakingFn, IsPlayerInVoiceChatFn,
+    ProcessMulticastDelegateFn, SetAudioInputVolumeFn, SetAudioMutedFn, SetWantsToTalkFn,
+    SocketCloseFn, SocketRecvFromFn, SocketSendToFn, TArrayViewI16, UniqueNetIdIsValidFn,
+    UniqueNetIdToStringFn,
 };
 
 static MODULE_BASE: AtomicUsize = AtomicUsize::new(0);
@@ -64,6 +71,7 @@ static ORIG_SET_WANTS_TO_TALK: AtomicUsize = AtomicUsize::new(0);
 static ORIG_GET_WANTS_TO_TALK: AtomicUsize = AtomicUsize::new(0);
 static ORIG_IS_PARTICIPANT_SPEAKING: AtomicUsize = AtomicUsize::new(0);
 static ORIG_IS_PLAYER_IN_VOICE_CHAT: AtomicUsize = AtomicUsize::new(0);
+static ORIG_GET_PARTICIPANT_AUDIO_ENERGY: AtomicUsize = AtomicUsize::new(0);
 
 static ACTIVE_SPEAKERS: Mutex<Vec<SpeakerEntry>> = Mutex::new(Vec::new());
 static RESOLVED_OPUS_API: OnceLock<OpusApiTable> = OnceLock::new();
@@ -113,6 +121,12 @@ pub fn set_orig_is_participant_speaking(addr: usize) {
 /// Registers the original-call trampoline address for `UDH_OnlineVoice::IsPlayerInVoiceChat`.
 pub fn set_orig_is_player_in_voice_chat(addr: usize) {
     ORIG_IS_PLAYER_IN_VOICE_CHAT.store(addr, Ordering::Release);
+}
+
+/// Registers the original-call trampoline address for
+/// `UDH_GameplayStatics::GetParticipantPositionalAudioEnergy`.
+pub fn set_orig_get_participant_audio_energy(addr: usize) {
+    ORIG_GET_PARTICIPANT_AUDIO_ENERGY.store(addr, Ordering::Release);
 }
 
 /// Detour entry point for `FSocketBSD::RecvFrom(this, Data, BufSize, BytesRead, Source, Flags)`.
@@ -374,6 +388,11 @@ pub unsafe extern "C" fn detour_engine_loop_tick(engine_loop: *mut c_void) {
         unsafe {
             deliver_ready_remote_audio(base, &ctx, now);
         }
+
+        // SAFETY: Broadcasting ESC-menu speaking icon ON/refresh/OFF state transitions on game thread.
+        unsafe {
+            dispatch_speaker_ui_notifications(base, &ctx, now);
+        }
     } else if was_in_match {
         IN_DEDICATED_MATCH.store(false, Ordering::Release);
         // SAFETY: Exiting Dedicated Server back to Lobby/Main Menu on the game thread.
@@ -421,6 +440,9 @@ pub unsafe extern "C" fn detour_set_wants_to_talk(online_voice: *mut c_void, wan
             .cast::<u8>() = wants_flag;
     }
     set_local_wants_to_talk(wants_flag != 0);
+    if wants_flag == 0 {
+        reset_local_mic_energy();
+    }
 
     // SAFETY: Keep EOS RTC input muted while on a Dedicated Server.
     unsafe {
@@ -497,6 +519,25 @@ pub unsafe extern "C" fn detour_is_participant_speaking(
         return u8::from(wants != 0);
     }
 
+    // Enforce manual/global mute and ghost isolation so muted players and isolated dead ghosts
+    // never light up ESC-menu speaking icons or character lip-sync animations.
+    // SAFETY: `ADH_PlayerState::bIsMuted` is verified at `+0x642`.
+    let is_muted: u8 = unsafe { *player_state.byte_add(OFFSET_PS_IS_MUTED).cast::<u8>() };
+    if is_muted != 0 {
+        return 0;
+    }
+    if !local_ps.is_null() {
+        // SAFETY: `ADH_PlayerState::bCanHearGhosts` (`+0x647`) and `bIsDeadGhost` (`+0x646`).
+        let local_can_hear_ghosts: u8 =
+            unsafe { *local_ps.byte_add(OFFSET_PS_CAN_HEAR_GHOSTS).cast::<u8>() };
+        // SAFETY: Reading `ADH_PlayerState::bIsDeadGhost` (`+0x646`).
+        let target_is_ghost: u8 =
+            unsafe { *player_state.byte_add(OFFSET_PS_IS_GHOST).cast::<u8>() };
+        if local_can_hear_ghosts == 0 && target_is_ghost != 0 {
+            return 0;
+        }
+    }
+
     // SAFETY: `APlayerState::UniqueId.UniqueNetId.Object` is at aligned `+0x258`.
     let unique_net_id: *const c_void = unsafe {
         *(player_state
@@ -571,6 +612,100 @@ pub unsafe extern "C" fn detour_is_player_in_voice_chat(
     // SAFETY: Checking whether `player_id_str` resolves to an active `ADH_PlayerState*`.
     let ps: *mut c_void = unsafe { call_get_dh_ps_from_unique_id(base, player_id_str, world_ctx) };
     u8::from(!ps.is_null())
+}
+
+/// Detour entry point for `UDH_GameplayStatics::GetParticipantPositionalAudioEnergy(APlayerState*)`.
+///
+/// Drives Dread Hunger's HUD microphone volume meter (`UDH_VOIPTalkingWidget::NativeTick`, used by
+/// both `UDH_PushToTalkWidget` and `UDH_LobbySlotSpeakingWidget`):
+/// - Outside Dedicated Server matches: forwards to vanilla EOS RTC implementation.
+/// - Dedicated Server matches: returns live smoothed post-DSP WASAPI energy (`0.0..=1.0`) for the
+///   local player while `bWantsToTalk` is enabled, or smoothed decoded PCM energy (`0.0..=1.0`)
+///   for unmuted, non-ghost-isolated remote speakers.
+///
+/// # Safety
+/// Must only be invoked by UE4 through our verified
+/// `UDH_GameplayStatics::GetParticipantPositionalAudioEnergy` detour on the game thread.
+pub unsafe extern "C" fn detour_get_participant_audio_energy(player_state: *mut c_void) -> f32 {
+    if !IN_DEDICATED_MATCH.load(Ordering::Acquire) {
+        let orig_addr: usize = ORIG_GET_PARTICIPANT_AUDIO_ENERGY.load(Ordering::Acquire);
+        if orig_addr == 0 {
+            return 0.0;
+        }
+        // SAFETY: `orig_addr` points to our verified `RX` original-call trampoline.
+        let orig_fn: GetParticipantAudioEnergyFn =
+            unsafe { std::mem::transmute::<usize, GetParticipantAudioEnergyFn>(orig_addr) };
+        // SAFETY: Forwarding Lobby/Menu mic meter query directly to vanilla EOS implementation.
+        return unsafe { orig_fn(player_state) };
+    }
+
+    let base: usize = MODULE_BASE.load(Ordering::Acquire);
+    if base == 0 || player_state.is_null() {
+        return 0.0;
+    }
+
+    // SAFETY: Querying active Dedicated Server match pointers on the game thread.
+    let Some(ctx): Option<MatchContext> = (unsafe { query_match_context(base) }) else {
+        return 0.0;
+    };
+
+    // Local player microphone volume meter (lock-free atomic read from WASAPI post-DSP pipeline).
+    if !ctx.local_ps.is_null() && player_state == ctx.local_ps {
+        if !ctx.online_voice.is_null() {
+            // SAFETY: `UDH_OnlineVoice::bWantsToTalk` is verified at `+0x80`.
+            let wants: u8 = unsafe {
+                *ctx.online_voice
+                    .byte_add(OFFSET_DH_ONLINE_VOICE_WANTS_TO_TALK)
+                    .cast::<u8>()
+            };
+            if wants == 0 {
+                return 0.0;
+            }
+        }
+        return read_local_mic_energy();
+    }
+
+    // Remote player meter: enforce manual/global mute and ghost isolation.
+    // SAFETY: `ADH_PlayerState::bIsMuted` is verified at `+0x642`.
+    let is_muted: u8 = unsafe { *player_state.byte_add(OFFSET_PS_IS_MUTED).cast::<u8>() };
+    if is_muted != 0 {
+        return 0.0;
+    }
+    if !ctx.local_ps.is_null() {
+        // SAFETY: `ADH_PlayerState::bCanHearGhosts` (`+0x647`) and `bIsDeadGhost` (`+0x646`).
+        let local_can_hear_ghosts: u8 = unsafe {
+            *ctx.local_ps
+                .byte_add(OFFSET_PS_CAN_HEAR_GHOSTS)
+                .cast::<u8>()
+        };
+        // SAFETY: Reading `ADH_PlayerState::bIsDeadGhost` (`+0x646`).
+        let target_is_ghost: u8 =
+            unsafe { *player_state.byte_add(OFFSET_PS_IS_GHOST).cast::<u8>() };
+        if local_can_hear_ghosts == 0 && target_is_ghost != 0 {
+            return 0.0;
+        }
+    }
+
+    // SAFETY: `APlayerState::UniqueId.UniqueNetId.Object` is at aligned `+0x258`.
+    let unique_net_id: *const c_void = unsafe {
+        *(player_state
+            .byte_add(OFFSET_PS_UNIQUE_NET_ID_PTR)
+            .cast::<*const c_void>())
+    };
+    if unique_net_id.is_null() {
+        return 0.0;
+    }
+
+    let mut energy: f32 = 0.0;
+    // SAFETY: Converting `FUniqueNetId` to `FString` and freeing UE4 memory via `FMemory::Free`.
+    let _ok: bool = unsafe {
+        with_unique_net_id_fstring(base, unique_net_id, |id_fstr: &FString| {
+            if let Some(id_utf16) = fstring_to_utf16_vec(id_fstr) {
+                energy = query_speaker_energy(&id_utf16);
+            }
+        })
+    };
+    energy
 }
 
 unsafe fn enter_dedicated_match_mode(base: usize, image_size: usize, ctx: &MatchContext) {
@@ -678,6 +813,7 @@ unsafe fn deliver_ready_remote_audio(base: usize, ctx: &MatchContext, now: Insta
         let target_ps: *mut c_void = unsafe {
             call_get_dh_ps_from_unique_id(base, &raw const sender_fstr, ctx.online_voice)
         };
+        let no_nul_len: usize = frame.uid_utf16_nul.len() - 1;
         if !target_ps.is_null() {
             if target_ps == ctx.local_ps {
                 continue;
@@ -685,6 +821,7 @@ unsafe fn deliver_ready_remote_audio(base: usize, ctx: &MatchContext, now: Insta
             // SAFETY: `ADH_PlayerState::bIsMuted` (manual + global mute) is verified at `+0x642`.
             let is_muted: u8 = unsafe { *target_ps.byte_add(OFFSET_PS_IS_MUTED).cast::<u8>() };
             if is_muted != 0 {
+                mark_speaker_inactive(&frame.uid_utf16_nul[..no_nul_len], now);
                 continue;
             }
             if !ctx.local_ps.is_null() {
@@ -698,14 +835,21 @@ unsafe fn deliver_ready_remote_audio(base: usize, ctx: &MatchContext, now: Insta
                 let target_is_ghost: u8 =
                     unsafe { *target_ps.byte_add(OFFSET_PS_IS_GHOST).cast::<u8>() };
                 if local_can_hear_ghosts == 0 && target_is_ghost != 0 {
+                    mark_speaker_inactive(&frame.uid_utf16_nul[..no_nul_len], now);
                     continue;
                 }
             }
         }
 
+        let frame_energy: f32 = pcm_i16_rms_energy(&frame.pcm_i16);
         if has_audible_speech(&frame.pcm_i16) {
-            let no_nul_len: usize = frame.uid_utf16_nul.len() - 1;
-            record_active_speaker(frame.uid_utf16_nul[..no_nul_len].to_vec());
+            record_active_speaker(
+                frame.uid_utf16_nul[..no_nul_len].to_vec(),
+                frame_energy,
+                now,
+            );
+        } else {
+            decay_existing_speaker_energy(&frame.uid_utf16_nul[..no_nul_len]);
         }
 
         let pcm_view: TArrayViewI16 = TArrayViewI16 {
@@ -913,6 +1057,13 @@ unsafe fn query_match_context(base: usize) -> Option<MatchContext> {
         return None;
     }
 
+    // SAFETY: `UDH_GameInstance::MessageBus` is verified at aligned `+0x518`.
+    let message_bus: *mut c_void = unsafe {
+        *(game_instance
+            .byte_add(OFFSET_DH_GAME_INSTANCE_MESSAGE_BUS)
+            .cast::<*mut c_void>())
+    };
+
     // SAFETY: `UDH_GameInstance::OnlineVoice` is verified at aligned `+0x520`.
     let online_voice: *mut c_void = unsafe {
         *(game_instance
@@ -958,6 +1109,7 @@ unsafe fn query_match_context(base: usize) -> Option<MatchContext> {
     Some(MatchContext {
         world,
         game_instance,
+        message_bus,
         online_voice,
         local_pc: local_controller,
         local_ps: local_player_state,
@@ -1167,29 +1319,195 @@ fn has_audible_speech(samples: &[i16]) -> bool {
     false
 }
 
-fn record_active_speaker(id_utf16: Vec<u16>) {
+/// Evaluates tracked remote speakers against `now` and returns NUL-terminated UTF-16LE UIDs
+/// requiring a `UDH_MessageBus::OnVoiceChatParticipantChangedDelegate` broadcast:
+/// - Instant ON when an active speaker (`elapsed < SPEAKER_ACTIVE_WINDOW_MS`) has not yet been
+///   notified.
+/// - Periodic refresh every `SPEAKER_UI_REFRESH_INTERVAL_MS` (`250 ms`) while active so VOIP
+///   range entry/exit, Thrall Hush, and Mute updates propagate promptly.
+/// - Instant OFF right at `elapsed >= SPEAKER_ACTIVE_WINDOW_MS` (`350 ms`) with zero repeated
+///   OFF spam afterwards.
+#[must_use]
+pub fn collect_speaker_ui_notifications(
+    speakers: &mut [SpeakerEntry],
+    now: Instant,
+) -> Vec<Vec<u16>> {
+    let active_window: Duration = Duration::from_millis(SPEAKER_ACTIVE_WINDOW_MS);
+    let refresh_interval: Duration = Duration::from_millis(SPEAKER_UI_REFRESH_INTERVAL_MS);
+    let mut notifications: Vec<Vec<u16>> = Vec::new();
+
+    for entry in speakers.iter_mut() {
+        if entry.id_utf16.is_empty() {
+            continue;
+        }
+        let is_active: bool = now.saturating_duration_since(entry.last_heard) < active_window;
+        if is_active {
+            let should_broadcast: bool = if entry.notified_speaking {
+                now.saturating_duration_since(entry.last_notify_at) >= refresh_interval
+            } else {
+                entry.notified_speaking = true;
+                true
+            };
+            if should_broadcast {
+                entry.last_notify_at = now;
+                let mut uid_nul: Vec<u16> = Vec::with_capacity(entry.id_utf16.len() + 1);
+                uid_nul.extend_from_slice(&entry.id_utf16);
+                uid_nul.push(0u16);
+                notifications.push(uid_nul);
+            }
+        } else if entry.notified_speaking {
+            entry.notified_speaking = false;
+            entry.last_notify_at = now;
+            entry.energy = 0.0;
+            let mut uid_nul: Vec<u16> = Vec::with_capacity(entry.id_utf16.len() + 1);
+            uid_nul.extend_from_slice(&entry.id_utf16);
+            uid_nul.push(0u16);
+            notifications.push(uid_nul);
+        }
+    }
+
+    notifications
+}
+
+unsafe fn dispatch_speaker_ui_notifications(base: usize, ctx: &MatchContext, now: Instant) {
+    if ctx.message_bus.is_null() {
+        return;
+    }
+
+    // Release `ACTIVE_SPEAKERS` lock BEFORE invoking UE4 delegates to eliminate any re-entrancy
+    // deadlock when `UDH_LobbySlotSpeakingWidget::Update` calls back into `IsParticipantSpeaking`.
+    let pending: Vec<Vec<u16>> = {
+        let Ok(mut speakers): Result<std::sync::MutexGuard<'_, Vec<SpeakerEntry>>, _> =
+            ACTIVE_SPEAKERS.lock()
+        else {
+            return;
+        };
+        collect_speaker_ui_notifications(&mut speakers, now)
+    };
+
+    if pending.is_empty() {
+        return;
+    }
+
+    for mut uid_utf16_nul in pending {
+        if uid_utf16_nul.len() < 2 {
+            continue;
+        }
+        let Ok(num_i32): Result<i32, std::num::TryFromIntError> =
+            i32::try_from(uid_utf16_nul.len())
+        else {
+            continue;
+        };
+        let mut participant_fstr: FString = FString {
+            data: uid_utf16_nul.as_mut_ptr(),
+            num: num_i32,
+            max: num_i32,
+        };
+        // SAFETY: `ctx.message_bus` is a live `UDH_MessageBus*` on the game thread and
+        // `participant_fstr` is a valid read-only stack `FString` deep-copied by UE4's delegate exec.
+        unsafe {
+            call_broadcast_voice_chat_participant_changed(
+                base,
+                ctx.message_bus,
+                &raw mut participant_fstr,
+            );
+        }
+    }
+}
+
+fn record_active_speaker(id_utf16: Vec<u16>, frame_energy: f32, now: Instant) {
     let Ok(mut speakers): Result<std::sync::MutexGuard<'_, Vec<SpeakerEntry>>, _> =
         ACTIVE_SPEAKERS.lock()
     else {
         return;
     };
-    let now: Instant = Instant::now();
     for entry in speakers.iter_mut() {
         if entry.id_utf16 == id_utf16 {
             entry.last_heard = now;
+            entry.energy = smooth_meter_energy(
+                entry.energy,
+                frame_energy,
+                REMOTE_ENERGY_ATTACK_ALPHA,
+                REMOTE_ENERGY_RELEASE_ALPHA,
+            );
             return;
         }
     }
     if speakers.len() >= MAX_TRACKED_SPEAKERS {
         let cutoff: Duration = Duration::from_millis(SPEAKER_PRUNE_WINDOW_MS);
-        speakers.retain(|entry: &SpeakerEntry| now.duration_since(entry.last_heard) <= cutoff);
+        speakers.retain(|entry: &SpeakerEntry| {
+            entry.notified_speaking || now.duration_since(entry.last_heard) <= cutoff
+        });
     }
     if speakers.len() < MAX_TRACKED_SPEAKERS {
+        let initial_energy: f32 = smooth_meter_energy(
+            0.0,
+            frame_energy,
+            REMOTE_ENERGY_ATTACK_ALPHA,
+            REMOTE_ENERGY_RELEASE_ALPHA,
+        );
         speakers.push(SpeakerEntry {
             id_utf16,
             last_heard: now,
+            energy: initial_energy,
+            notified_speaking: false,
+            last_notify_at: now,
         });
     }
+}
+
+fn mark_speaker_inactive(id_utf16: &[u16], now: Instant) {
+    let Ok(mut speakers): Result<std::sync::MutexGuard<'_, Vec<SpeakerEntry>>, _> =
+        ACTIVE_SPEAKERS.lock()
+    else {
+        return;
+    };
+    for entry in speakers.iter_mut() {
+        if entry.id_utf16.as_slice() == id_utf16 {
+            entry.energy = 0.0;
+            if let Some(expired) = now.checked_sub(Duration::from_millis(SPEAKER_ACTIVE_WINDOW_MS))
+            {
+                entry.last_heard = expired;
+            }
+            return;
+        }
+    }
+}
+
+fn decay_existing_speaker_energy(id_utf16: &[u16]) {
+    let Ok(mut speakers): Result<std::sync::MutexGuard<'_, Vec<SpeakerEntry>>, _> =
+        ACTIVE_SPEAKERS.lock()
+    else {
+        return;
+    };
+    for entry in speakers.iter_mut() {
+        if entry.id_utf16.as_slice() == id_utf16 {
+            entry.energy = smooth_meter_energy(
+                entry.energy,
+                0.0,
+                REMOTE_ENERGY_ATTACK_ALPHA,
+                REMOTE_ENERGY_RELEASE_ALPHA,
+            );
+            return;
+        }
+    }
+}
+
+fn query_speaker_energy(id_utf16: &[u16]) -> f32 {
+    let Ok(speakers): Result<std::sync::MutexGuard<'_, Vec<SpeakerEntry>>, _> =
+        ACTIVE_SPEAKERS.lock()
+    else {
+        return 0.0;
+    };
+    let now: Instant = Instant::now();
+    for entry in speakers.iter() {
+        if entry.id_utf16.as_slice() == id_utf16 {
+            let elapsed_ms: u64 =
+                u64::try_from(now.duration_since(entry.last_heard).as_millis()).unwrap_or(u64::MAX);
+            return decay_meter_energy(entry.energy, elapsed_ms, SPEAKER_ACTIVE_WINDOW_MS);
+        }
+    }
+    0.0
 }
 
 fn is_speaker_recently_active(id_utf16: &[u16]) -> bool {
@@ -1202,7 +1520,7 @@ fn is_speaker_recently_active(id_utf16: &[u16]) -> bool {
     let window: Duration = Duration::from_millis(SPEAKER_ACTIVE_WINDOW_MS);
     for entry in speakers.iter() {
         if entry.id_utf16.as_slice() == id_utf16 {
-            return now.duration_since(entry.last_heard) <= window;
+            return now.duration_since(entry.last_heard) < window;
         }
     }
     false
@@ -1216,7 +1534,9 @@ fn prune_stale_speakers() {
     };
     let now: Instant = Instant::now();
     let cutoff: Duration = Duration::from_millis(SPEAKER_PRUNE_WINDOW_MS);
-    speakers.retain(|entry: &SpeakerEntry| now.duration_since(entry.last_heard) <= cutoff);
+    speakers.retain(|entry: &SpeakerEntry| {
+        entry.notified_speaking || now.duration_since(entry.last_heard) <= cutoff
+    });
 }
 
 fn clear_active_speakers() {
@@ -1315,4 +1635,37 @@ unsafe fn call_is_in_voip_range(
     let func: IsInVoipRangeFn = unsafe { std::mem::transmute::<usize, IsInVoipRangeFn>(addr) };
     // SAFETY: Querying native 3D VOIP hearing range for speaking indicator UI.
     unsafe { func(online_voice, player_state, max_range) }
+}
+
+unsafe fn call_broadcast_voice_chat_participant_changed(
+    base: usize,
+    message_bus: *mut c_void,
+    participant_id_str: *mut FString,
+) {
+    if message_bus.is_null() || participant_id_str.is_null() {
+        return;
+    }
+    // SAFETY: `UDH_MessageBus::OnVoiceChatParticipantChangedDelegate` is verified at `+0x398`.
+    let delegate_ptr: *mut c_void =
+        unsafe { message_bus.byte_add(OFFSET_DH_MESSAGE_BUS_ON_VOICE_CHAT_PARTICIPANT_CHANGED) };
+    // SAFETY: `InvocationList.ArrayNum` (`i32`) is verified at delegate offset `+0x08`.
+    let listener_count: i32 = unsafe {
+        *(delegate_ptr
+            .byte_add(OFFSET_MULTICAST_DELEGATE_NUM)
+            .cast::<i32>())
+    };
+    if listener_count <= 0 || listener_count > MAX_SANE_DELEGATE_LISTENERS {
+        return;
+    }
+    let Some(addr): Option<usize> = base.checked_add(RVA_PROCESS_MULTICAST_DELEGATE) else {
+        return;
+    };
+    // SAFETY: Verified `TMulticastScriptDelegate<FWeakObjectPtr>::ProcessMulticastDelegate<UObject>`
+    // address (`0x7619D0`) and 2-pointer Win64 ABI signature matching `0x140EA001B`.
+    let func: ProcessMulticastDelegateFn =
+        unsafe { std::mem::transmute::<usize, ProcessMulticastDelegateFn>(addr) };
+    // SAFETY: Firing multicast delegate on the UE4 Game Thread with live stack `FString` parameter.
+    unsafe {
+        func(delegate_ptr, participant_id_str.cast::<c_void>());
+    }
 }

@@ -29,20 +29,20 @@ use windows::Win32::System::Threading::GetCurrentProcess;
 
 #[cfg(windows)]
 use crate::consts::patch::{
-    DEFAULT_ALLOC_GRANULARITY, DETOUR_ENGINE_LOOP_TICK, DETOUR_GET_WANTS_TO_TALK,
-    DETOUR_IS_PARTICIPANT_SPEAKING, DETOUR_IS_PLAYER_IN_VOICE_CHAT, DETOUR_SET_WANTS_TO_TALK,
-    DETOUR_SOCKET_CLOSE, DETOUR_SOCKET_RECV_FROM, DETOUR_SOCKET_SEND_TO,
+    DEFAULT_ALLOC_GRANULARITY, DETOUR_ENGINE_LOOP_TICK, DETOUR_GET_PARTICIPANT_AUDIO_ENERGY,
+    DETOUR_GET_WANTS_TO_TALK, DETOUR_IS_PARTICIPANT_SPEAKING, DETOUR_IS_PLAYER_IN_VOICE_CHAT,
+    DETOUR_SET_WANTS_TO_TALK, DETOUR_SOCKET_CLOSE, DETOUR_SOCKET_RECV_FROM, DETOUR_SOCKET_SEND_TO,
     EOS_BEFORE_RECV_AUDIO_GUARD, STANDARD_DETOUR_COUNT, TOTAL_PATCH_COUNT, TRAMPOLINE_ALLOC_SIZE,
     TRAMPOLINE_MAX_DISTANCE, TRAMPOLINE_SLOT_ALIGN, X64_NOP_BYTE,
 };
 #[cfg(windows)]
 use crate::hooks::{
-    detour_engine_loop_tick, detour_get_wants_to_talk, detour_is_participant_speaking,
-    detour_is_player_in_voice_chat, detour_set_wants_to_talk, detour_socket_close,
-    detour_socket_recv_from, detour_socket_send_to, set_module_image, set_orig_engine_loop_tick,
-    set_orig_get_wants_to_talk, set_orig_is_participant_speaking, set_orig_is_player_in_voice_chat,
-    set_orig_set_wants_to_talk, set_orig_socket_close, set_orig_socket_recv_from,
-    set_orig_socket_send_to, IN_DEDICATED_MATCH,
+    detour_engine_loop_tick, detour_get_participant_audio_energy, detour_get_wants_to_talk,
+    detour_is_participant_speaking, detour_is_player_in_voice_chat, detour_set_wants_to_talk,
+    detour_socket_close, detour_socket_recv_from, detour_socket_send_to, set_module_image,
+    set_orig_engine_loop_tick, set_orig_get_participant_audio_energy, set_orig_get_wants_to_talk,
+    set_orig_is_participant_speaking, set_orig_is_player_in_voice_chat, set_orig_set_wants_to_talk,
+    set_orig_socket_close, set_orig_socket_recv_from, set_orig_socket_send_to, IN_DEDICATED_MATCH,
 };
 #[cfg(windows)]
 use crate::logger::log_line;
@@ -352,6 +352,11 @@ fn install_all_client_trampolines(module_base: usize, image_size: usize, report:
             spec: &DETOUR_IS_PLAYER_IN_VOICE_CHAT,
             handler_addr: detour_is_player_in_voice_chat as *const () as usize,
             register_orig: set_orig_is_player_in_voice_chat,
+        },
+        StandardDetourBinding {
+            spec: &DETOUR_GET_PARTICIPANT_AUDIO_ENERGY,
+            handler_addr: detour_get_participant_audio_energy as *const () as usize,
+            register_orig: set_orig_get_participant_audio_energy,
         },
     ];
 

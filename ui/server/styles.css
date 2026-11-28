@@ -1500,9 +1500,13 @@ code,
   filter: drop-shadow(2px 2px 0 var(--ink));
 }
 
-.nb-cta-wrap:has(button:disabled) {
+.nb-cta-wrap:has(button:disabled:not(.is-sending)) {
   opacity: 0.45;
   filter: drop-shadow(2px 2px 0 var(--ink));
+}
+
+.nb-cta-wrap:has(button.is-sending) {
+  filter: drop-shadow(3px 3px 0 var(--ink));
 }
 
 .nb-cta-btn {
@@ -1528,6 +1532,10 @@ code,
 
 .nb-cta-btn:disabled {
   cursor: not-allowed;
+}
+
+.nb-cta-btn.is-sending {
+  cursor: progress;
 }
 
 .nb-cta-btn.cta-lg {
@@ -1556,6 +1564,52 @@ code,
     0 12px
   );
   transition: background-color 0.12s ease, color 0.12s ease, text-shadow 0.12s ease;
+}
+
+.nb-cta-btn .cta-dots {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+}
+
+.nb-cta-btn.is-sending .cta-label {
+  display: none;
+}
+
+.nb-cta-btn.is-sending .cta-dots {
+  display: inline-flex;
+}
+
+.nb-cta-btn .cta-dots span {
+  width: 8px;
+  height: 8px;
+  background: #ffffff;
+  border: 1.5px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  animation: ctaDotBounce 0.68s cubic-bezier(0.35, 0, 0.25, 1) infinite;
+}
+
+.nb-cta-btn .cta-dots span:nth-child(2) {
+  animation-delay: 0.14s;
+}
+
+.nb-cta-btn .cta-dots span:nth-child(3) {
+  animation-delay: 0.28s;
+}
+
+@keyframes ctaDotBounce {
+  0%, 80%, 100% {
+    transform: translateY(0) scale(0.9);
+    opacity: 0.65;
+    background: #ffffff;
+  }
+  40% {
+    transform: translateY(-5px) scale(1.15);
+    opacity: 1;
+    background: var(--yellow);
+  }
 }
 
 .nb-cta-btn.cta-lg .nb-cta-face {
@@ -1610,12 +1664,16 @@ code,
 .settings-fields-area {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 2px 4px 4px 2px;
+  padding: 2px 4px 2px 2px;
 }
 
 .settings-fields-area .field-grid {
+  flex-shrink: 0;
   gap: 7px 12px;
 }
 
@@ -1633,28 +1691,43 @@ code,
   padding: 4px 14px;
 }
 
-.settings-fields-area .toggle-row.compact-toggle {
-  min-height: 41px;
-  padding: 6px 13px;
+.settings-toggle-group {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 4px;
 }
 
-.settings-fields-area .field-group.full-span:has(.toggle-row) {
-  margin-top: 2px;
+.settings-toggle-group .toggle-row.compact-toggle {
+  flex: 1 1 56px;
+  min-height: 41px;
+  max-height: 62px;
+  padding: 5px 16px;
+}
+
+.settings-fields-area .toggle-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
 }
 
 .settings-fields-area .nb-switch {
-  width: 50px;
-  height: 25px;
+  width: 52px;
+  height: 26px;
 }
 
 .settings-fields-area .nb-switch-track::after {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
+  left: 3px;
   top: 2px;
 }
 
 .settings-fields-area .nb-switch input:checked + .nb-switch-track::after {
-  transform: translateX(23px);
+  transform: translateX(24px);
 }
 
 .settings-action-bar {
@@ -2760,6 +2833,7 @@ code,
 @media (prefers-reduced-motion: reduce) {
   .neon-ribbon,
   .pulse-dot,
+  .nb-cta-btn .cta-dots span,
   .toast,
   .toast.is-leaving {
     animation: none !important;

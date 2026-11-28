@@ -296,7 +296,10 @@
 
                   <span class="nb-cta-wrap is-full">
                     <button type="button" id="btnConsoleSubmit" class="nb-cta-btn cta-pink cta-lg">
-                      <span class="nb-cta-face">コンソールへ送信</span>
+                      <span class="nb-cta-face">
+                        <span class="cta-label">コンソールへ送信</span>
+                        <span class="cta-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+                      </span>
                     </button>
                   </span>
                 </div>
@@ -559,35 +562,31 @@
                   <label class="field-label" for="cfgRestartWait">再起動カウントダウン (秒)</label>
                   <input id="cfgRestartWait" class="nb-input" type="number" min="1" max="300">
                 </div>
+              </div>
 
-                <div class="field-group full-span">
-                  <div class="toggle-row compact-toggle">
-                    <span class="toggle-title">再起動時のポート切替 <span class="chip info">ON: 2ポート交互 / OFF: ポート1固定</span></span>
-                    <label class="nb-switch">
-                      <input id="cfgSwitchPort" type="checkbox">
-                      <span class="nb-switch-track"></span>
-                    </label>
-                  </div>
+              <div class="settings-toggle-group">
+                <div class="toggle-row compact-toggle">
+                  <span class="toggle-title">再起動時のポート切替 <span class="chip info">ON: 2ポート交互 / OFF: ポート1固定</span></span>
+                  <label class="nb-switch">
+                    <input id="cfgSwitchPort" type="checkbox">
+                    <span class="nb-switch-track"></span>
+                  </label>
                 </div>
 
-                <div class="field-group full-span">
-                  <div class="toggle-row compact-toggle">
-                    <span class="toggle-title">自動ブロードキャスト既定値 <span class="chip">コンソール操作時にゲーム内自動告知</span></span>
-                    <label class="nb-switch">
-                      <input id="cfgAutoBroadcast" type="checkbox">
-                      <span class="nb-switch-track"></span>
-                    </label>
-                  </div>
+                <div class="toggle-row compact-toggle">
+                  <span class="toggle-title">自動ブロードキャスト既定値 <span class="chip">コンソール操作時にゲーム内自動告知</span></span>
+                  <label class="nb-switch">
+                    <input id="cfgAutoBroadcast" type="checkbox">
+                    <span class="nb-switch-track"></span>
+                  </label>
                 </div>
 
-                <div class="field-group full-span">
-                  <div class="toggle-row compact-toggle">
-                    <span class="toggle-title">自動再起動ウォッチドッグ <span class="chip">試合終了・UDP停止検知で自動再起動</span></span>
-                    <label class="nb-switch">
-                      <input id="cfgWatchdog" type="checkbox" checked>
-                      <span class="nb-switch-track"></span>
-                    </label>
-                  </div>
+                <div class="toggle-row compact-toggle">
+                  <span class="toggle-title">自動再起動ウォッチドッグ <span class="chip">試合終了・UDP停止検知で自動再起動</span></span>
+                  <label class="nb-switch">
+                    <input id="cfgWatchdog" type="checkbox" checked>
+                    <span class="nb-switch-track"></span>
+                  </label>
                 </div>
               </div>
             </div>

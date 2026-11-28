@@ -65,6 +65,10 @@ pub type GetPrivateStaticClassFn = unsafe extern "C" fn() -> *mut c_void;
 /// Calling convention for `FMemory::Free(void* original)`.
 pub type FMemoryFreeFn = unsafe extern "C" fn(original: *mut c_void);
 
+/// Calling convention for `TMulticastScriptDelegate<FWeakObjectPtr>::ProcessMulticastDelegate<UObject>`.
+pub type ProcessMulticastDelegateFn =
+    unsafe extern "C" fn(delegate: *mut c_void, parameters: *mut c_void);
+
 /// Calling convention for `UDH_OnlineVoice::BeforeRecvAudioRendered`.
 ///
 /// NOTE: `online_voice_slot` is `UDH_OnlineVoice**` (pointer-to-pointer), verified at `0xE9F9DD`.
@@ -109,6 +113,9 @@ pub type GetDhPlayerStateFromUniqueIdFn =
 
 /// Calling convention for `UDH_GameplayStatics::GetLocalDHPlayerState(UObject*) -> ADH_PlayerState*`.
 pub type GetLocalDhPlayerStateFn = unsafe extern "C" fn(world_ctx: *mut c_void) -> *mut c_void;
+
+/// Calling convention for `UDH_GameplayStatics::GetParticipantPositionalAudioEnergy(APlayerState*) -> float`.
+pub type GetParticipantAudioEnergyFn = unsafe extern "C" fn(player_state: *mut c_void) -> f32;
 
 /// Calling convention for `FUniqueNetId::IsValid(this) -> bool`.
 pub type UniqueNetIdIsValidFn = unsafe extern "C" fn(unique_id: *const c_void) -> u8;

@@ -68,3 +68,30 @@ pub const LIMITER_KNEE_THRESHOLD: f32 = 0.85;
 
 /// Soft-knee limiter hard ceiling (normalized amplitude `~ -0.18 dBFS`).
 pub const LIMITER_CEILING: f32 = 0.98;
+
+/// Lower dBFS floor mapped to `0.0` on Dread Hunger's HUD microphone volume meter.
+pub const ENERGY_FLOOR_DBFS: f32 = -52.0;
+
+/// Upper dBFS ceiling mapped to `1.0` on Dread Hunger's HUD microphone volume meter.
+pub const ENERGY_CEIL_DBFS: f32 = -8.0;
+
+/// Minimum linear RMS considered above digital silence before taking `20 * log10(rms)`.
+pub const ENERGY_RMS_EPSILON: f32 = 1.0e-5;
+
+/// Residual meter energy threshold flushed cleanly to `0.0`.
+pub const ENERGY_SILENCE_EPSILON: f32 = 0.002;
+
+/// Fast attack smoothing factor (`10 ms` frame) for the local microphone HUD volume meter.
+pub const LOCAL_ENERGY_ATTACK_ALPHA: f32 = 0.65;
+
+/// Smooth release decay factor (`10 ms` frame) for the local microphone HUD volume meter.
+pub const LOCAL_ENERGY_RELEASE_ALPHA: f32 = 0.14;
+
+/// Maximum staleness window in milliseconds over which local microphone meter energy decays to `0.0`.
+pub const LOCAL_ENERGY_STALE_WINDOW_MS: u64 = 250;
+
+/// Fast attack smoothing factor (`20 ms` frame) for remote speaker HUD volume meters.
+pub const REMOTE_ENERGY_ATTACK_ALPHA: f32 = 0.70;
+
+/// Smooth release decay factor (`20 ms` frame) for remote speaker HUD volume meters.
+pub const REMOTE_ENERGY_RELEASE_ALPHA: f32 = 0.25;

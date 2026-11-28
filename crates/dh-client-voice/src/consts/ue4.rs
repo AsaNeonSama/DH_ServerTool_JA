@@ -20,6 +20,11 @@ pub const RVA_ADH_PLAYERSTATE_STATIC_CLASS: usize = 0x00F6_51F0;
 /// Client RVA of `FMemory::Free(void* original)`.
 pub const RVA_FMEMORY_FREE: usize = 0x010D_50F0;
 
+/// Client RVA of `TMulticastScriptDelegate<FWeakObjectPtr>::ProcessMulticastDelegate<UObject>`.
+pub const RVA_PROCESS_MULTICAST_DELEGATE: usize = 0x0076_19D0;
+/// Expected 7-byte entry prologue of `ProcessMulticastDelegate` (`0x7619D0`).
+pub const SIG_PROCESS_MULTICAST_DELEGATE: [u8; 7] = [0x4C, 0x8B, 0xDC, 0x56, 0x57, 0x41, 0x57];
+
 /// Client RVA of `UDH_OnlineVoice::BeforeRecvAudioRendered(UDH_OnlineVoice**, FString*, TArrayView<i16>*)`.
 pub const RVA_DH_ONLINE_VOICE_BEFORE_RECV_AUDIO: usize = 0x00E9_F9C0;
 /// Client RVA of `UDH_OnlineVoice::GetVoiceChatUser(UDH_OnlineVoice* this) -> IVoiceChatUser*`.
@@ -55,6 +60,15 @@ pub const OFFSET_FSOCKET_BSD_SOCKET_TYPE: usize = 0x08;
 pub const OFFSET_FSOCKET_BSD_RAW_SOCKET: usize = 0x28;
 /// `FInternetAddrBSD::Addr` offset (`SOCKADDR_STORAGE`, 128 bytes).
 pub const OFFSET_FINTERNET_ADDR_BSD_STORAGE: usize = 0x08;
+
+/// `UDH_GameInstance::MessageBus` offset (`UDH_MessageBus*`, verified in `UDH_MessageBus::GetInstance`).
+pub const OFFSET_DH_GAME_INSTANCE_MESSAGE_BUS: usize = 0x518;
+/// `UDH_MessageBus::OnVoiceChatParticipantChangedDelegate` offset (`FMulticastInlineDelegate`).
+pub const OFFSET_DH_MESSAGE_BUS_ON_VOICE_CHAT_PARTICIPANT_CHANGED: usize = 0x398;
+/// `TArray::ArrayNum` (`i32`) offset inside `FMulticastInlineDelegate::InvocationList`.
+pub const OFFSET_MULTICAST_DELEGATE_NUM: usize = 0x08;
+/// Sanity upper bound on bound listeners in `FMulticastInlineDelegate::InvocationList`.
+pub const MAX_SANE_DELEGATE_LISTENERS: i32 = 4096;
 
 /// `UDH_GameInstance::OnlineVoice` offset (`UDH_OnlineVoice*`, verified at `0xE0B620`).
 pub const OFFSET_DH_GAME_INSTANCE_ONLINE_VOICE: usize = 0x520;
@@ -93,6 +107,9 @@ pub const VTABLE_OFF_VOICE_CHAT_GET_OUTPUT_MUTED: usize = 0x50;
 
 /// Active speaker indicator hold window (`350 ms`) after receiving non-silent decoded PCM.
 pub const SPEAKER_ACTIVE_WINDOW_MS: u64 = 350;
+/// Periodic UI refresh interval (`250 ms`) while a remote speaker remains active, updating
+/// ESC-menu speaking icons promptly on VOIP range entry/exit, Thrall Hush, or Mute changes.
+pub const SPEAKER_UI_REFRESH_INTERVAL_MS: u64 = 250;
 /// Expiry window (`1500 ms`) for pruning stale speaker entries during periodic ticks.
 pub const SPEAKER_PRUNE_WINDOW_MS: u64 = 1500;
 /// Minimum peak `i16` sample amplitude treated as audible speech for HUD speaking indicators.

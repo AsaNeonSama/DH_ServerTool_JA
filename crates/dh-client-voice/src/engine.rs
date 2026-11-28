@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::ffi::c_void;
-use std::sync::atomic::{AtomicBool, AtomicU16, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -10,7 +10,10 @@ use dh_voice_proto::{
     MAX_PEER_SLOT, MIN_PEER_SLOT,
 };
 
-use crate::consts::dsp::{DSP_FRAME_SAMPLES_10MS, OPUS_FRAME_SAMPLES_20MS};
+use crate::consts::dsp::{
+    DSP_FRAME_SAMPLES_10MS, LOCAL_ENERGY_ATTACK_ALPHA, LOCAL_ENERGY_RELEASE_ALPHA,
+    LOCAL_ENERGY_STALE_WINDOW_MS, OPUS_FRAME_SAMPLES_20MS,
+};
 use crate::consts::engine::{
     HELLO_KEEPALIVE_INTERVAL_MS, HELLO_RETRY_INTERVAL_MS, INVALID_RAW_SOCKET, SOCKADDR_AF_INET,
     SOCKADDR_AF_INET6, SOCKADDR_INET6_LEN, SOCKADDR_INET_LEN, SOCKADDR_STORAGE_SIZE,
@@ -18,7 +21,9 @@ use crate::consts::engine::{
 use crate::consts::jitter::JITTER_MAX_SPEAKERS;
 use crate::consts::opus::OPUS_DTX_SILENCE_MAX_BYTES;
 use crate::consts::ue4::OFFSET_FINTERNET_ADDR_BSD_STORAGE;
-use crate::dsp::{normalized_f32_to_i16, DspPipeline};
+use crate::dsp::{
+    decay_meter_energy, normalized_f32_to_i16, pcm_i16_rms_energy, smooth_meter_energy, DspPipeline,
+};
 use crate::jitter::{advance_playout_accumulator, plc_fade_gain, SpeakerJitterBuffer};
 use crate::logger::log_line;
 use crate::structs::engine::{
@@ -43,6 +48,15 @@ static LOCAL_WANTS_TO_TALK: AtomicBool = AtomicBool::new(false);
 
 /// Server-assigned authoritative `peer_slot` (`1..=64`, or `0` prior to `HelloAck`).
 static ASSIGNED_PEER_SLOT: AtomicU16 = AtomicU16::new(0);
+
+/// Lock-free `f32::to_bits()` mirror of smoothed local microphone volume meter energy (`0.0..=1.0`).
+static LOCAL_MIC_ENERGY_BITS: AtomicU32 = AtomicU32::new(0);
+
+/// Monotonic millisecond timestamp (relative to `LOCAL_ENERGY_EPOCH`) of the latest local energy write.
+static LOCAL_MIC_ENERGY_MS: AtomicU64 = AtomicU64::new(0);
+
+/// Monotonic epoch anchoring lock-free `LOCAL_MIC_ENERGY_MS` timestamps.
+static LOCAL_ENERGY_EPOCH: OnceLock<Instant> = OnceLock::new();
 
 /// Active UDP socket handle + destination `SOCKADDR_STORAGE` protected against concurrent `Close`.
 static GAME_ENDPOINT: Mutex<Option<GameSocketEndpoint>> = Mutex::new(None);
@@ -82,6 +96,43 @@ pub fn set_local_wants_to_talk(wants: bool) {
 #[must_use]
 pub fn assigned_peer_slot() -> u16 {
     ASSIGNED_PEER_SLOT.load(Ordering::Acquire)
+}
+
+fn local_energy_now_ms() -> u64 {
+    let epoch: &Instant = LOCAL_ENERGY_EPOCH.get_or_init(Instant::now);
+    u64::try_from(Instant::now().saturating_duration_since(*epoch).as_millis())
+        .unwrap_or(u64::MAX - 1)
+        .saturating_add(1)
+}
+
+fn store_local_mic_energy(energy: f32) {
+    let clamped: f32 = if energy.is_finite() {
+        energy.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    LOCAL_MIC_ENERGY_BITS.store(clamped.to_bits(), Ordering::Release);
+    LOCAL_MIC_ENERGY_MS.store(local_energy_now_ms(), Ordering::Release);
+}
+
+/// Resets the lock-free local microphone meter energy immediately to `0.0`.
+pub fn reset_local_mic_energy() {
+    LOCAL_MIC_ENERGY_BITS.store(0.0_f32.to_bits(), Ordering::Release);
+    LOCAL_MIC_ENERGY_MS.store(0, Ordering::Release);
+}
+
+/// Reads the live smoothed local microphone HUD volume meter energy (`0.0..=1.0`), smoothly
+/// decaying to `0.0` if capture frames stop arriving.
+#[must_use]
+pub fn read_local_mic_energy() -> f32 {
+    let bits: u32 = LOCAL_MIC_ENERGY_BITS.load(Ordering::Acquire);
+    let stored: f32 = f32::from_bits(bits);
+    let updated_ms: u64 = LOCAL_MIC_ENERGY_MS.load(Ordering::Acquire);
+    if updated_ms == 0 || stored <= 0.0 || !stored.is_finite() {
+        return 0.0;
+    }
+    let elapsed_ms: u64 = local_energy_now_ms().saturating_sub(updated_ms);
+    decay_meter_energy(stored, elapsed_ms, LOCAL_ENERGY_STALE_WINDOW_MS)
 }
 
 /// Encodes a UTF-8 player UID into a NUL-terminated UTF-16LE buffer suitable for read-only
@@ -349,6 +400,7 @@ pub unsafe fn on_dhv2_datagram_received(
 /// + RX jitter table). Called once on the UE4 Game Thread when entering a Dedicated Server match.
 pub fn start_match_session(opus_api: OpusApiTable) {
     ASSIGNED_PEER_SLOT.store(0, Ordering::Release);
+    reset_local_mic_energy();
 
     if let Ok(mut rx) = rx_state().lock() {
         rx.reset_for_new_match(Some(opus_api));
@@ -399,6 +451,7 @@ pub fn stop_match_session() {
 
     LOCAL_WANTS_TO_TALK.store(false, Ordering::Release);
     MATCH_GAME_SOCKET_PTR.store(0, Ordering::Release);
+    reset_local_mic_energy();
 
     if let Ok(mut session) = session_state().lock() {
         if let Some(mut wasapi) = session.wasapi.take() {
@@ -491,6 +544,7 @@ impl TxCapturePipeline {
             in_talkspurt: false,
             tx_seq: 0,
             tx_timestamp: 0,
+            smoothed_energy: 0.0,
             opus_scratch: [0u8; MAX_OPUS_PAYLOAD],
             wire_scratch: [0u8; MAX_PACKET_SIZE],
         }
@@ -513,6 +567,10 @@ impl TxCapturePipeline {
                 }
                 self.in_talkspurt = false;
             }
+            if self.smoothed_energy > 0.0 {
+                self.smoothed_energy = 0.0;
+                reset_local_mic_energy();
+            }
             self.has_first_half = false;
             self.first_half_speech = false;
             self.dsp.warmup_aec_10ms(capture_mono_f32, render_mono_f32);
@@ -522,6 +580,19 @@ impl TxCapturePipeline {
         let dsp_res: crate::structs::dsp::DspFrameResult = self
             .dsp
             .process_capture_10ms(capture_mono_f32, render_mono_f32);
+
+        let raw_energy: f32 = if dsp_res.speech_active {
+            pcm_i16_rms_energy(&dsp_res.pcm_i16)
+        } else {
+            0.0
+        };
+        self.smoothed_energy = smooth_meter_energy(
+            self.smoothed_energy,
+            raw_energy,
+            LOCAL_ENERGY_ATTACK_ALPHA,
+            LOCAL_ENERGY_RELEASE_ALPHA,
+        );
+        store_local_mic_energy(self.smoothed_energy);
 
         if !self.has_first_half {
             self.pcm_20ms[..DSP_FRAME_SAMPLES_10MS].copy_from_slice(&dsp_res.pcm_i16);

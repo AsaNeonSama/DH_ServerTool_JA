@@ -1,15 +1,17 @@
 use std::f32::consts::TAU;
 
 use dh_voice_client::consts::dsp::{
-    DSP_FRAME_SAMPLES_10MS, LIMITER_CEILING, LIMITER_KNEE_THRESHOLD, VAD_HOLDOVER_FRAMES,
-    VOICE_SAMPLE_RATE_HZ,
+    DSP_FRAME_SAMPLES_10MS, LIMITER_CEILING, LIMITER_KNEE_THRESHOLD, LOCAL_ENERGY_ATTACK_ALPHA,
+    LOCAL_ENERGY_RELEASE_ALPHA, VAD_HOLDOVER_FRAMES, VOICE_SAMPLE_RATE_HZ,
 };
+use dh_voice_client::consts::ue4::SPEAKER_ACTIVE_WINDOW_MS;
 use dh_voice_client::consts::wasapi::{
     HRESULT_AUDCLNT_E_DEVICE_INVALIDATED, HRESULT_AUDCLNT_E_RESOURCES_INVALIDATED,
     HRESULT_AUDCLNT_E_SERVICE_NOT_RUNNING,
 };
 use dh_voice_client::{
-    decode_interleaved_to_mono_f32, is_recoverable_device_error, normalized_f32_to_i16,
+    decay_meter_energy, decode_interleaved_to_mono_f32, is_recoverable_device_error,
+    normalized_f32_to_i16, pcm_i16_rms_energy, rms_to_meter_energy, smooth_meter_energy,
     soft_knee_limit, AgcLimiterState, BiquadHpfState, DspFrameResult, DspPipeline, LinearResampler,
     RenderReferenceRing, VadGateState, WasapiSampleFormat, WasapiStreamFormat,
 };
@@ -232,4 +234,54 @@ fn wasapi_resampler_ring_and_pcm_decoders_work_accurately() {
         HRESULT_AUDCLNT_E_RESOURCES_INVALIDATED
     ));
     assert!(!is_recoverable_device_error(0));
+}
+
+#[test]
+fn perceptual_mic_energy_meter_maps_smooths_and_decays_cleanly() {
+    // Silence, empty, sub-floor noise, and non-finite inputs map strictly to 0.0
+    assert_eq!(pcm_i16_rms_energy(&[]), 0.0);
+    assert_eq!(pcm_i16_rms_energy(&[0i16; DSP_FRAME_SAMPLES_10MS]), 0.0);
+    assert_eq!(rms_to_meter_energy(0.0), 0.0);
+    assert_eq!(rms_to_meter_energy(0.001), 0.0); // -60 dBFS < -52 dBFS floor
+    assert_eq!(rms_to_meter_energy(f32::NAN), 0.0);
+    assert_eq!(rms_to_meter_energy(f32::INFINITY), 0.0);
+
+    // Conversational speech PCM (~ -20 dBFS = amplitude ~3276) maps into mid-high (0.4, 0.9)
+    let speech_pcm: [i16; DSP_FRAME_SAMPLES_10MS] = [3_276i16; DSP_FRAME_SAMPLES_10MS];
+    let speech_energy: f32 = pcm_i16_rms_energy(&speech_pcm);
+    assert!(
+        speech_energy > 0.45 && speech_energy < 0.90,
+        "unexpected speech meter energy: {speech_energy}"
+    );
+
+    // Clipping / loud speech (>= -8 dBFS) saturates cleanly at 1.0
+    let loud_pcm: [i16; DSP_FRAME_SAMPLES_10MS] = [i16::MAX; DSP_FRAME_SAMPLES_10MS];
+    assert!((pcm_i16_rms_energy(&loud_pcm) - 1.0).abs() < 1.0e-6);
+
+    // Smoothing rises quickly on attack and releases smoothly toward 0.0
+    let attacked: f32 = smooth_meter_energy(
+        0.0,
+        0.8,
+        LOCAL_ENERGY_ATTACK_ALPHA,
+        LOCAL_ENERGY_RELEASE_ALPHA,
+    );
+    assert!(attacked > 0.45 && attacked < 0.8);
+    let mut releasing: f32 = attacked;
+    for _ in 0..50 {
+        releasing = smooth_meter_energy(
+            releasing,
+            0.0,
+            LOCAL_ENERGY_ATTACK_ALPHA,
+            LOCAL_ENERGY_RELEASE_ALPHA,
+        );
+    }
+    assert_eq!(releasing, 0.0);
+
+    // Time-based stale decay glides smoothly from 100% -> 50% -> 0% over SPEAKER_ACTIVE_WINDOW_MS
+    let full: f32 = decay_meter_energy(0.8, 0, SPEAKER_ACTIVE_WINDOW_MS);
+    let half: f32 = decay_meter_energy(0.8, SPEAKER_ACTIVE_WINDOW_MS / 2, SPEAKER_ACTIVE_WINDOW_MS);
+    let expired: f32 = decay_meter_energy(0.8, SPEAKER_ACTIVE_WINDOW_MS, SPEAKER_ACTIVE_WINDOW_MS);
+    assert!((full - 0.8).abs() < 1.0e-5);
+    assert!((half - 0.4).abs() < 0.02);
+    assert_eq!(expired, 0.0);
 }

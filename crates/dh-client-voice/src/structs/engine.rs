@@ -77,6 +77,8 @@ pub struct TxCapturePipeline {
     pub tx_seq: u16,
     /// Monotonic `48 kHz` sample timestamp (`+960` per `20 ms` frame).
     pub tx_timestamp: u32,
+    /// Smoothed local microphone energy (`0.0..=1.0`) published lock-free for HUD volume meters.
+    pub smoothed_energy: f32,
     /// Reusable Opus output scratch buffer (zero per-frame heap allocation).
     pub opus_scratch: [u8; MAX_OPUS_PAYLOAD],
     /// Reusable `DHV2` wire packet scratch buffer (zero per-frame heap allocation).

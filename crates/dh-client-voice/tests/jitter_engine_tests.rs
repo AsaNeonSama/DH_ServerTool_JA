@@ -10,10 +10,12 @@ use dh_voice_client::consts::jitter::{
     JITTER_MAX_BUFFERED_FRAMES, JITTER_MAX_PLAYOUT_FRAMES_PER_TICK, JITTER_MAX_TARGET_FRAMES,
     JITTER_MIN_TARGET_FRAMES,
 };
+use dh_voice_client::consts::ue4::{SPEAKER_ACTIVE_WINDOW_MS, SPEAKER_UI_REFRESH_INTERVAL_MS};
 use dh_voice_client::{
-    advance_playout_accumulator, apply_plc_fade_in_place, encode_uid_utf16_nul,
-    parse_sockaddr_storage, plc_fade_gain, seq_diff, DecodedPlayoutFrame, OpusApiTable,
-    OpusDecoder, OpusEncoder, PlayoutAction, SpeakerJitterBuffer, VoiceRxState,
+    advance_playout_accumulator, apply_plc_fade_in_place, collect_speaker_ui_notifications,
+    encode_uid_utf16_nul, parse_sockaddr_storage, plc_fade_gain, seq_diff, DecodedPlayoutFrame,
+    OpusApiTable, OpusDecoder, OpusEncoder, PlayoutAction, SpeakerEntry, SpeakerJitterBuffer,
+    VoiceRxState,
 };
 use dh_voice_proto::{PeerMapEntry, FLAG_END_OF_TALKSPURT, FLAG_HAS_FEC};
 
@@ -317,4 +319,61 @@ fn voice_rx_state_and_mock_opus_deliver_decoded_fec_and_faded_plc() {
     // PeerMap pruning removes vanished slots
     rx.apply_peer_map(&[]);
     assert_eq!(rx.peer_count(), 0);
+}
+
+#[test]
+fn speaker_ui_notifications_transition_on_refresh_and_off_without_spam() {
+    let t0: Instant = Instant::now();
+    let uid_raw: Vec<u16> = "76561198000000009|0002def".encode_utf16().collect();
+    let uid_nul: Vec<u16> = encode_uid_utf16_nul("76561198000000009|0002def");
+    let mut speakers: Vec<SpeakerEntry> = vec![SpeakerEntry {
+        id_utf16: uid_raw,
+        last_heard: t0,
+        energy: 0.75,
+        notified_speaking: false,
+        last_notify_at: t0,
+    }];
+
+    // 1. Instant ON on first active tick
+    let on_notifs: Vec<Vec<u16>> = collect_speaker_ui_notifications(&mut speakers, t0);
+    assert_eq!(on_notifs, vec![uid_nul.clone()]);
+    assert!(speakers[0].notified_speaking);
+
+    // 2. No spam while < SPEAKER_UI_REFRESH_INTERVAL_MS (250 ms)
+    let t_early: Instant = t0 + Duration::from_millis(SPEAKER_UI_REFRESH_INTERVAL_MS - 10);
+    speakers[0].last_heard = t_early;
+    let empty: Vec<Vec<u16>> = Vec::new();
+    assert_eq!(
+        collect_speaker_ui_notifications(&mut speakers, t_early),
+        empty
+    );
+
+    // 3. Periodic refresh at >= 250 ms while still actively speaking
+    let t_refresh: Instant = t0 + Duration::from_millis(SPEAKER_UI_REFRESH_INTERVAL_MS);
+    speakers[0].last_heard = t_refresh;
+    let refresh_notifs: Vec<Vec<u16>> = collect_speaker_ui_notifications(&mut speakers, t_refresh);
+    assert_eq!(refresh_notifs, vec![uid_nul.clone()]);
+    assert!(speakers[0].notified_speaking);
+
+    // 4. Still no spam immediately after refresh
+    let t_mid: Instant = t_refresh + Duration::from_millis(100);
+    assert_eq!(
+        collect_speaker_ui_notifications(&mut speakers, t_mid),
+        empty
+    );
+
+    // 5. Instant OFF right at >= SPEAKER_ACTIVE_WINDOW_MS (350 ms) since last_heard
+    let t_off: Instant = t_refresh + Duration::from_millis(SPEAKER_ACTIVE_WINDOW_MS);
+    let off_notifs: Vec<Vec<u16>> = collect_speaker_ui_notifications(&mut speakers, t_off);
+    assert_eq!(off_notifs, vec![uid_nul]);
+    assert!(!speakers[0].notified_speaking);
+    assert_eq!(speakers[0].energy, 0.0);
+
+    // 6. Zero repeated OFF spam on subsequent idle ticks
+    let t_later: Instant = t_off + Duration::from_millis(500);
+    assert_eq!(
+        collect_speaker_ui_notifications(&mut speakers, t_later),
+        empty
+    );
+    assert!(!speakers[0].notified_speaking);
 }

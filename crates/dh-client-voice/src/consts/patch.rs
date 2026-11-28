@@ -62,10 +62,10 @@ pub const EOS_RECV_GUARD_CHECK: [u8; 6] = [0x80, 0x38, 0x00, 0x74, 0x01, 0xC3];
 /// stub (`10 + 6 + 10 + 14 = 40`).
 pub const EOS_RECV_GUARD_STUB_LEN: usize = 40;
 
-/// Number of standard function-entry detours installed by the Plan A voice engine (`8`).
-pub const STANDARD_DETOUR_COUNT: usize = 8;
+/// Number of standard function-entry detours installed by the Plan A voice engine (`9`).
+pub const STANDARD_DETOUR_COUNT: usize = 9;
 
-/// Total number of client detours applied at startup (`1` guard detour + `8` function detours = `9`).
+/// Total number of client detours applied at startup (`1` guard detour + `9` function detours = `10`).
 pub const TOTAL_PATCH_COUNT: usize = 1 + STANDARD_DETOUR_COUNT;
 
 /// Guard detour on `FEOSPlusVoiceChatUser::OnVoiceChatBeforeRecvAudioRendered` (`0xA2DC70`)
@@ -134,4 +134,12 @@ pub const DETOUR_IS_PLAYER_IN_VOICE_CHAT: DetourSpec = DetourSpec {
     name: "UDH_OnlineVoice::IsPlayerInVoiceChat Tab-menu mute enabler",
     rva: 0x00EB_5140,
     expected_prologue: &[0x48, 0x89, 0x5C, 0x24, 0x10],
+};
+
+/// Detour on `UDH_GameplayStatics::GetParticipantPositionalAudioEnergy` (`0xF081D0`) driving
+/// Dread Hunger's HUD microphone volume meter (`UDH_VOIPTalkingWidget::NativeTick`).
+pub const DETOUR_GET_PARTICIPANT_AUDIO_ENERGY: DetourSpec = DetourSpec {
+    name: "UDH_GameplayStatics::GetParticipantPositionalAudioEnergy HUD volume meter",
+    rva: 0x00F0_81D0,
+    expected_prologue: &[0x40, 0x53, 0x48, 0x83, 0xEC, 0x20],
 };
