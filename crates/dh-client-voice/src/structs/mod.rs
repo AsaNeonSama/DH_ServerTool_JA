@@ -1,23 +1,39 @@
+pub mod dsp;
+pub mod engine;
+pub mod jitter;
+pub mod opus;
 pub mod patch;
 pub mod proxy;
 pub mod state;
 pub mod ue4;
+pub mod wasapi;
 
+pub use dsp::{AgcLimiterState, BiquadHpfState, DspFrameResult, DspPipeline, VadGateState};
+pub use engine::{
+    ClientVoiceSession, DecodedPlayoutFrame, GameSocketEndpoint, RemotePeerVoice,
+    TxCapturePipeline, VoiceRxState,
+};
+pub use jitter::{BufferedVoicePacket, JitterStats, PlayoutAction, SpeakerJitterBuffer};
+pub use opus::{
+    OpusApiTable, OpusDecodeFn, OpusDecoder, OpusDecoderCtlVoidFn, OpusDecoderGetSizeFn,
+    OpusDecoderInitFn, OpusEncodeFn, OpusEncoder, OpusEncoderCtlSetIntFn, OpusEncoderCtlVoidFn,
+    OpusEncoderGetSizeFn, OpusEncoderInitFn, OpusError, OpusGetVersionStringFn,
+};
 pub use patch::{
-    BytePatch, DetourSpec, EosRecvGuardSpec, PatchOutcome, PatchReport, PendingSitePatch,
-    StandardDetourBinding, SubmitRemoteVoiceSpec, TrampolineError, TrampolinePageBuilder,
-    VtablePatchSpec,
+    DetourSpec, EosRecvGuardSpec, PatchOutcome, PatchReport, PendingSitePatch,
+    StandardDetourBinding, TrampolineError, TrampolinePageBuilder,
 };
 pub use proxy::ProxyExportSpec;
 pub use state::{MatchContext, SpeakerEntry};
 pub use ue4::{
-    BeforeRecvAudioRenderedFn, ChannelDefinition, FMemoryFreeFn, FMemoryReallocFn, FName,
-    FNameCtorAnsiFn, FNameEntryIdFromValidENameFn, FString, GetAudioMutedFn,
+    BeforeRecvAudioRenderedFn, EngineLoopTickFn, FMemoryFreeFn, FString, GetAudioMutedFn,
     GetDhPlayerStateFromUniqueIdFn, GetFirstLocalPcFn, GetGameWorldFn, GetLocalDhPlayerStateFn,
-    GetPrivateStaticClassFn, GetUniquePlayerIdFn, GetVoiceChatUserFn, GetVoiceInterfaceFn,
-    GetWantsToTalkFn, IsInVoipRangeFn, IsParticipantSpeakingFn, IsPlayerInVoiceChatFn,
-    LoadChannelDefinitionsFn, OnlineVoiceTickFn, RefCtrlDestroyObjFn, RefCtrlDtorFn,
-    RegisterLocalTalkerFn, SetAudioInputVolumeFn, SetAudioMutedFn, SetWantsToTalkFn, SharedPtr,
-    StartStopNetworkedVoiceFn, TArrayRaw, TArrayViewI16, UniqueNetIdIsValidFn,
-    UniqueNetIdToStringFn,
+    GetNetDriverSocketFn, GetPrivateStaticClassFn, GetVoiceChatUserFn, GetWantsToTalkFn,
+    IsInVoipRangeFn, IsParticipantSpeakingFn, IsPlayerInVoiceChatFn, SetAudioInputVolumeFn,
+    SetAudioMutedFn, SetWantsToTalkFn, SocketCloseFn, SocketRecvFromFn, SocketSendToFn,
+    TArrayViewI16, UniqueNetIdIsValidFn, UniqueNetIdToStringFn,
+};
+pub use wasapi::{
+    CaptureFrameFactory, CaptureFrameHandler, LinearResampler, RenderReferenceRing,
+    WasapiSampleFormat, WasapiSession, WasapiStreamFormat,
 };

@@ -40,7 +40,9 @@ windows-core = "0.62"
 uuid = { version = "1", features = ["v4"] }
 
 [build-dependencies]
+sha2 = "0.11"
 tauri-build = { version = "2", features = [] }
+zstd = { version = "0.14", default-features = false }
 
 [lints]
 workspace = true

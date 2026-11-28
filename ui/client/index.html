@@ -118,7 +118,7 @@
                     <span class="builtin-tile-border">
                       <span class="builtin-tile-face">
                         <span class="builtin-tile-left">
-                          <span class="builtin-tile-title">UEネイティブボイス</span>
+                          <span class="builtin-tile-title">自有音声クライアント</span>
                           <span class="kind-badge kind-voice">音声チャット</span>
                         </span>
                         <span class="builtin-state-pill" data-state-pill="voice_chat">OFF</span>
@@ -207,17 +207,21 @@
 
   <!-- In-App Neo-Brutalist License Modal (1:1 parity with DH_ServerLauncher_JA) -->
   <div id="licenseModalBackdrop" class="nb-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="licenseModalTitle" aria-hidden="true">
-    <div class="nb-modal-dialog">
-      <div class="nb-modal-stripe" aria-hidden="true"></div>
-      <div class="nb-modal-header">
-        <div class="nb-modal-title-group">
-          <span class="nb-modal-kicker">LICENSE</span>
-          <h2 id="licenseModalTitle" class="nb-modal-title">DH_Tool_JA ライセンス情報</h2>
+    <div class="nb-modal-shell">
+      <div class="nb-modal-dialog">
+        <div class="nb-modal-inner">
+          <div class="nb-modal-stripe" aria-hidden="true"></div>
+          <div class="nb-modal-header">
+            <div class="nb-modal-title-group">
+              <span class="nb-modal-kicker">LICENSE</span>
+              <h2 id="licenseModalTitle" class="nb-modal-title">DH_Tool_JA ライセンス情報</h2>
+            </div>
+            <button type="button" id="licenseCloseBtn" class="win-ctrl-btn win-ctrl-close" title="閉じる" aria-label="閉じる">✕</button>
+          </div>
+          <div class="nb-modal-body">
+            <pre id="licenseModalText" class="license-pre">読み込み中...</pre>
+          </div>
         </div>
-        <button type="button" id="licenseCloseBtn" class="win-ctrl-btn win-ctrl-close" title="閉じる" aria-label="閉じる">✕</button>
-      </div>
-      <div class="nb-modal-body">
-        <pre id="licenseModalText" class="license-pre">読み込み中...</pre>
       </div>
     </div>
   </div>

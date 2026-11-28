@@ -14,6 +14,8 @@ pub struct MatchContext {
     pub local_pc: *mut c_void,
     /// Live local `ADH_PlayerState*` (may be null briefly before `PlayerState` replication).
     pub local_ps: *mut c_void,
+    /// Live `FSocketBSD*` pointer returned by `UIpNetDriver::GetSocket()` (`0` if unavailable).
+    pub game_socket_ptr: usize,
 }
 
 /// Timestamped remote speaking activity record keyed by UTF-16 `UniqueNetId` string.

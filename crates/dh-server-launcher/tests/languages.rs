@@ -97,7 +97,7 @@ fn renders_japanese_server_app_gui_and_client_required_mod_messages() {
         mod_description(ModLabelCode::ContentTotemSpells).is_some_and(|d| d.contains(".pak/.sig"))
     );
     assert!(mod_description(ModLabelCode::ContentUeVoice)
-        .is_some_and(|d| d.contains("dh_voice_client.dll")));
+        .is_some_and(|d| d.contains("自有音声クライアント")));
     assert_eq!(
         APP_LICENSE_URL,
         "https://github.com/AsaNeonSama/DH_Tool_JA/blob/main/LICENSE"

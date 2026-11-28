@@ -1,27 +1,3 @@
-/// Single verified in-place byte patch in the client executable image.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct BytePatch {
-    /// Human-readable identifier of the patch site.
-    pub name: &'static str,
-    /// Relative virtual address from `DreadHunger-Win64-Shipping.exe` base.
-    pub rva: usize,
-    /// Exact original machine-code bytes required before patching.
-    pub expected: &'static [u8],
-    /// Replacement machine-code bytes (must match `expected.len()`).
-    pub replacement: &'static [u8],
-}
-
-/// Verified `.rdata` vtable slot replacement specification.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct VtablePatchSpec {
-    /// Human-readable identifier of the vtable patch.
-    pub name: &'static str,
-    /// Relative virtual address of the 8-byte vtable slot.
-    pub slot_rva: usize,
-    /// Expected original function target RVA stored inside the vtable slot.
-    pub expected_target_rva: usize,
-}
-
 /// Verified function-entry detour specification (`5`-byte `E9 rel32` into nearby `RX` stub).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DetourSpec {
@@ -32,20 +8,6 @@ pub struct DetourSpec {
     /// Exact original prologue bytes overwritten at `rva` (must be `>= 5` bytes and free of
     /// RIP-relative operands).
     pub expected_prologue: &'static [u8],
-}
-
-/// Specification for the mid-function PCM redirect hook inside
-/// `FVoiceEngineImpl::SubmitRemoteVoiceData`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SubmitRemoteVoiceSpec {
-    /// Human-readable identifier of the hook site.
-    pub name: &'static str,
-    /// RVA of the instruction right after `FVoiceDecoderOpus::Decode` succeeds (`0x927C0C`).
-    pub hook_rva: usize,
-    /// Exact expected `12` bytes overwritten at `hook_rva`.
-    pub expected_bytes: &'static [u8],
-    /// RVA of the clean register-restoring epilogue (`0x92824B`).
-    pub epilogue_rva: usize,
 }
 
 /// Specification for the zero-overhead naked guard detour on
@@ -60,7 +22,7 @@ pub struct EosRecvGuardSpec {
     pub expected_prologue: [u8; 10],
 }
 
-/// Outcome of attempting to verify and apply a single patch or detour.
+/// Outcome of attempting to verify and apply a single detour.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PatchOutcome {
     /// Original bytes matched and replacement was written.
@@ -75,16 +37,16 @@ pub enum PatchOutcome {
     MemoryError,
 }
 
-/// Aggregate result of applying all client voice patches at startup.
+/// Aggregate result of applying all client voice detours at startup.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PatchReport {
     /// Whether the host process matched `DreadHunger-Win64-Shipping.exe`.
     pub target_matched: bool,
-    /// Number of patches newly applied.
+    /// Number of detours newly applied.
     pub applied: usize,
-    /// Number of patches already present.
+    /// Number of detours already present.
     pub already_applied: usize,
-    /// Number of patches skipped due to mismatch, bounds, or memory failure.
+    /// Number of detours skipped due to mismatch, bounds, or memory failure.
     pub skipped: usize,
 }
 

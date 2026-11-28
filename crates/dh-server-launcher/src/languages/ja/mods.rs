@@ -9,7 +9,7 @@ pub fn label(code: ModLabelCode) -> &'static str {
         ModLabelCode::DefaultNetworkFix => "ネットワーク接続保護・乱入防止",
         ModLabelCode::DefaultCannibalClimb => "食人鬼登攀補強",
         ModLabelCode::ContentTotemSpells => "カスタムスペル(新呪文5種)",
-        ModLabelCode::ContentUeVoice => "UEネイティブボイス(音声)",
+        ModLabelCode::ContentUeVoice => "自有音声サーバー",
         ModLabelCode::RandRole => "役職ランダム",
         ModLabelCode::SpellCastStart => "開幕沈黙",
         ModLabelCode::ResourcesSpawnerDeparture => "マップ補強(山頂)",
@@ -41,12 +41,12 @@ pub fn label(code: ModLabelCode) -> &'static str {
 #[must_use]
 pub fn description(code: ModLabelCode) -> Option<&'static str> {
     match code {
-        ModLabelCode::ContentTotemSpells => Some(
-            "サーバー側で新呪文5種(爆弾ネズミ・船爆破・転移・威圧・交換)を有効化します（クライアント側へ対応 .pak/.sig 導入が必須）",
-        ),
-        ModLabelCode::ContentUeVoice => Some(
-            "サーバー側でUE4ネイティブボイス(24kHz/MaxVoiceDataSize=14336)を有効化します（クライアント側は DH_ClientLauncher_JA の内蔵ボイスチャット / dh_voice_client.dll が必須）",
-        ),
+        ModLabelCode::ContentTotemSpells => {
+            Some("新呪文5種を追加します。クライアント側へ対応 .pak/.sig の導入が必須です。")
+        }
+        ModLabelCode::ContentUeVoice => {
+            Some("クライアント側で「自有音声クライアント」を有効化してください。")
+        }
         _ => None,
     }
 }

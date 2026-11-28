@@ -5,6 +5,8 @@ members = [
     "crates/dh-gadget-injector",
     "crates/dh-server-launcher",
     "crates/dh-client-eos-fix",
+    "crates/dh-voice-proto",
+    "crates/dh-server-voice",
     "crates/dh-client-voice",
     "crates/dh-client-launcher",
 ]

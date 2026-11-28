@@ -115,11 +115,14 @@ fn map_mod_option_dto(opt: &ModMenuOption, is_client_required: bool) -> ModOptio
     };
     let description: Option<String> =
         languages::mod_description(opt.label_code).map(str::to_string);
-    let scripts: Vec<String> = opt
+    let mut scripts: Vec<String> = opt
         .scripts
         .iter()
         .map(|s: &PatchScript| s.file_name.to_string())
         .collect();
+    for dll in opt.dlls {
+        scripts.push(dll.file_name().to_string());
+    }
     let conflicts_with: Vec<String> = opt
         .conflicts_with
         .iter()

@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 license-file.workspace = true
 repository.workspace = true
-description = "Dread Hunger client dual-mode UE4 native voice DLL (EOS voice in Lobby, UE4 native 48 kHz Opus voice on Dedicated Servers; supports direct injection as dh_voice_client.dll and drop-in X3DAudio1_7.dll proxying)"
+description = "Dread Hunger client dual-mode 3D voice DLL (EOS voice in Lobby, zero-extra-port DHV2 pure-Rust AEC3+RNNoise+Opus voice on Dedicated Servers; supports direct injection as dh_voice_client.dll and drop-in X3DAudio1_7.dll proxying)"
 authors = ["アサネオン / Build With Antigravity"]
 build = "build.rs"
 
@@ -14,14 +14,25 @@ crate-type = ["cdylib", "rlib"]
 path = "src/lib.rs"
 
 [dependencies]
+aec3 = { version = "0.4", default-features = false }
+dh-voice-proto = { path = "../dh-voice-proto" }
+nnnoiseless = { version = "0.5", default-features = false }
 windows = { version = "0.62", features = [
     "Win32_Foundation",
+    "Win32_Media_Audio",
+    "Win32_Media_KernelStreaming",
+    "Win32_Media_Multimedia",
+    "Win32_Networking_WinSock",
+    "Win32_Security",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
     "Win32_System_Diagnostics_Debug",
     "Win32_System_LibraryLoader",
     "Win32_System_Memory",
     "Win32_System_SystemInformation",
     "Win32_System_SystemServices",
     "Win32_System_Threading",
+    "Win32_System_Variant",
 ] }
 
 [target.'cfg(windows)'.build-dependencies]

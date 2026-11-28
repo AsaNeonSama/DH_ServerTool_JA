@@ -8,7 +8,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::structs::config::{AppConfig, ConfigLoadOutcome};
 use crate::structs::languages::ApiCode;
-use crate::structs::mods::ResolvedPatchScript;
+use crate::structs::mods::{ExtractedServerDll, ResolvedPatchScript};
 use crate::structs::server::LaunchPlan;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -80,6 +80,14 @@ pub struct GuiRoundSpawnSpec<'a> {
     pub port: u16,
     pub round: u64,
     pub patches: &'a [ResolvedPatchScript],
+    pub dlls: &'a [ExtractedServerDll],
+}
+
+pub struct GuiSupervisorBootstrap {
+    pub initial_plan: LaunchPlan,
+    pub initial_patches: Vec<ResolvedPatchScript>,
+    pub initial_dlls: Vec<ExtractedServerDll>,
+    pub config: AppConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -24,5 +24,5 @@ pub const BUILTIN_VOICE_ID: &str = "voice_chat";
 
 pub const BUILTIN_EOS_PLAN_A_LABEL: &str = "EOS修復 Plan A (標準・19パッチ)";
 pub const BUILTIN_EOS_PLAN_B_LABEL: &str = "EOS修復 Plan B (非公開URI・20パッチ)";
-pub const BUILTIN_VOICE_LABEL: &str = "UEネイティブボイス (voice_chat)";
+pub const BUILTIN_VOICE_LABEL: &str = "自有音声クライアント (音声チャット)";
 pub const SHA256_READ_BUFFER_SIZE: usize = 8_192;

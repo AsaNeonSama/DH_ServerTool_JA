@@ -52,7 +52,7 @@
               <span class="nav-tab-num">01</span>
               <span>コンソール</span>
             </span>
-            <span id="tabConsoleBadge" class="nav-tab-badge">LOCAL</span>
+            <span id="tabConsoleBadge" class="nav-tab-badge">127.0.0.1:7893</span>
           </button>
         </div>
         <div class="nav-tab-wrap" data-tab-wrap="mods">
@@ -274,7 +274,7 @@
                     </div>
                     <div class="field-group">
                       <label class="field-label" for="conChatMessage">送信メッセージ</label>
-                      <input id="conChatMessage" class="nb-input" type="text" placeholder="ゲーム内通知メッセージを入力...">
+                      <textarea id="conChatMessage" class="nb-input nb-textarea" rows="3" placeholder="ゲーム内通知メッセージを入力..."></textarea>
                     </div>
                   </div>
 
@@ -628,17 +628,21 @@
 
   <!-- In-App Neo-Brutalist License Modal -->
   <div id="licenseModalBackdrop" class="nb-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="licenseModalTitle" aria-hidden="true">
-    <div class="nb-modal-dialog">
-      <div class="nb-modal-stripe" aria-hidden="true"></div>
-      <div class="nb-modal-header">
-        <div class="nb-modal-title-group">
-          <span class="nb-modal-kicker">LICENSE</span>
-          <h2 id="licenseModalTitle" class="nb-modal-title">DH_Tool_JA ライセンス情報</h2>
+    <div class="nb-modal-shell">
+      <div class="nb-modal-dialog">
+        <div class="nb-modal-surface">
+          <div class="nb-modal-stripe" aria-hidden="true"></div>
+          <div class="nb-modal-header">
+            <div class="nb-modal-title-group">
+              <span class="nb-modal-kicker">LICENSE</span>
+              <h2 id="licenseModalTitle" class="nb-modal-title">DH_Tool_JA ライセンス情報</h2>
+            </div>
+            <button type="button" id="btnCloseLicenseModal" class="win-btn win-btn-close" title="閉じる" aria-label="閉じる">✕</button>
+          </div>
+          <div class="nb-modal-body">
+            <pre id="licenseModalText" class="license-pre selectable">読み込み中...</pre>
+          </div>
         </div>
-        <button type="button" id="btnCloseLicenseModal" class="win-btn win-btn-close" title="閉じる" aria-label="閉じる">✕</button>
-      </div>
-      <div class="nb-modal-body">
-        <pre id="licenseModalText" class="license-pre selectable">読み込み中...</pre>
       </div>
     </div>
   </div>

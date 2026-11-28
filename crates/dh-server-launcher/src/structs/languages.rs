@@ -244,6 +244,19 @@ pub enum ServerMsg<'a> {
         total: usize,
         label: &'a str,
     },
+    OepDllInjected {
+        index: usize,
+        total: usize,
+        label: &'a str,
+        file_name: &'a str,
+        module_handle: u64,
+    },
+    OepDllInjectFailed {
+        index: usize,
+        total: usize,
+        label: &'a str,
+        file_name: &'a str,
+    },
     AllPatchesInjectedResumed {
         count: usize,
     },

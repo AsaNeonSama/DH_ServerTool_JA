@@ -3,8 +3,9 @@ use std::sync::{Arc, MutexGuard};
 use std::time::Duration;
 
 use dh_gadget_injector::{
-    spawn_and_inject_with_cancel, ActiveInjectionSession, EventCallback, InjectLaunchRequest,
-    InjectorError, InjectorEvent, LogLevel, OepStubInjector, PatchMod,
+    spawn_and_inject_with_cancel, ActiveInjectionSession, DllEventCallback, DllInjectionEvent,
+    EventCallback, InjectLaunchRequest, InjectorError, InjectorEvent, LogLevel, OepStubInjector,
+    PatchMod,
 };
 use dh_win32::{find_udp_listener_pid, is_process_alive, terminate_process, UdpLookupResult};
 use tauri::{AppHandle, Emitter};
@@ -20,14 +21,17 @@ use crate::consts::server::{
 use crate::format::format_seconds;
 use crate::gui::state::{build_patch_progress_list, idle_server_monitor_state};
 use crate::languages;
-use crate::mods::{prepare_injection_plan, ResolvedPatchScript};
+use crate::mods::{
+    prepare_injection_plan, prepare_server_dll_plan, ExtractedServerDll, ResolvedPatchScript,
+};
 use crate::server::patch_logger::{
     append_patch_runtime_log_at, start_patch_runtime_log, PatchLogLevel,
 };
 use crate::server::supervisor::{next_server_port, resolve_clean_path};
 use crate::structs::gui::{
-    GuiAppState, GuiRoundSpawnSpec, GuiSharedData, PatchProgressItemDto, PatchProgressStatus,
-    ServerControlCommand, ServerLogEntryDto, ServerLogLevel, ServerMonitorStateDto, ServerPhase,
+    GuiAppState, GuiRoundSpawnSpec, GuiSharedData, GuiSupervisorBootstrap, PatchProgressItemDto,
+    PatchProgressStatus, ServerControlCommand, ServerLogEntryDto, ServerLogLevel,
+    ServerMonitorStateDto, ServerPhase,
 };
 use crate::structs::languages::{GuiMsgCode, ServerMsg};
 use crate::structs::server::LaunchPlan;
@@ -75,13 +79,17 @@ async fn spawn_and_inject_gui_round(
         .file_name()
         .map_or_default(|n: &std::ffi::OsStr| n.to_string_lossy().to_string());
 
+    let total_scripts: usize = spec.patches.len();
+    let total_dlls: usize = spec.dlls.len();
+    let total_items: usize = total_scripts.saturating_add(total_dlls);
+
     {
         let mut guard: MutexGuard<'_, GuiSharedData> = state.lock_shared();
         guard.server_status.current_patch_log_file = Some(log_file_name);
         guard.server_status.patch_progress = build_patch_progress_list(spec.patches);
         guard.server_status.injected_count = 0;
-        guard.server_status.total_patch_count = spec.patches.len();
-        guard.server_status.active_mod_count = spec.patches.len();
+        guard.server_status.total_patch_count = total_items;
+        guard.server_status.active_mod_count = total_items;
     }
     emit_server_state(app, state);
 
@@ -95,8 +103,7 @@ async fn spawn_and_inject_gui_round(
         }),
     );
 
-    let total: usize = spec.patches.len();
-    let mut injector_mods: Vec<PatchMod> = Vec::with_capacity(total);
+    let mut injector_mods: Vec<PatchMod> = Vec::with_capacity(total_scripts);
     for patch in spec.patches {
         injector_mods.push(PatchMod {
             id: patch.id.clone(),
@@ -126,17 +133,20 @@ async fn spawn_and_inject_gui_round(
                         break;
                     }
                 }
-                let loaded_count: usize = guard
+                guard.server_status.injected_count = guard
                     .server_status
-                    .patch_progress
-                    .iter()
-                    .filter(|p: &&PatchProgressItemDto| {
-                        matches!(p.status, PatchProgressStatus::Loaded)
-                    })
-                    .count();
-                guard.server_status.injected_count = loaded_count;
+                    .injected_count
+                    .saturating_add(1)
+                    .min(total_items);
                 if matched_index == 0 {
-                    matched_index = loaded_count;
+                    matched_index = guard
+                        .server_status
+                        .patch_progress
+                        .iter()
+                        .filter(|p: &&PatchProgressItemDto| {
+                            matches!(p.status, PatchProgressStatus::Loaded)
+                        })
+                        .count();
                 }
             }
             emit_server_state(&app_for_cb, &state_for_cb);
@@ -147,7 +157,7 @@ async fn spawn_and_inject_gui_round(
                 ServerLogLevel::Success,
                 languages::render_server(&ServerMsg::InjectedPatchDone {
                     index: matched_index,
-                    total,
+                    total: total_scripts,
                     label: &label_with_file,
                 }),
             );
@@ -195,6 +205,71 @@ async fn spawn_and_inject_gui_round(
         InjectorEvent::InitOk | InjectorEvent::ChannelClosed => {}
     });
 
+    let dll_meta: Arc<Vec<(String, String)>> = Arc::new(
+        spec.dlls
+            .iter()
+            .map(|d: &ExtractedServerDll| (d.file_name.clone(), d.label.clone()))
+            .collect(),
+    );
+    let app_for_dll: AppHandle = app.clone();
+    let state_for_dll: GuiAppState = state.clone();
+    let log_path_for_dll: Arc<PathBuf> = Arc::new(log_path.clone());
+    let on_dll_event: DllEventCallback = Arc::new(move |event: DllInjectionEvent| match event {
+        DllInjectionEvent::Loaded {
+            index,
+            total: dll_total,
+            path,
+            module_handle,
+        } => {
+            let fallback_name: String = path
+                .file_name()
+                .map_or_default(|n: &std::ffi::OsStr| n.to_string_lossy().to_string());
+            let (file_name, label): (&str, &str) = dll_meta.get(index.saturating_sub(1)).map_or(
+                (fallback_name.as_str(), fallback_name.as_str()),
+                |(f, l)| (f.as_str(), l.as_str()),
+            );
+            {
+                let mut guard: MutexGuard<'_, GuiSharedData> = state_for_dll.lock_shared();
+                guard.server_status.injected_count = guard
+                    .server_status
+                    .injected_count
+                    .saturating_add(1)
+                    .min(total_items);
+            }
+            emit_server_state(&app_for_dll, &state_for_dll);
+            let msg: String = languages::render_server(&ServerMsg::OepDllInjected {
+                index,
+                total: dll_total,
+                label,
+                file_name,
+                module_handle,
+            });
+            append_patch_runtime_log_at(&log_path_for_dll, PatchLogLevel::Info, file_name, &msg);
+            emit_server_log(&app_for_dll, &state_for_dll, ServerLogLevel::Success, msg);
+        }
+        DllInjectionEvent::Failed {
+            index,
+            total: dll_total,
+            path,
+        } => {
+            let fallback_name: String = path
+                .file_name()
+                .map_or_default(|n: &std::ffi::OsStr| n.to_string_lossy().to_string());
+            let (file_name, label): (&str, &str) = dll_meta.get(index.saturating_sub(1)).map_or(
+                (fallback_name.as_str(), fallback_name.as_str()),
+                |(f, l)| (f.as_str(), l.as_str()),
+            );
+            let msg: String = languages::render_server(&ServerMsg::OepDllInjectFailed {
+                index,
+                total: dll_total,
+                label,
+                file_name,
+            });
+            append_patch_runtime_log_at(&log_path_for_dll, PatchLogLevel::Error, file_name, &msg);
+            emit_server_log(&app_for_dll, &state_for_dll, ServerLogLevel::Error, msg);
+        }
+    });
+
     let cwd: Option<PathBuf> = std::env::current_dir().ok();
     let exe_path: PathBuf = match cwd.as_deref() {
         Some(base) => resolve_clean_path(Path::new(&spec.config.shipping_executable), base),
@@ -209,10 +284,19 @@ async fn spawn_and_inject_gui_round(
 
     let mut request: InjectLaunchRequest = InjectLaunchRequest::new(exe_path, args, injector_mods);
     request.cwd = cwd;
+    request.dlls = spec
+        .dlls
+        .iter()
+        .map(|d: &ExtractedServerDll| d.path.clone())
+        .collect();
+    request.fail_on_dll_load_error = !request.dlls.is_empty();
     request.patch_log_path = log_path;
     request.round = spec.round;
     request.init_timeout = Duration::from_secs(INJECTION_INIT_TIMEOUT_SECS);
     request.on_event = Some(on_event);
+    if !request.dlls.is_empty() {
+        request.on_dll_event = Some(on_dll_event);
+    }
 
     let injector: OepStubInjector = OepStubInjector;
     let session: ActiveInjectionSession =
@@ -222,7 +306,7 @@ async fn spawn_and_inject_gui_round(
         app,
         state,
         ServerLogLevel::Success,
-        languages::render_server(&ServerMsg::AllPatchesInjectedResumed { count: total }),
+        languages::render_server(&ServerMsg::AllPatchesInjectedResumed { count: total_items }),
     );
 
     Ok(session)
@@ -232,14 +316,14 @@ async fn spawn_and_inject_gui_round(
 pub async fn run_gui_server_supervisor(
     app: AppHandle,
     state: GuiAppState,
-    initial_plan: LaunchPlan,
-    initial_patches: Vec<ResolvedPatchScript>,
-    config: AppConfig,
+    bootstrap: GuiSupervisorBootstrap,
     cancel: CancellationToken,
     mut cmd_rx: mpsc::UnboundedReceiver<ServerControlCommand>,
 ) {
-    let mut active_plan: LaunchPlan = initial_plan;
-    let mut patches: Vec<ResolvedPatchScript> = initial_patches;
+    let mut active_plan: LaunchPlan = bootstrap.initial_plan;
+    let mut patches: Vec<ResolvedPatchScript> = bootstrap.initial_patches;
+    let mut dlls: Vec<ExtractedServerDll> = bootstrap.initial_dlls;
+    let config: AppConfig = bootstrap.config;
     let mut current_port: u16 = active_plan.server_ports[0];
     let mut round: u32 = 0;
 
@@ -283,6 +367,7 @@ pub async fn run_gui_server_supervisor(
             port: current_port,
             round: u64::from(round),
             patches: &patches,
+            dlls: &dlls,
         };
         let session: ActiveInjectionSession =
             match spawn_and_inject_gui_round(&app, &state, &spawn_spec, &cancel).await {
@@ -383,15 +468,28 @@ pub async fn run_gui_server_supervisor(
                                 break;
                             }
                             ServerControlCommand::UpdateNextPlan(new_plan) => {
-                                match prepare_injection_plan(
+                                let next_prepared: Result<
+                                    (Vec<ResolvedPatchScript>, Vec<ExtractedServerDll>),
+                                    String,
+                                > = prepare_injection_plan(
                                     &new_plan.selected_content_option_numbers,
                                     &new_plan.selected_option_numbers,
                                     new_plan.console_patch_port,
                                     None,
-                                ) {
-                                    Ok(next_patches) => {
+                                )
+                                .and_then(|next_patches: Vec<ResolvedPatchScript>| {
+                                    let next_dlls: Vec<ExtractedServerDll> =
+                                        prepare_server_dll_plan(
+                                            &new_plan.selected_content_option_numbers,
+                                            None,
+                                        )?;
+                                    Ok((next_patches, next_dlls))
+                                });
+                                match next_prepared {
+                                    Ok((next_patches, next_dlls)) => {
                                         active_plan = new_plan;
                                         patches = next_patches;
+                                        dlls = next_dlls;
                                         emit_server_log(
                                             &app,
                                             &state,
@@ -559,14 +657,20 @@ pub async fn run_gui_server_supervisor(
                                         new_plan.console_patch_port,
                                         None,
                                     ) {
-                                        active_plan = new_plan;
-                                        patches = next_patches;
-                                        emit_server_log(
-                                            &app,
-                                            &state,
-                                            ServerLogLevel::Info,
-                                            languages::gui_text(GuiMsgCode::NextRoundPlanUpdated).to_string(),
-                                        );
+                                        if let Ok(next_dlls) = prepare_server_dll_plan(
+                                            &new_plan.selected_content_option_numbers,
+                                            None,
+                                        ) {
+                                            active_plan = new_plan;
+                                            patches = next_patches;
+                                            dlls = next_dlls;
+                                            emit_server_log(
+                                                &app,
+                                                &state,
+                                                ServerLogLevel::Info,
+                                                languages::gui_text(GuiMsgCode::NextRoundPlanUpdated).to_string(),
+                                            );
+                                        }
                                     }
                                 }
                             }

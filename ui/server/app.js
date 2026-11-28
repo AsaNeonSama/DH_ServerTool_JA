@@ -779,6 +779,58 @@
     if (!skipSync) {
       scheduleDraftSync(true);
     }
+    if (target === "console") {
+      window.requestAnimationFrame(syncChatTextareaHeight);
+    }
+  }
+
+  function syncChatTextareaHeight() {
+    const textarea = byId("conChatMessage");
+    const chatPanel = byId("conPanelChat");
+    if (!textarea || !chatPanel || chatPanel.style.display === "none") return;
+    const taRect = textarea.getBoundingClientRect();
+    if (taRect.width <= 0) return;
+
+    const cs = window.getComputedStyle(textarea);
+    const lineHeight = parseFloat(cs.lineHeight) || 20;
+    const padY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+    const borderY = (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
+    const minHeight = Math.ceil(lineHeight * 3 + padY + borderY);
+
+    const fields = textarea.closest(".console-form-fields");
+    const card = textarea.closest(".console-form-card");
+    const footer = card ? card.querySelector(".console-form-footer") : null;
+    const submitBtn = byId("btnConsoleSubmit");
+    const submitWrap = submitBtn ? submitBtn.closest(".nb-cta-wrap") || submitBtn : null;
+
+    let maxBottom = taRect.top + minHeight;
+    if (fields) {
+      const fieldsRect = fields.getBoundingClientRect();
+      // Keep bottom clearance inside .console-form-fields so the textarea shadow never clips or triggers card scroll
+      maxBottom = fieldsRect.bottom - 6;
+    }
+    if (footer) {
+      const footerTop = footer.getBoundingClientRect().top;
+      maxBottom = Math.min(maxBottom, footerTop - 6);
+    }
+    if (submitWrap) {
+      const submitTop = submitWrap.getBoundingClientRect().top;
+      maxBottom = Math.min(maxBottom, submitTop - 14);
+    }
+
+    const maxHeight = Math.max(minHeight, Math.floor(maxBottom - taRect.top));
+    textarea.style.minHeight = minHeight + "px";
+    textarea.style.maxHeight = maxHeight + "px";
+    textarea.style.height = minHeight + "px";
+
+    const neededHeight = Math.ceil(textarea.scrollHeight + borderY);
+    if (neededHeight > maxHeight) {
+      textarea.style.height = maxHeight + "px";
+      textarea.style.overflowY = "auto";
+    } else {
+      textarea.style.height = Math.max(minHeight, neededHeight) + "px";
+      textarea.style.overflowY = "hidden";
+    }
   }
 
   // ==================== Tab 01: In-App Admin Console ====================
@@ -922,6 +974,9 @@
     byId("conPanelChat").style.display = op === "send_thrall_msg" ? "flex" : "none";
     byId("conPanelKick").style.display = op === "kick_player" ? "flex" : "none";
     byId("conAutoBroadcastWrap").style.display = op === "send_thrall_msg" ? "none" : "flex";
+    if (op === "send_thrall_msg") {
+      window.requestAnimationFrame(syncChatTextareaHeight);
+    }
 
     // Command sub-fields
     const cmdType = byId("conCommandType").value || "summon";
@@ -1144,18 +1199,21 @@
       : state.selectedOptionNumbers.has(mod.number);
     const activeConflicts = isClientReq ? [] : getActiveConflictsForMod(mod);
 
+    const isConflicted = activeConflicts.length > 0 && !isSelected;
+    let stateCls = isClientReq ? " is-client-req" : " is-server-only";
+    if (isFun) stateCls += " is-fun";
+    if (isSelected) stateCls += " is-selected";
+    if (isConflicted) stateCls += " is-conflicted";
+
+    const wrap = document.createElement("div");
+    wrap.className = "mod-card-wrap" + stateCls;
+
     const card = document.createElement("button");
     card.type = "button";
-    let cls = "mod-card";
-    if (isClientReq) {
-      cls += " is-client-req";
-    } else {
-      cls += " is-server-only";
-    }
-    if (isFun) cls += " is-fun";
-    if (isSelected) cls += " is-selected";
-    if (activeConflicts.length > 0 && !isSelected) cls += " is-conflicted";
-    card.className = cls;
+    card.className = "mod-card" + stateCls;
+
+    const inner = document.createElement("div");
+    inner.className = "mod-card-inner";
 
     const titleWrap = document.createElement("div");
     titleWrap.className = "mod-card-title-wrap";
@@ -1188,13 +1246,13 @@
           return found ? found.label : cid;
         });
         tooltipLines.push("排他対象: " + conflictNames.join(" / "));
-        if (activeConflicts.length > 0 && !isSelected) {
+        if (isConflicted) {
           tooltipLines.push("クリックすると選択中の排他MODを自動解除して切替えます");
         }
         const confBadge = document.createElement("span");
         confBadge.className =
           "mod-inline-badge is-conflict" +
-          (activeConflicts.length > 0 && !isSelected ? " is-active-conflict" : "");
+          (isConflicted ? " is-active-conflict" : "");
         confBadge.textContent = "排他";
         rightWrap.appendChild(confBadge);
       }
@@ -1205,14 +1263,14 @@
       card.title = tooltipLines.join("\n");
 
       rightWrap.appendChild(check);
-      card.appendChild(titleWrap);
-      card.appendChild(rightWrap);
+      inner.appendChild(titleWrap);
+      inner.appendChild(rightWrap);
     } else {
       const top = document.createElement("div");
       top.className = "mod-card-top";
       top.appendChild(titleWrap);
       top.appendChild(check);
-      card.appendChild(top);
+      inner.appendChild(top);
 
       const meta = document.createElement("div");
       meta.className = "mod-meta";
@@ -1232,16 +1290,19 @@
       }
 
       if (meta.childNodes.length > 0) {
-        card.appendChild(meta);
+        inner.appendChild(meta);
       }
 
       if (mod.description) {
         const descEl = document.createElement("div");
         descEl.className = "mod-desc";
         descEl.textContent = mod.description;
-        card.appendChild(descEl);
+        inner.appendChild(descEl);
       }
     }
+
+    card.appendChild(inner);
+    wrap.appendChild(card);
 
     card.addEventListener("click", function () {
       if (isClientReq) {
@@ -1270,7 +1331,7 @@
       scheduleNextRoundAutoSync();
     });
 
-    return card;
+    return wrap;
   }
 
   function renderModGrids() {
@@ -1430,7 +1491,7 @@
   function renderBridgeLabels() {
     const activePort = state.config ? state.config.consolePatchPort : 7893;
     byId("conLoopbackPortLabel").textContent = "127.0.0.1:" + activePort;
-    byId("tabConsoleBadge").textContent = ":" + activePort;
+    byId("tabConsoleBadge").textContent = "127.0.0.1:" + activePort;
   }
 
   function renderExeStatus() {
@@ -1462,6 +1523,7 @@
     } else {
       alertStrip.className = "alert-strip";
     }
+    window.requestAnimationFrame(syncChatTextareaHeight);
   }
 
   function buildConfigFromForm() {
@@ -1607,11 +1669,19 @@
       "conCustomTarget",
       "conRawCommand",
       "conStatusNumber",
-      "conChatMessage",
     ].forEach(function (id) {
       byId(id).addEventListener("input", function () {
         scheduleDraftSync(false);
       });
+    });
+
+    byId("conChatMessage").addEventListener("input", function () {
+      syncChatTextareaHeight();
+      scheduleDraftSync(false);
+    });
+
+    window.addEventListener("resize", function () {
+      syncChatTextareaHeight();
     });
 
     byId("conItemCount").addEventListener("input", function () {

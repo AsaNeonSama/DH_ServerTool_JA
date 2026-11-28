@@ -28,4 +28,4 @@ pub const EOS_PLAN_A_DESCRIPTION: &str = "EOS再接続・同ポート再起動�
 pub const EOS_PLAN_B_DESCRIPTION: &str =
     "EOS再接続修正 + ロビーURI非公開化 (20パッチ / Plan A と排他)";
 pub const VOICE_CLIENT_DESCRIPTION: &str =
-    "専用サーバー向けUE4ネイティブ音声チャット有効化 (ロビーEOS自動切替)";
+    "自有音声クライアント (追加ポート不要・同一UDPポート3D音声 / ロビーEOS自動切替)";

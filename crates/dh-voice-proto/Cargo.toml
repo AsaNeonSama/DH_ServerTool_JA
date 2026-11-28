@@ -1,0 +1,15 @@
+[package]
+name = "dh-voice-proto"
+version = "0.1.0"
+edition = "2021"
+license-file.workspace = true
+repository.workspace = true
+description = "Compact DHV2 UDP wire protocol shared between Dread Hunger server and client voice engines"
+authors = ["アサネオン / Build With Antigravity"]
+
+[lib]
+name = "dh_voice_proto"
+path = "src/lib.rs"
+
+[lints]
+workspace = true

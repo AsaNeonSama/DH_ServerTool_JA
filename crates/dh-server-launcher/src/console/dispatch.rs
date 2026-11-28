@@ -747,13 +747,20 @@ pub async fn handle_set_storage(
     action_result(status_code::SUCCESS, ApiCode::Success)
 }
 
+fn normalize_chat_message(raw_message: &str) -> String {
+    let without_nul: String = raw_message.replace('\0', "");
+    let normalized_crlf: String = without_nul.replace("\r\n", "\n").replace('\r', "\n");
+    normalized_crlf.trim().to_string()
+}
+
 pub async fn handle_send_thrall_msg(
     ctx: &ConsoleDispatchContext<'_>,
     player_name: &str,
     raw_message: &str,
 ) -> ConsoleActionPayload {
     let target_role: &str = player_name.trim();
-    let message: &str = raw_message.trim();
+    let normalized_msg: String = normalize_chat_message(raw_message);
+    let message: &str = normalized_msg.as_str();
 
     if target_role.is_empty() || message.is_empty() {
         emit_console_log_event(
@@ -794,7 +801,8 @@ pub async fn handle_broadcast(
     ctx: &ConsoleDispatchContext<'_>,
     raw_message: &str,
 ) -> ConsoleActionPayload {
-    let message: &str = raw_message.trim();
+    let normalized_msg: String = normalize_chat_message(raw_message);
+    let message: &str = normalized_msg.as_str();
     if message.is_empty() {
         emit_console_log_event(
             ctx.log_sink,

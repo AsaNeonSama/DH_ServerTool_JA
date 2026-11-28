@@ -425,6 +425,7 @@ code,
   padding: 2px 7px;
   background: var(--ink);
   color: var(--cyan);
+  white-space: nowrap;
   flex-shrink: 0;
 }
 
@@ -952,6 +953,33 @@ code,
   font-size: 13.5px;
   font-weight: 800;
   box-shadow: 4px 4px 0 var(--ink);
+}
+
+.console-form-card .nb-textarea {
+  min-height: 0;
+  height: auto;
+  padding: 8px 10px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+  resize: none;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  box-sizing: border-box;
+}
+
+.console-form-card .nb-textarea::-webkit-scrollbar {
+  width: 8px;
+}
+
+.console-form-card .nb-textarea::-webkit-scrollbar-track {
+  background: #eceae0;
+  border-left: 2px solid var(--ink);
+}
+
+.console-form-card .nb-textarea::-webkit-scrollbar-thumb {
+  background: var(--ink);
 }
 
 .nb-input.input-compact {
@@ -1584,11 +1612,11 @@ code,
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 2px 4px 8px 2px;
+  padding: 2px 4px 4px 2px;
 }
 
 .settings-fields-area .field-grid {
-  gap: 6px 12px;
+  gap: 7px 12px;
 }
 
 .settings-fields-area .field-group {
@@ -1606,28 +1634,33 @@ code,
 }
 
 .settings-fields-area .toggle-row.compact-toggle {
-  padding: 4px 10px;
+  min-height: 41px;
+  padding: 6px 13px;
+}
+
+.settings-fields-area .field-group.full-span:has(.toggle-row) {
+  margin-top: 2px;
 }
 
 .settings-fields-area .nb-switch {
-  width: 48px;
-  height: 24px;
+  width: 50px;
+  height: 25px;
 }
 
 .settings-fields-area .nb-switch-track::after {
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
   top: 2px;
 }
 
 .settings-fields-area .nb-switch input:checked + .nb-switch-track::after {
-  transform: translateX(22px);
+  transform: translateX(23px);
 }
 
 .settings-action-bar {
   flex-shrink: 0;
   margin-top: auto;
-  padding-top: 12px;
+  padding-top: 10px;
   border-top: 2px dashed rgba(10, 10, 15, 0.22);
   display: flex;
   flex-wrap: wrap;
@@ -1815,67 +1848,171 @@ code,
   gap: 10px;
 }
 
-.mod-card {
+/* 2-layer chamfered Neo-Brutalist polygon MOD cards:
+   outer .mod-card-wrap carries unclipped hard drop-shadow;
+   .mod-card forms the solid 2.5px clipped polygon border shell;
+   .mod-card-inner carries the matching inner bevel & card fill. */
+.mod-card-wrap {
   position: relative;
   min-width: 0;
-  overflow: hidden;
-  border: 2.5px solid var(--ink);
-  background: #ffffff;
-  padding: 7px 9px;
+  display: flex;
+  filter: drop-shadow(3px 3px 0 var(--ink));
+  transition: transform 0.1s ease, filter 0.1s ease;
+}
+
+.mod-card-wrap.is-server-only {
+  height: 44px;
+}
+
+.mod-card-wrap.is-client-req {
+  height: 100%;
+  filter: drop-shadow(3px 3px 0 var(--purple-deep));
+}
+
+.mod-card-wrap:hover {
+  transform: translate(-1px, -1px);
+  filter: drop-shadow(5px 5px 0 var(--ink));
+}
+
+.mod-card-wrap.is-client-req:hover {
+  filter: drop-shadow(5px 5px 0 var(--purple-deep));
+}
+
+.mod-card-wrap.is-selected {
+  transform: translate(1px, 1px);
+  filter: drop-shadow(2.5px 2.5px 0 var(--ink)) drop-shadow(3px 3px 0 var(--blue));
+}
+
+.mod-card-wrap.is-fun.is-selected {
+  filter: drop-shadow(2.5px 2.5px 0 var(--ink)) drop-shadow(3px 3px 0 var(--pink));
+}
+
+.mod-card-wrap.is-client-req.is-selected {
+  transform: translate(1px, 1px);
+  filter: drop-shadow(2.5px 2.5px 0 var(--ink)) drop-shadow(3.5px 3.5px 0 var(--magenta));
+}
+
+.mod-card-wrap.is-conflicted:not(.is-selected) {
+  filter: drop-shadow(3px 3px 0 var(--red));
+}
+
+.mod-card-wrap.is-conflicted:not(.is-selected):hover {
+  transform: translate(-1px, -1px);
+  filter: drop-shadow(5px 5px 0 var(--red));
+}
+
+.mod-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  border: 0;
+  padding: 2.5px;
+  background: var(--ink);
   cursor: pointer;
   text-align: left;
-  box-shadow: 3px 3px 0 var(--ink);
-  transition: transform 0.1s ease, box-shadow 0.1s ease, background-color 0.12s ease, border-color 0.12s ease;
+  box-shadow: none;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  overflow: hidden;
+  outline: none;
+  clip-path: polygon(
+    10px 0,
+    100% 0,
+    100% calc(100% - 10px),
+    calc(100% - 10px) 100%,
+    0 100%,
+    0 10px
+  );
+  transition: background-color 0.12s ease;
 }
 
 .mod-card.is-server-only {
   height: 44px;
-  padding: 0 9px;
+}
+
+.mod-card.is-client-req {
+  background: var(--purple-deep);
+  clip-path: polygon(
+    13px 0,
+    100% 0,
+    100% calc(100% - 13px),
+    calc(100% - 13px) 100%,
+    0 100%,
+    0 13px
+  );
+}
+
+.mod-card.is-client-req.is-selected {
+  background: var(--ink);
+}
+
+.mod-card.is-conflicted:not(.is-selected) {
+  background: var(--red);
+}
+
+.mod-card-inner {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  background: #ffffff;
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 14px;
+  overflow: hidden;
+  clip-path: polygon(
+    8.5px 0,
+    100% 0,
+    100% calc(100% - 8.5px),
+    calc(100% - 8.5px) 100%,
+    0 100%,
+    0 8.5px
+  );
+  transition: background-color 0.12s ease;
+}
+
+.mod-card.is-server-only .mod-card-inner {
+  padding: 0 11px;
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
   gap: 6px;
 }
 
-.mod-card:hover {
-  transform: translate(-1px, -1px);
-  box-shadow: 5px 5px 0 var(--ink);
+.mod-card.is-client-req .mod-card-inner {
+  clip-path: polygon(
+    11.5px 0,
+    100% 0,
+    100% calc(100% - 11.5px),
+    calc(100% - 11.5px) 100%,
+    0 100%,
+    0 11.5px
+  );
 }
 
-.mod-card.is-selected {
+.mod-card:focus-visible .mod-card-inner {
+  background: #f2fbff;
+}
+
+.mod-card.is-selected .mod-card-inner {
   background: var(--cyan);
-  box-shadow: 2.5px 2.5px 0 var(--ink), 4px 4px 0 var(--blue);
-  transform: translate(1px, 1px);
 }
 
-.mod-card.is-fun.is-selected {
+.mod-card.is-fun.is-selected .mod-card-inner {
   background: var(--lime);
-  box-shadow: 2.5px 2.5px 0 var(--ink), 4px 4px 0 var(--pink);
 }
 
-.mod-card.is-client-req {
-  border-color: var(--purple-deep);
-  box-shadow: 3px 3px 0 var(--purple-deep);
-}
-
-.mod-card.is-client-req.is-selected {
+.mod-card.is-client-req.is-selected .mod-card-inner {
   background: #e9d5ff;
-  border-color: var(--ink);
-  box-shadow: 2.5px 2.5px 0 var(--ink), 5px 5px 0 var(--magenta);
 }
 
-.mod-card.is-conflicted:not(.is-selected) {
+.mod-card.is-conflicted:not(.is-selected) .mod-card-inner {
   background: #ffe0e8;
-  border-color: var(--red);
-  box-shadow: 3px 3px 0 var(--red);
 }
 
-.mod-card.is-conflicted:not(.is-selected):hover {
+.mod-card.is-conflicted:not(.is-selected):hover .mod-card-inner {
   background: #ffd1dc;
-  box-shadow: 5px 5px 0 var(--red);
 }
 
 .mod-card.is-conflicted:not(.is-selected) .mod-title {
@@ -2375,15 +2512,43 @@ code,
   display: flex;
 }
 
-.nb-modal-dialog {
+.nb-modal-shell {
   width: min(840px, 100%);
   height: min(560px, 100%);
+  filter: drop-shadow(8px 8px 0 var(--cyan));
+}
+
+.nb-modal-dialog {
+  width: 100%;
+  height: 100%;
+  padding: 4px;
+  background: var(--ink);
+  display: flex;
+  clip-path: polygon(
+    18px 0,
+    100% 0,
+    100% calc(100% - 18px),
+    calc(100% - 18px) 100%,
+    0 100%,
+    0 18px
+  );
+}
+
+.nb-modal-surface {
+  width: 100%;
+  height: 100%;
   background: var(--paper);
-  border: 3.5px solid var(--ink);
-  box-shadow: 8px 8px 0 var(--cyan);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  clip-path: polygon(
+    15px 0,
+    100% 0,
+    100% calc(100% - 15px),
+    calc(100% - 15px) 100%,
+    0 100%,
+    0 15px
+  );
 }
 
 .nb-modal-stripe {
@@ -2399,7 +2564,7 @@ code,
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 14px;
+  padding: 12px 16px 12px 22px;
   background: var(--ink);
   color: #ffffff;
   border-bottom: 3px solid var(--ink);
@@ -2439,7 +2604,7 @@ code,
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 12px 14px;
+  padding: 14px 16px 18px 16px;
   background: var(--surface);
 }
 

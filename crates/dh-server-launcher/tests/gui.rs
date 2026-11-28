@@ -43,16 +43,13 @@ fn partitions_mods_into_client_required_practical_and_fun_sections() {
         catalog.client_required_mods[0].requirement_badge.as_deref(),
         Some("[PAK必須]")
     );
-    assert!(catalog.client_required_mods[0]
-        .description
-        .as_deref()
-        .is_some_and(|d| !d.is_empty()));
+    assert_eq!(
+        catalog.client_required_mods[0].description.as_deref(),
+        Some("新呪文5種を追加します。クライアント側へ対応 .pak/.sig の導入が必須です。")
+    );
 
     assert_eq!(catalog.client_required_mods[1].id, "content_ue_voice");
-    assert_eq!(
-        catalog.client_required_mods[1].label,
-        "UEネイティブボイス(音声)"
-    );
+    assert_eq!(catalog.client_required_mods[1].label, "自有音声サーバー");
     assert_eq!(
         catalog.client_required_mods[1].requirement_badge.as_deref(),
         Some("[DLL必須]")
@@ -63,10 +60,14 @@ fn partitions_mods_into_client_required_practical_and_fun_sections() {
             .as_deref(),
         Some("dh_voice_client.dll")
     );
-    assert!(catalog.client_required_mods[1]
-        .description
-        .as_deref()
-        .is_some_and(|d| d.contains("dh_voice_client.dll")));
+    assert_eq!(
+        catalog.client_required_mods[1].scripts,
+        vec!["dh_voice_server.dll"]
+    );
+    assert_eq!(
+        catalog.client_required_mods[1].description.as_deref(),
+        Some("クライアント側で「自有音声クライアント」を有効化してください。")
+    );
 
     assert_eq!(catalog.practical_mods.len(), 13);
     assert_eq!(catalog.practical_mods[0].number, 1);
@@ -254,12 +255,11 @@ fn saves_and_validates_config_preserving_backwards_compatibility() {
 fn classifies_patch_progress_categories_accurately() {
     let patches = build_injection_plan_with_content_mods(&[1, 2], &[1], 7893, None);
     let progress = build_patch_progress_list(&patches);
-    assert_eq!(progress.len(), 8);
+    assert_eq!(progress.len(), 7);
     assert_eq!(progress[0].category, PatchProgressCategory::Default);
     assert_eq!(progress[4].category, PatchProgressCategory::Default);
     assert_eq!(progress[5].category, PatchProgressCategory::ClientRequired);
-    assert_eq!(progress[6].category, PatchProgressCategory::ClientRequired);
-    assert_eq!(progress[7].category, PatchProgressCategory::ServerOnly);
+    assert_eq!(progress[6].category, PatchProgressCategory::ServerOnly);
     assert!(progress
         .iter()
         .all(|p| p.status == PatchProgressStatus::Pending));

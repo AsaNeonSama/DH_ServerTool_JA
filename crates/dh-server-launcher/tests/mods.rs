@@ -2,17 +2,20 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 
+use dh_server_launcher::consts::server_dlls::{
+    VOICE_SERVER_DLL_FILE_NAME, VOICE_SERVER_DLL_RAW_LEN, VOICE_SERVER_DLL_SHA256,
+};
 use dh_server_launcher::languages;
 use dh_server_launcher::mods::{
-    are_mod_options_conflicting, build_injection_plan, find_conflicting_selected_options,
-    find_content_option_by_number, find_option_by_number, get_mod_conflict_pairs,
-    prepare_injection_plan, CONSOLE_PATCH_ID, CONSOLE_PATCH_PORT_TOKEN,
-    CONTENT_MOD_ASSET_ROOT_TOKEN, DEFAULT_PATCH_SCRIPTS, SELECTABLE_CONTENT_MOD_OPTIONS,
-    SELECTABLE_MOD_OPTIONS,
+    are_mod_options_conflicting, build_injection_plan, extract_server_dll,
+    find_conflicting_selected_options, find_content_option_by_number, find_option_by_number,
+    get_mod_conflict_pairs, prepare_injection_plan, prepare_server_dll_plan, ServerBuiltinDllId,
+    CONSOLE_PATCH_ID, CONSOLE_PATCH_PORT_TOKEN, CONTENT_MOD_ASSET_ROOT_TOKEN,
+    DEFAULT_PATCH_SCRIPTS, SELECTABLE_CONTENT_MOD_OPTIONS, SELECTABLE_MOD_OPTIONS,
 };
 
 #[test]
-fn embeds_all_31_non_empty_unique_scripts_and_22_menu_options() {
+fn embeds_all_30_non_empty_unique_scripts_plus_voice_dll_and_22_menu_options() {
     assert_eq!(DEFAULT_PATCH_SCRIPTS.len(), 5);
     assert_eq!(SELECTABLE_MOD_OPTIONS.len(), 22);
     assert_eq!(SELECTABLE_CONTENT_MOD_OPTIONS.len(), 2);
@@ -20,6 +23,7 @@ fn embeds_all_31_non_empty_unique_scripts_and_22_menu_options() {
     let mut ids = HashSet::new();
     let mut file_names = HashSet::new();
     let mut total_scripts = 0usize;
+    let mut total_dlls = 0usize;
 
     for patch in DEFAULT_PATCH_SCRIPTS {
         assert!(
@@ -37,7 +41,11 @@ fn embeds_all_31_non_empty_unique_scripts_and_22_menu_options() {
     }
 
     for opt in SELECTABLE_CONTENT_MOD_OPTIONS {
-        assert!(!opt.scripts.is_empty());
+        assert!(
+            !opt.scripts.is_empty() || !opt.dlls.is_empty(),
+            "content mod {} must declare at least one script or OEP DLL",
+            opt.id
+        );
         for patch in opt.scripts {
             assert!(
                 !patch.source.trim().is_empty(),
@@ -52,6 +60,7 @@ fn embeds_all_31_non_empty_unique_scripts_and_22_menu_options() {
             );
             total_scripts += 1;
         }
+        total_dlls += opt.dlls.len();
     }
 
     for (idx, opt) in SELECTABLE_MOD_OPTIONS.iter().enumerate() {
@@ -73,7 +82,8 @@ fn embeds_all_31_non_empty_unique_scripts_and_22_menu_options() {
         }
     }
 
-    assert_eq!(total_scripts, 31);
+    assert_eq!(total_scripts, 30);
+    assert_eq!(total_dlls, 1);
 
     let network_fix = &DEFAULT_PATCH_SCRIPTS[3];
     assert_eq!(network_fix.id, "default:network_fix_win64");
@@ -188,29 +198,22 @@ fn enforces_all_four_bidirectional_conflict_rules() {
 }
 
 #[test]
-fn embeds_zero_asset_totem_spells_and_ue_voice_client_mods_and_orders_before_server_only_mods() {
+fn embeds_totem_spells_js_and_rust_voice_server_dll_and_orders_before_server_only_mods() {
     assert_eq!(SELECTABLE_CONTENT_MOD_OPTIONS.len(), 2);
     let opt = find_content_option_by_number(1).expect("content mod #1 must exist");
     assert_eq!(opt.id, "content_totem_spells");
     assert_eq!(opt.scripts.len(), 1);
+    assert_eq!(opt.dlls, []);
 
-    let voice_opt = find_content_option_by_number(2).expect("content mod #2 (UE voice) must exist");
+    let voice_opt =
+        find_content_option_by_number(2).expect("content mod #2 (voice server) must exist");
     assert_eq!(voice_opt.id, "content_ue_voice");
     assert_eq!(
         languages::mod_label(voice_opt.label_code),
-        "UEネイティブボイス(音声)"
+        "自有音声サーバー"
     );
-    assert_eq!(voice_opt.scripts.len(), 1);
-    let voice_script = &voice_opt.scripts[0];
-    assert_eq!(voice_script.file_name, "UEボイス有効化.js");
-    assert!(voice_script.asset_bundle.is_none());
-    assert!(
-        voice_script.source.contains("0x10F0110")
-            && voice_script.source.contains("0x8FF000")
-            && voice_script.source.contains("0x2968540")
-            && voice_script.source.contains("bHasVoiceEnabled"),
-        "UEボイス有効化.js must contain verified voice INI & lifecycle RVAs"
-    );
+    assert!(voice_opt.scripts.is_empty());
+    assert_eq!(voice_opt.dlls, &[ServerBuiltinDllId::VoiceServer]);
     let script = &opt.scripts[0];
     assert!(
         script.asset_bundle.is_none(),
@@ -271,7 +274,8 @@ fn embeds_zero_asset_totem_spells_and_ue_voice_client_mods_and_orders_before_ser
         std::env::temp_dir().join(format!("dh_content_mod_test_{}", std::process::id()));
     let _ = fs::remove_dir_all(&temp_cache);
 
-    // Injection order: 5 default -> Client-required MODs -> Server-only JS MODs
+    // Injection order: 5 default -> Client-required JS MODs -> Server-only JS MODs
+    // (C2 injects dh_voice_server.dll via OEP rather than a JS script)
     let plan = prepare_injection_plan(&[1, 2], &[1, 13], 7893, Some(&temp_cache))
         .expect("prepare_injection_plan must succeed");
     let names: Vec<&str> = plan.iter().map(|p| p.file_name.as_str()).collect();
@@ -284,7 +288,6 @@ fn embeds_zero_asset_totem_spells_and_ue_voice_client_mods_and_orders_before_ser
             "接続保護_乱入防止.js",
             "食人鬼登攀補強.js",
             "カスタムスペル.js",
-            "UEボイス有効化.js",
             "役職ランダム.js",
             "銃_弓同時所持.js",
         ]
@@ -293,6 +296,42 @@ fn embeds_zero_asset_totem_spells_and_ue_voice_client_mods_and_orders_before_ser
         !temp_cache.exists(),
         "zero-asset Option C Content MOD should not create any server asset cache directory"
     );
+
+    // Server DLL extraction + SHA-256 verification + cache reuse + tamper self-healing
+    assert_eq!(
+        prepare_server_dll_plan(&[1], Some(&temp_cache)).expect("no server dlls for C1"),
+        Vec::new()
+    );
+
+    let dlls_first =
+        prepare_server_dll_plan(&[1, 2], Some(&temp_cache)).expect("extract dh_voice_server.dll");
+    assert_eq!(dlls_first.len(), 1);
+    let voice_dll = &dlls_first[0];
+    assert_eq!(voice_dll.id, ServerBuiltinDllId::VoiceServer);
+    assert_eq!(voice_dll.file_name, VOICE_SERVER_DLL_FILE_NAME);
+    assert_eq!(voice_dll.sha256, VOICE_SERVER_DLL_SHA256);
+    assert_eq!(voice_dll.raw_bytes, VOICE_SERVER_DLL_RAW_LEN);
+    assert!(!voice_dll.reused_cache);
+    let raw_bytes = fs::read(&voice_dll.path).expect("read extracted voice server dll");
+    assert_eq!(raw_bytes.len(), VOICE_SERVER_DLL_RAW_LEN);
+    assert_eq!(&raw_bytes[..2], b"MZ");
+
+    let voice_cached = extract_server_dll(ServerBuiltinDllId::VoiceServer, Some(&temp_cache))
+        .expect("reuse cached dh_voice_server.dll");
+    assert!(voice_cached.reused_cache);
+    assert_eq!(voice_cached.path, voice_dll.path);
+
+    // Tamper cached DLL and confirm automatic SHA-256 re-extraction
+    fs::write(&voice_dll.path, b"corrupted").expect("corrupt cached dll");
+    let voice_healed = extract_server_dll(ServerBuiltinDllId::VoiceServer, Some(&temp_cache))
+        .expect("self-heal tampered dh_voice_server.dll");
+    assert!(!voice_healed.reused_cache);
+    assert_eq!(
+        fs::read(&voice_healed.path).expect("read healed dll").len(),
+        VOICE_SERVER_DLL_RAW_LEN
+    );
+
+    let _ = fs::remove_dir_all(&temp_cache);
 }
 
 #[test]

@@ -2,19 +2,24 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 
+use dh_voice_client::consts::opus::{
+    RVA_OPUS_DECODE, RVA_OPUS_DECODER_CTL, RVA_OPUS_DECODER_GET_SIZE, RVA_OPUS_DECODER_INIT,
+    RVA_OPUS_ENCODE, RVA_OPUS_ENCODER_CTL, RVA_OPUS_ENCODER_GET_SIZE, RVA_OPUS_ENCODER_INIT,
+    RVA_OPUS_GET_VERSION_STRING, SIG_OPUS_DECODE, SIG_OPUS_DECODER_CTL, SIG_OPUS_DECODER_GET_SIZE,
+    SIG_OPUS_DECODER_INIT, SIG_OPUS_ENCODE, SIG_OPUS_ENCODER_CTL, SIG_OPUS_ENCODER_GET_SIZE,
+    SIG_OPUS_ENCODER_INIT, SIG_OPUS_GET_VERSION_STRING,
+};
 use dh_voice_client::consts::patch::{
-    DETOUR_GET_WANTS_TO_TALK, DETOUR_IS_PARTICIPANT_SPEAKING, DETOUR_IS_PLAYER_IN_VOICE_CHAT,
-    DETOUR_LOAD_CHANNEL_DEFINITIONS, DETOUR_ONLINE_VOICE_TICK, DETOUR_SET_WANTS_TO_TALK,
-    DIRECT_PATCHES, EOS_BEFORE_RECV_AUDIO_GUARD, EOS_PLUS_GET_VOICE_VTABLE_PATCH,
-    EOS_RECV_GUARD_STUB_LEN, SUBMIT_REMOTE_VOICE_HOOK, SUBMIT_REMOTE_VOICE_STUB_LEN,
-    X64_ABS_JMP_LEN,
+    DETOUR_ENGINE_LOOP_TICK, DETOUR_GET_WANTS_TO_TALK, DETOUR_IS_PARTICIPANT_SPEAKING,
+    DETOUR_IS_PLAYER_IN_VOICE_CHAT, DETOUR_SET_WANTS_TO_TALK, DETOUR_SOCKET_CLOSE,
+    DETOUR_SOCKET_RECV_FROM, DETOUR_SOCKET_SEND_TO, EOS_BEFORE_RECV_AUDIO_GUARD,
+    EOS_RECV_GUARD_STUB_LEN, STANDARD_DETOUR_COUNT, TOTAL_PATCH_COUNT, X64_ABS_JMP_LEN,
 };
 use dh_voice_client::consts::proxy::{X3DAUDIO_EXPORTS, X3DAUDIO_EXPORT_COUNT};
+use dh_voice_client::consts::ue4::RVA_UIPNETDRIVER_GET_SOCKET;
 use dh_voice_client::{
-    apply_direct_patch_in_buffer, encode_abs_jmp_stub, encode_eos_recv_guard_stub,
-    encode_jmp_rel32, encode_original_trampoline, encode_submit_remote_voice_stub,
-    is_target_process_path, ChannelDefinition, DetourSpec, FName, FString, PatchOutcome, SharedPtr,
-    TArrayRaw, TArrayViewI16, TrampolineError,
+    encode_abs_jmp_stub, encode_eos_recv_guard_stub, encode_jmp_rel32, encode_original_trampoline,
+    is_target_process_path, DetourSpec, FString, TArrayViewI16, TrampolineError,
 };
 
 fn rva_to_file_offset(pe_bytes: &[u8], rva: usize) -> Option<usize> {
@@ -58,12 +63,10 @@ fn rva_to_file_offset(pe_bytes: &[u8], rva: usize) -> Option<usize> {
 #[test]
 fn struct_layouts_match_ue4_abi() {
     assert_eq!(std::mem::size_of::<AtomicBool>(), 1);
-    assert_eq!(std::mem::size_of::<FName>(), 0x08);
     assert_eq!(std::mem::size_of::<FString>(), 0x10);
-    assert_eq!(std::mem::size_of::<TArrayRaw>(), 0x10);
     assert_eq!(std::mem::size_of::<TArrayViewI16>(), 0x10);
-    assert_eq!(std::mem::size_of::<SharedPtr>(), 0x10);
-    assert_eq!(std::mem::size_of::<ChannelDefinition>(), 0x28);
+    assert_eq!(TOTAL_PATCH_COUNT, 1 + STANDARD_DETOUR_COUNT);
+    assert_eq!(TOTAL_PATCH_COUNT, 9);
 }
 
 #[test]
@@ -88,50 +91,7 @@ fn x3daudio_exports_cover_ordinals_one_and_two() {
 }
 
 #[test]
-fn direct_patch_in_buffer_is_exact_and_idempotent() {
-    let mut buf: Vec<u8> = vec![0u8; 32];
-    let patch = dh_voice_client::BytePatch {
-        name: "synthetic",
-        rva: 8,
-        expected: &[0x48, 0x8B, 0x01],
-        replacement: &[0xC3, 0x90, 0x90],
-    };
-    buf[8..11].copy_from_slice(patch.expected);
-
-    assert_eq!(
-        apply_direct_patch_in_buffer(&mut buf, &patch),
-        PatchOutcome::Applied
-    );
-    assert_eq!(&buf[8..11], patch.replacement);
-    assert_eq!(
-        apply_direct_patch_in_buffer(&mut buf, &patch),
-        PatchOutcome::AlreadyApplied
-    );
-
-    buf[8] ^= 0xFF;
-    assert_eq!(
-        apply_direct_patch_in_buffer(&mut buf, &patch),
-        PatchOutcome::SignatureMismatch
-    );
-}
-
-#[test]
 fn custom_stubs_encode_exact_x64_sequences() {
-    let submit_stub: [u8; SUBMIT_REMOTE_VOICE_STUB_LEN] =
-        encode_submit_remote_voice_stub(0x0000_7FF8_AABB_CCDD, 0x0000_0001_4092_824B).unwrap();
-    assert_eq!(&submit_stub[0..4], &[0x48, 0x83, 0xEC, 0x20]);
-    assert_eq!(&submit_stub[24..26], &[0x48, 0xB8]);
-    assert_eq!(
-        u64::from_le_bytes(submit_stub[26..34].try_into().unwrap()),
-        0x0000_7FF8_AABB_CCDD
-    );
-    assert_eq!(&submit_stub[34..40], &[0xFF, 0xD0, 0x48, 0x83, 0xC4, 0x20]);
-    assert_eq!(&submit_stub[40..46], &[0xFF, 0x25, 0x00, 0x00, 0x00, 0x00]);
-    assert_eq!(
-        u64::from_le_bytes(submit_stub[46..54].try_into().unwrap()),
-        0x0000_0001_4092_824B
-    );
-
     let guard_stub: [u8; EOS_RECV_GUARD_STUB_LEN] = encode_eos_recv_guard_stub(
         0x0000_7FF8_1122_3344,
         &EOS_BEFORE_RECV_AUDIO_GUARD.expected_prologue,
@@ -154,9 +114,10 @@ fn custom_stubs_encode_exact_x64_sequences() {
         0x0000_0001_40A2_DC7A
     );
 
-    let orig: Vec<u8> =
-        encode_original_trampoline(&[0x40, 0x53, 0x48, 0x83, 0xEC, 0x30], 0x1409_29696).unwrap();
-    assert_eq!(orig.len(), 6 + X64_ABS_JMP_LEN);
+    let orig_close: Vec<u8> =
+        encode_original_trampoline(DETOUR_SOCKET_CLOSE.expected_prologue, 0x0000_0001_4166_0B16)
+            .unwrap();
+    assert_eq!(orig_close.len(), 6 + X64_ABS_JMP_LEN);
 
     let abs: [u8; X64_ABS_JMP_LEN] = encode_abs_jmp_stub(0x1400_1234).unwrap();
     assert_eq!(
@@ -171,7 +132,7 @@ fn custom_stubs_encode_exact_x64_sequences() {
 }
 
 #[test]
-fn client_binary_signatures_match_reference_executable() {
+fn client_binary_signatures_and_libopus_match_reference_executable() {
     let client_exe: PathBuf = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../../references/WindowsClient/DreadHunger-Win64-Shipping.exe");
     if !client_exe.is_file() {
@@ -180,41 +141,7 @@ fn client_binary_signatures_match_reference_executable() {
 
     let bytes: Vec<u8> = fs::read(&client_exe).expect("read reference client exe");
 
-    // 1. Direct byte patches (7)
-    for patch in &DIRECT_PATCHES {
-        let off: usize =
-            rva_to_file_offset(&bytes, patch.rva).expect("client direct patch RVA maps to file");
-        let actual: &[u8] = &bytes[off..off + patch.expected.len()];
-        assert_eq!(
-            actual, patch.expected,
-            "byte mismatch for client patch '{}' at RVA 0x{:X}",
-            patch.name, patch.rva
-        );
-    }
-
-    // 2. Vtable slot (`FOnlineSubsystemEOSPlus::GetVoiceInterface` at default ImageBase `0x140000000`)
-    let vt_off: usize = rva_to_file_offset(&bytes, EOS_PLUS_GET_VOICE_VTABLE_PATCH.slot_rva)
-        .expect("EOSPlus vtable slot RVA maps to file");
-    let stored_va: u64 = u64::from_le_bytes(bytes[vt_off..vt_off + 8].try_into().unwrap());
-    let expected_va: u64 = 0x0000_0001_4000_0000u64
-        + u64::try_from(EOS_PLUS_GET_VOICE_VTABLE_PATCH.expected_target_rva).unwrap();
-    assert_eq!(
-        stored_va, expected_va,
-        "vtable mismatch for '{}'",
-        EOS_PLUS_GET_VOICE_VTABLE_PATCH.name
-    );
-
-    // 3. Mid-function hook (`SubmitRemoteVoiceData`)
-    let submit_off: usize = rva_to_file_offset(&bytes, SUBMIT_REMOTE_VOICE_HOOK.hook_rva)
-        .expect("SubmitRemoteVoiceData hook RVA maps to file");
-    assert_eq!(
-        &bytes[submit_off..submit_off + SUBMIT_REMOTE_VOICE_HOOK.expected_bytes.len()],
-        SUBMIT_REMOTE_VOICE_HOOK.expected_bytes,
-        "byte mismatch for '{}'",
-        SUBMIT_REMOTE_VOICE_HOOK.name
-    );
-
-    // 4. Guard detour (`OnVoiceChatBeforeRecvAudioRendered`)
+    // 1. Guard detour (`FEOSPlusVoiceChatUser::OnVoiceChatBeforeRecvAudioRendered`)
     let guard_off: usize = rva_to_file_offset(&bytes, EOS_BEFORE_RECV_AUDIO_GUARD.rva)
         .expect("EOS recv guard RVA maps to file");
     assert_eq!(
@@ -224,10 +151,12 @@ fn client_binary_signatures_match_reference_executable() {
         EOS_BEFORE_RECV_AUDIO_GUARD.name
     );
 
-    // 5. Standard function detours (6)
-    let detours: [&DetourSpec; 6] = [
-        &DETOUR_LOAD_CHANNEL_DEFINITIONS,
-        &DETOUR_ONLINE_VOICE_TICK,
+    // 2. All 8 Plan A standard function detours
+    let detours: [&DetourSpec; STANDARD_DETOUR_COUNT] = [
+        &DETOUR_SOCKET_RECV_FROM,
+        &DETOUR_SOCKET_SEND_TO,
+        &DETOUR_SOCKET_CLOSE,
+        &DETOUR_ENGINE_LOOP_TICK,
         &DETOUR_SET_WANTS_TO_TALK,
         &DETOUR_GET_WANTS_TO_TALK,
         &DETOUR_IS_PARTICIPANT_SPEAKING,
@@ -241,6 +170,64 @@ fn client_binary_signatures_match_reference_executable() {
             actual, spec.expected_prologue,
             "prologue mismatch for client detour '{}' at RVA 0x{:X}",
             spec.name, spec.rva
+        );
+    }
+
+    // 3. `UIpNetDriver::GetSocket` entry prologue verification
+    let get_sock_off: usize = rva_to_file_offset(&bytes, RVA_UIPNETDRIVER_GET_SOCKET)
+        .expect("UIpNetDriver::GetSocket RVA maps to file");
+    assert_eq!(
+        &bytes[get_sock_off..get_sock_off + 5],
+        &[0x48, 0x89, 0x5C, 0x24, 0x08],
+        "UIpNetDriver::GetSocket prologue mismatch"
+    );
+
+    // 4. All 9 in-process `libopus 1.1-beta` function signatures
+    let opus_entries: [(&str, usize, [u8; 8]); 9] = [
+        (
+            "opus_encoder_get_size",
+            RVA_OPUS_ENCODER_GET_SIZE,
+            SIG_OPUS_ENCODER_GET_SIZE,
+        ),
+        (
+            "opus_encoder_init",
+            RVA_OPUS_ENCODER_INIT,
+            SIG_OPUS_ENCODER_INIT,
+        ),
+        (
+            "opus_encoder_ctl",
+            RVA_OPUS_ENCODER_CTL,
+            SIG_OPUS_ENCODER_CTL,
+        ),
+        ("opus_encode", RVA_OPUS_ENCODE, SIG_OPUS_ENCODE),
+        (
+            "opus_decoder_get_size",
+            RVA_OPUS_DECODER_GET_SIZE,
+            SIG_OPUS_DECODER_GET_SIZE,
+        ),
+        (
+            "opus_decoder_init",
+            RVA_OPUS_DECODER_INIT,
+            SIG_OPUS_DECODER_INIT,
+        ),
+        (
+            "opus_decoder_ctl",
+            RVA_OPUS_DECODER_CTL,
+            SIG_OPUS_DECODER_CTL,
+        ),
+        ("opus_decode", RVA_OPUS_DECODE, SIG_OPUS_DECODE),
+        (
+            "opus_get_version_string",
+            RVA_OPUS_GET_VERSION_STRING,
+            SIG_OPUS_GET_VERSION_STRING,
+        ),
+    ];
+    for (name, rva, expected) in opus_entries {
+        let off: usize = rva_to_file_offset(&bytes, rva).expect("libopus RVA maps to file");
+        let actual: &[u8] = &bytes[off..off + expected.len()];
+        assert_eq!(
+            actual, &expected,
+            "libopus signature mismatch for '{name}' at RVA 0x{rva:X}"
         );
     }
 }

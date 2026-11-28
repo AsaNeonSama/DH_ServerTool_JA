@@ -16,13 +16,15 @@ use crate::gui::state::{
 };
 use crate::gui::supervisor::run_gui_server_supervisor;
 use crate::languages;
-use crate::mods::{prepare_injection_plan, ResolvedPatchScript};
+use crate::mods::{
+    prepare_injection_plan, prepare_server_dll_plan, ExtractedServerDll, ResolvedPatchScript,
+};
 use crate::structs::console::{ConsoleBridge, ConsoleLogRecord, ConsoleLogSink};
 use crate::structs::gui::{
     ActiveSupervisorHandle, AdminConsoleActionRequestDto, AdminConsoleActionResultDto,
     ConfigSaveResultDto, ConsoleLogEntryDto, GuiAppState, GuiSharedData, GuiSnapshot,
-    LaunchServerRequestDto, MatchDraftDto, PickedFileDto, ServerControlCommand,
-    ServerMonitorStateDto, ServerPhase, UiSessionDraftDto,
+    GuiSupervisorBootstrap, LaunchServerRequestDto, MatchDraftDto, PickedFileDto,
+    ServerControlCommand, ServerMonitorStateDto, ServerPhase, UiSessionDraftDto,
 };
 use crate::structs::languages::{GuiMsg, GuiMsgCode};
 use crate::structs::server::{LaunchPlan, MatchConfig};
@@ -206,6 +208,8 @@ pub async fn launch_server(
         plan.console_patch_port,
         None,
     )?;
+    let dlls: Vec<ExtractedServerDll> =
+        prepare_server_dll_plan(&plan.selected_content_option_numbers, None)?;
 
     {
         let mut guard: MutexGuard<'_, GuiSharedData> = state.lock_shared();
@@ -234,17 +238,14 @@ pub async fn launch_server(
     let app_clone: AppHandle = app.clone();
     let state_clone: GuiAppState = state.inner().clone();
     let cancel_clone: CancellationToken = cancel.clone();
+    let bootstrap: GuiSupervisorBootstrap = GuiSupervisorBootstrap {
+        initial_plan: plan,
+        initial_patches: patches,
+        initial_dlls: dlls,
+        config,
+    };
     let task: JoinHandle<()> = tokio::spawn(async move {
-        run_gui_server_supervisor(
-            app_clone,
-            state_clone,
-            plan,
-            patches,
-            config,
-            cancel_clone,
-            cmd_rx,
-        )
-        .await;
+        run_gui_server_supervisor(app_clone, state_clone, bootstrap, cancel_clone, cmd_rx).await;
     });
 
     *sup_slot = Some(ActiveSupervisorHandle {

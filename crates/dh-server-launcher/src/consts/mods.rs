@@ -1,5 +1,5 @@
 use crate::structs::languages::ModLabelCode;
-use crate::structs::mods::{ModGroup, ModKind, ModMenuOption, PatchScript};
+use crate::structs::mods::{ModGroup, ModKind, ModMenuOption, PatchScript, ServerBuiltinDllId};
 
 pub const CONSOLE_PATCH_ID: &str = "default:console_win64";
 pub const CONSOLE_PATCH_PORT_TOKEN: &str = "__CONSOLE_PATCH_PORT__";
@@ -54,7 +54,7 @@ pub const DEFAULT_PATCH_SCRIPTS: &[PatchScript] = &[
 ];
 
 // Selectable Client-Cooperation-Required MODs (requiring matching client .pak or .dll)
-// Server runs pure-JS runtime patches (zero server-side .uasset/.uexp/.pak files).
+// C1 runs pure-JS runtime patches; C2 early-injects the native Rust voice relay DLL at OEP.
 pub const SELECTABLE_CONTENT_MOD_OPTIONS: &[ModMenuOption] = &[
     ModMenuOption {
         id: "content_totem_spells",
@@ -72,6 +72,7 @@ pub const SELECTABLE_CONTENT_MOD_OPTIONS: &[ModMenuOption] = &[
             ),
             asset_bundle: None,
         }],
+        dlls: &[],
     },
     ModMenuOption {
         id: "content_ue_voice",
@@ -79,14 +80,8 @@ pub const SELECTABLE_CONTENT_MOD_OPTIONS: &[ModMenuOption] = &[
         label_code: ModLabelCode::ContentUeVoice,
         kind: ModKind::Single,
         conflicts_with: &[],
-        scripts: &[PatchScript {
-            id: "content:ue_voice_win64",
-            file_name: "UEボイス有効化.js",
-            label_code: ModLabelCode::ContentUeVoice,
-            group: ModGroup::ContentMod,
-            source: include_str!("../../../../assets/voice_chat/server/UEボイス有効化.js"),
-            asset_bundle: None,
-        }],
+        scripts: &[],
+        dlls: &[ServerBuiltinDllId::VoiceServer],
     },
 ];
 
@@ -106,6 +101,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             source: include_str!("../../../../assets/patches/single/役職ランダム.js"),
             asset_bundle: None,
         }],
+        dlls: &[],
     },
     ModMenuOption {
         id: "spell_cast_start",
@@ -121,6 +117,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             source: include_str!("../../../../assets/patches/single/開幕沈黙.js"),
             asset_bundle: None,
         }],
+        dlls: &[],
     },
     ModMenuOption {
         id: "resources_spawner_departure",
@@ -136,6 +133,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             source: include_str!("../../../../assets/patches/single/マップ補強_山頂.js"),
             asset_bundle: None,
         }],
+        dlls: &[],
     },
     ModMenuOption {
         id: "resources_spawner_expanse",
@@ -151,6 +149,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             source: include_str!("../../../../assets/patches/single/マップ補強_広漠.js"),
             asset_bundle: None,
         }],
+        dlls: &[],
     },
     ModMenuOption {
         id: "spell_custom",
@@ -166,6 +165,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             source: include_str!("../../../../assets/patches/single/全サボタージュ.js"),
             asset_bundle: None,
         }],
+        dlls: &[],
     },
     ModMenuOption {
         id: "madmate_normal_nolimit",
@@ -181,6 +181,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             source: include_str!("../../../../assets/patches/single/狂人モード.js"),
             asset_bundle: None,
         }],
+        dlls: &[],
     },
     ModMenuOption {
         id: "bone_dagger_mode",
@@ -214,6 +215,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
                 asset_bundle: None,
             },
         ],
+        dlls: &[],
     },
     ModMenuOption {
         id: "quest_system",
@@ -229,6 +231,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             source: include_str!("../../../../assets/patches/single/クエスト報酬.js"),
             asset_bundle: None,
         }],
+        dlls: &[],
     },
     ModMenuOption {
         id: "add_storage",
@@ -244,6 +247,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             source: include_str!("../../../../assets/patches/single/全員バックパック.js"),
             asset_bundle: None,
         }],
+        dlls: &[],
     },
     ModMenuOption {
         id: "whetstone_any_item",
@@ -259,6 +263,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             source: include_str!("../../../../assets/patches/single/万能砥石.js"),
             asset_bundle: None,
         }],
+        dlls: &[],
     },
     ModMenuOption {
         id: "arrow_full_recovery",
@@ -274,6 +279,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             source: include_str!("../../../../assets/patches/single/矢回収100.js"),
             asset_bundle: None,
         }],
+        dlls: &[],
     },
     ModMenuOption {
         id: "blizzard_armory_open",
@@ -289,6 +295,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             source: include_str!("../../../../assets/patches/single/暴風雪マスケット.js"),
             asset_bundle: None,
         }],
+        dlls: &[],
     },
     ModMenuOption {
         id: "gun_and_bow",
@@ -304,6 +311,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             source: include_str!("../../../../assets/patches/single/銃_弓同時所持.js"),
             asset_bundle: None,
         }],
+        dlls: &[],
     },
     ModMenuOption {
         id: "start_armory_open",
@@ -319,6 +327,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             source: include_str!("../../../../assets/patches/single/開幕マスケット.js"),
             asset_bundle: None,
         }],
+        dlls: &[],
     },
     ModMenuOption {
         id: "vomit_modify",
@@ -334,6 +343,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             source: include_str!("../../../../assets/patches/single/毒耐性.js"),
             asset_bundle: None,
         }],
+        dlls: &[],
     },
     ModMenuOption {
         id: "north_ghost",
@@ -349,6 +359,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             source: include_str!("../../../../assets/patches/single/ミステリーモード.js"),
             asset_bundle: None,
         }],
+        dlls: &[],
     },
     ModMenuOption {
         id: "grenade",
@@ -364,6 +375,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             source: include_str!("../../../../assets/patches/single/グレネード.js"),
             asset_bundle: None,
         }],
+        dlls: &[],
     },
     ModMenuOption {
         id: "moon_jump",
@@ -379,6 +391,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             source: include_str!("../../../../assets/patches/single/八艘飛び.js"),
             asset_bundle: None,
         }],
+        dlls: &[],
     },
     ModMenuOption {
         id: "spell_no_cd",
@@ -394,6 +407,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             source: include_str!("../../../../assets/patches/single/スペルチャージ無限.js"),
             asset_bundle: None,
         }],
+        dlls: &[],
     },
     ModMenuOption {
         id: "no_death",
@@ -409,6 +423,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             source: include_str!("../../../../assets/patches/single/無限復活.js"),
             asset_bundle: None,
         }],
+        dlls: &[],
     },
     ModMenuOption {
         id: "sightseeing_departure",
@@ -424,6 +439,7 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             source: include_str!("../../../../assets/patches/single/観光モード_山頂.js"),
             asset_bundle: None,
         }],
+        dlls: &[],
     },
     ModMenuOption {
         id: "sightseeing_expanse",
@@ -439,5 +455,6 @@ pub const SELECTABLE_MOD_OPTIONS: &[ModMenuOption] = &[
             source: include_str!("../../../../assets/patches/single/観光モード_広漠.js"),
             asset_bundle: None,
         }],
+        dlls: &[],
     },
 ];

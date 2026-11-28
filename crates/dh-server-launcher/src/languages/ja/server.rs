@@ -28,6 +28,25 @@ pub fn render(msg: &ServerMsg<'_>) -> String {
         } => {
             format!("[{index}/{total}] 注入完了: {label}")
         }
+        ServerMsg::OepDllInjected {
+            index,
+            total,
+            label,
+            file_name,
+            module_handle,
+        } => {
+            format!(
+                "[{index}/{total}] OEP DLL 注入完了: {label} ({file_name} / HMODULE: 0x{module_handle:x})"
+            )
+        }
+        ServerMsg::OepDllInjectFailed {
+            index,
+            total,
+            label,
+            file_name,
+        } => {
+            format!("[{index}/{total}] OEP DLL 注入失敗: {label} ({file_name})")
+        }
         ServerMsg::AllPatchesInjectedResumed { count } => {
             format!("全 {count} 件のMODパッチの注入完了 -> サーバー実行を再開しました!")
         }

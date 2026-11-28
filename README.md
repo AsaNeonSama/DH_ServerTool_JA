@@ -8,7 +8,7 @@ Dread Hunger Windows Dedicated Server（原生未改造サーバー）＆ Window
 - **2 つの単一実行ファイル GUI (`dist/DH_ServerLauncher_JA.exe`・`dist/DH_ClientLauncher_JA.exe`)**:
   - Rust + Tauri v2 + 静的 CRT リンク (`+crt-static`) により、`VCRUNTIME140.dll` などの外部ランタイム不要・ネイティブ WebView2 デスクトップ GUI（Angular Neo-Brutalist デザイン）で単独動作します。
   - 原生サーバー／クライアントバイナリ無改造のまま、OEP ガイドスタブによる 0 秒早注入で JS パッチおよび DLL を安全に適用します（`frida.dll` や `.stub` 配置不要）。
-  - 配布フォルダ `dist/` には実行ファイル (`.exe`) とクライアント配布用 `.pak` / `.sig` のみを格納します（クライアント用 EOS 修復 DLL Plan A/B および UE ボイス DLL は `DH_ClientLauncher_JA.exe` 内に zstd 圧縮・SHA-256 検証付きで内蔵）。
+  - 配布フォルダ `dist/` には実行ファイル (`.exe`) とクライアント配布用 `.pak` / `.sig` のみを格納します（サーバー側 `dh_voice_server.dll` は `DH_ServerLauncher_JA.exe` 内に、クライアント側 EOS 修復 DLL Plan A/B および `dh_voice_client.dll` は `DH_ClientLauncher_JA.exe` 内に zstd 圧縮・SHA-256 検証付きで内蔵）。
 - **サーバーランチャー (`DH_ServerLauncher_JA.exe` / `crates/dh-server-launcher/`)**:
   - **ゼロ HTTP 公開・アプリ内蔵管理コンソール**: 外部向け HTTP ポートを一切待受せず、アプリ内の「コンソール」タブからローカルループバック (`127.0.0.1:<consolePatchPort>`) 経由で `コンソール連携.js` へ直接送信します（コマンド実行・ステータス設定・アイテム追加 44 種検索・ストレージ設定・個別／全体チャット・キック・自動ブロードキャスト対応）。
   - **デフォルト自動注入 MOD (5 種・常時有効)**:
@@ -18,9 +18,9 @@ Dread Hunger Windows Dedicated Server（原生未改造サーバー）＆ Window
     - `default/接続保護_乱入防止.js`（ネットワーク接続保護・乱入防止：`EnteringMap`/`WaitingToStart` 和集合統合による開局名簿ロック・ゾンビ接続および残留旧 Controller の即時クリーンアップ・満員時の開局メンバー許可・無人 10 秒サーバー終了タイマー解除＆CloseServer 抑止）
     - `default/食人鬼登攀補強.js`（急斜面 78° 登攀・2 段階垂直氷壁／岸壁登攀 `MOVE_Flying`＋緩斜面自動復帰・3 層防爬船＆舷梯遮断・原版 ThreatTable 互換、野生動物非干渉）
   - **3 区分 MOD セレクター & 排他ルール制御**:
-    1. **クライアント導入必須 MOD (2 種・サーバー側純 JS / ゼロ資産)**:
-       - `カスタムスペル(新呪文5種)` (`[PAK必須]`: `assets/advanced_content/server/totem_spells/カスタムスペル.js` / クライアント側 `dist/advanced_content/totem_spells/DH_TotemSpells_Client_p.{pak,sig}`)
-       - `UEネイティブボイス(音声)` (`[DLL必須]`: `assets/voice_chat/server/UEボイス有効化.js` / クライアント側 `DH_ClientLauncher_JA.exe` の内蔵ボイスチャット有効化)
+    1. **クライアント導入必須 MOD (2 種)**:
+       - `カスタムスペル(新呪文5種)` (`[PAK必須]`: サーバー側純 JS `assets/advanced_content/server/totem_spells/カスタムスペル.js` / クライアント側 `dist/advanced_content/totem_spells/DH_TotemSpells_Client_p.{pak,sig}`)
+       - `自有音声サーバー` (`[DLL必須]`: サーバー側内蔵 `dh_voice_server.dll` をゲーム同一 UDP ポート多重化で OEP 注入 / クライアント側 `DH_ClientLauncher_JA.exe` の内蔵 **自有音声クライアント** トグルを有効化)
     2. **実用系 MOD (`1〜13`・サーバーのみ)**:
        - `1: 役職ランダム` / `2: 開幕沈黙` / `3: マップ補強(山頂)` (`21` と排他) / `4: マップ補強(広漠)` (`22` と排他) / `5: 全サボタージュ` / `6: 狂人モード` / `7: 骨の短剣モード [3本パック]` / `8: クエスト報酬` / `9: 全員バックパック` / `10: 万能砥石` / `11: 矢回収100%` / `12: 暴風雪マスケット` (`14` と排他) / `13: 銃・弓同時所持`
     3. **バラエティ・特殊 MOD (`14〜22`・サーバーのみ)**:
@@ -32,7 +32,7 @@ Dread Hunger Windows Dedicated Server（原生未改造サーバー）＆ Window
 - **クライアントランチャー (`DH_ClientLauncher_JA.exe` / `crates/dh-client-launcher/`)**:
   - **内蔵クライアント MOD のみ（ワンクリック有効化・外部 DLL/JS インポート不要・デフォルト引数固定起動）**:
     - **EOS 再接続・同ポート再起動修正 (`crates/dh-client-eos-fix/`)**: Plan A（標準・19 パッチ）と Plan B（非公開 URI 検証版・20 パッチ）を排他トグルでワンクリック切替。非公開／カスタム部屋のロビー検索権限・`MEMBERS` 1000B 拡張・途中切断／クラッシュ再起動・Steam 招待再接続・固定ポート連続再起動を修正します。
-    - **UE ネイティブボイスチャット (`crates/dh-client-voice/` / `dh_voice_client.dll`)**: サーバー側 `UEボイス有効化.js` と連携する UE4 ネイティブボイスチャットを有効化します。
+    - **自有音声クライアント (`crates/dh-client-voice/` / `dh_voice_client.dll`)**: 追加ポート不要のゲーム同一 UDP ポート多重化 (`DHV2`)・3D ボイスエンジン（WASAPI キャプチャ＆ループバック参照 → 80 Hz HPF + WebRTC `aec3` + RNNoise `nnnoiseless` + VAD/AGC → ゲーム内蔵 `libopus` 48 kHz 32 kbps In-Band FEC/DTX/PLC → 話者別 Adaptive Jitter Buffer → `BeforeRecvAudioRendered` へ出力、ロビー復帰時は EOS ボイスへ自動切替）。サーバー側 **自有音声サーバー** (`dh_voice_server.dll`) と連携します。
   - Steam 環境変数 (`SteamAppId=1418630` / `SteamGameId=1418630`) を子プロセスへ安全に引き渡して起動し、設定は `./launcher_config.json` に永続化されます。
 
 ## 使い方
@@ -43,7 +43,7 @@ Dread Hunger Windows Dedicated Server（原生未改造サーバー）＆ Window
 
 ### 2. クライアント側 (`DH_ClientLauncher_JA.exe` & `.pak`)
 1. `dist/DH_ClientLauncher_JA.exe` を起動し、Steam 版 `DreadHunger-Win64-Shipping.exe` のパスを選択（または自動検出）します。
-2. 内蔵トグルから **EOS 修復 (Plan A / Plan B)** や **UE ネイティブボイス** を有効化してゲームを起動します。
+2. 内蔵トグルから **EOS 修復 (Plan A / Plan B)** や **自有音声クライアント** を有効化してゲームを起動します（初期状態: EOS Plan B = ON、自有音声クライアント = OFF）。
 3. サーバー側で `カスタムスペル(新呪文5種)` を有効にする場合は、`dist/advanced_content/totem_spells/DH_TotemSpells_Client_p.{pak,sig}` をクライアントの `DreadHunger/Content/Paks/~mods/` に配置してください。
 
 ## サーバー `launcher_config.json` 設定項目 (自動生成デフォルト)
@@ -63,18 +63,20 @@ Dread Hunger Windows Dedicated Server（原生未改造サーバー）＆ Window
 - `consolePatchPort`: アプリ内蔵コンソールと `コンソール連携.js` 間のローカルループバック (`127.0.0.1`) 専用 TCP ポート（外部には公開されません）。
 
 ## ワークスペース・資産構成
-- `crates/dh-win32/`: Win32 API ラッパー（Job Object・プロセス制御・PEB/OEP 読み取り・UDP/TCP テーブル・コンソール／クリップボード）
+- `crates/dh-win32/`: Win32 API ラッパー（Job Object・プロセス制御・PEB/OEP 読み取り・UDP/TCP テーブル・ローカル時刻取得・コンソール／クリップボード）
 - `crates/dh-gadget-injector/`: 独立再利用可能な Frida Gadget 17.27.4 & マルチ DLL OEP 早注入・キャッシュ管理・16→17 互換 Prelude・ループバック NDJSON ログチャンネル
-- `crates/dh-server-launcher/`: サーバーランチャー GUI 本体 (`DH_ServerLauncher_JA.exe`)
-- `crates/dh-client-launcher/`: クライアントランチャー GUI 本体 (`DH_ClientLauncher_JA.exe`、EOS Fix Plan A/B & UE Voice DLL 内蔵)
+- `crates/dh-voice-proto/`: 同一 UDP ポート多重化用 `DHV2` バイナリプロトコル（`Hello`/`HelloAck`/`PeerMap`/`VoiceFrame`/`Bye` コーデック）
+- `crates/dh-server-voice/`: サーバー用同一 UDP ポート 3D ボイス中継 DLL (`dh_voice_server.dll`、追加ポート不要)
+- `crates/dh-server-launcher/`: サーバーランチャー GUI 本体 (`DH_ServerLauncher_JA.exe`、`dh_voice_server.dll` 内蔵)
+- `crates/dh-client-launcher/`: クライアントランチャー GUI 本体 (`DH_ClientLauncher_JA.exe`、EOS Fix Plan A/B & `dh_voice_client.dll` 内蔵)
 - `crates/dh-client-eos-fix/`: クライアント用 EOS 再接続・同ポート再起動修正 DLL（Plan A 19 パッチ／Plan B 20 パッチ `--features private-uri`）
-- `crates/dh-client-voice/`: クライアント用 UE ネイティブボイスチャット DLL (`dh_voice_client.dll`)
+- `crates/dh-client-voice/`: クライアント用純 Rust 3D ボイスエンジン DLL (`dh_voice_client.dll`、WASAPI + AEC3 + RNNoise + Opus 48 kHz FEC/PLC)
 - `ui/server/`・`ui/client/`: Tauri v2 静的フロントエンド (HTML / CSS / Vanilla JS)
 - `assets/patches/`: デフォルト自動注入・サーバー単体 MOD スクリプト (`.js`)
 - `assets/advanced_content/server/`: コンテンツ MOD 用サーバー側純 JS スクリプト（`totem_spells/`）
 - `assets/advanced_content/client/paked/`: コンテンツ MOD 用クライアント配布 `.pak` / `.sig`
 - `assets/advanced_content/client/source/`: クライアント `.pak` 展開済みソース資産
-- `assets/voice_chat/`: UE ネイティブボイス用資産（`server/UEボイス有効化.js`・`client/dh_voice_client.dll`）
+- `assets/voice_chat/`: 自有音声サーバー／自有音声クライアント用ステージング DLL（`server/dh_voice_server.dll`・`client/dh_voice_client.dll`）
 
 ## 開発・ビルド
 > **注意**: `.cargo/config.toml`（静的 CRT `+crt-static` 設定）を確実に適用するため、すべての `cargo` コマンドは **リポジトリルート（Cargo Workspace ルート）** で実行してください。
@@ -87,7 +89,7 @@ cargo test --workspace
 cargo test -p dh-client-eos-fix --features private-uri
 cargo build --release -p dh-client-eos-fix
 cargo build --release -p dh-client-eos-fix --features private-uri
-cargo build --release -p dh-client-voice
+cargo build --release -p dh-server-voice -p dh-client-voice
 cargo build --release -p dh-server-launcher -p dh-client-launcher
 ```
 

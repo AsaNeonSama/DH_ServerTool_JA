@@ -1,0 +1,33 @@
+[package]
+name = "dh-server-voice"
+version = "0.1.0"
+edition = "2021"
+license-file.workspace = true
+repository.workspace = true
+description = "Dread Hunger Dedicated Server zero-extra-port DHV2 UDP voice relay DLL"
+authors = ["アサネオン / Build With Antigravity"]
+build = "build.rs"
+
+[lib]
+name = "dh_voice_server"
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[dependencies]
+dh-voice-proto = { path = "../dh-voice-proto" }
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Networking_WinSock",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_SystemInformation",
+    "Win32_System_SystemServices",
+    "Win32_System_Threading",
+] }
+
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
+
+[lints]
+workspace = true

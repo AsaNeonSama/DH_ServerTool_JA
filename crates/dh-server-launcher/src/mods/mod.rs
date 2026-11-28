@@ -1,5 +1,6 @@
 pub mod content_assets;
 pub mod registry;
+pub mod server_dlls;
 
 pub use content_assets::{extract_content_mod_assets, format_js_single_quoted_path};
 pub use registry::{
@@ -7,7 +8,9 @@ pub use registry::{
     find_conflicting_selected_in_list, find_conflicting_selected_options,
     find_content_option_by_number, find_option_by_number, find_option_in_list,
     get_conflict_pairs_in_list, get_mod_conflict_pairs, prepare_injection_plan,
-    ContentModAssetBundle, ModGroup, ModKind, ModMenuOption, PatchScript, ResolvedPatchScript,
-    CONSOLE_PATCH_ID, CONSOLE_PATCH_PORT_TOKEN, CONTENT_MOD_ASSET_ROOT_TOKEN,
-    DEFAULT_PATCH_SCRIPTS, SELECTABLE_CONTENT_MOD_OPTIONS, SELECTABLE_MOD_OPTIONS,
+    ContentModAssetBundle, ExtractedServerDll, ModGroup, ModKind, ModMenuOption, PatchScript,
+    ResolvedPatchScript, ServerBuiltinDllId, CONSOLE_PATCH_ID, CONSOLE_PATCH_PORT_TOKEN,
+    CONTENT_MOD_ASSET_ROOT_TOKEN, DEFAULT_PATCH_SCRIPTS, SELECTABLE_CONTENT_MOD_OPTIONS,
+    SELECTABLE_MOD_OPTIONS,
 };
+pub use server_dlls::{extract_server_dll, prepare_server_dll_plan, server_dll_cache_candidates};

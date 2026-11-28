@@ -262,3 +262,45 @@ async fn dispatches_status_item_storage_notice_broadcast_and_kick_actions() {
     // 7 actions executed -> 7 ANSI-free log entries recorded
     assert_eq!(logs.lock().unwrap().len(), 7);
 }
+
+#[tokio::test]
+async fn normalizes_multiline_chat_and_strips_embedded_nul_without_breaking_framing() {
+    // 1 single-target message + 8 broadcast packets = 9 packets total
+    let (port, collector) = spawn_packet_collector(9).await.expect("spawn collector");
+    let bridge = ConsoleBridge::new(port);
+    let logs: Arc<Mutex<Vec<ConsoleLogRecord>>> = Arc::new(Mutex::new(Vec::new()));
+    let logs_clone = Arc::clone(&logs);
+    let sink: ConsoleLogSink = Arc::new(move |rec| {
+        logs_clone.lock().unwrap().push(rec);
+    });
+
+    let ctx = ConsoleDispatchContext {
+        bridge: &bridge,
+        auto_broadcast: false,
+        log_sink: &sink,
+    };
+
+    let r_msg = handle_send_thrall_msg(&ctx, "Captain", "1行目\r\n2行目\0\r3行目").await;
+    assert_eq!(r_msg.code, ApiCode::Success);
+
+    let r_bcast = handle_broadcast(&ctx, "告知A\r\n告知B\0末尾").await;
+    assert_eq!(r_bcast.code, ApiCode::Success);
+
+    let packets = collector
+        .await
+        .expect("collector join")
+        .expect("collect all 9 packets");
+    assert_eq!(packets.len(), 9);
+    assert_eq!(packets[0]["action"], "send_thrall_message");
+    assert_eq!(packets[0]["targetRole"], "Captain");
+    assert_eq!(packets[0]["message"], "1行目\n2行目\n3行目");
+    for pkt in &packets[1..9] {
+        assert_eq!(pkt["action"], "send_thrall_message");
+        assert_eq!(pkt["message"], "告知A\n告知B末尾");
+    }
+
+    let recorded = logs.lock().unwrap();
+    assert_eq!(recorded.len(), 2);
+    assert!(!recorded[0].detail.contains('\n'));
+    assert!(!recorded[1].detail.contains('\n'));
+}

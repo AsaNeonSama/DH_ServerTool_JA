@@ -1,21 +1,11 @@
 use crate::consts::patch::{
-    DEFAULT_ALLOC_GRANULARITY, DETOUR_GET_WANTS_TO_TALK, DETOUR_IS_PARTICIPANT_SPEAKING,
-    DETOUR_IS_PLAYER_IN_VOICE_CHAT, DETOUR_LOAD_CHANNEL_DEFINITIONS, DETOUR_ONLINE_VOICE_TICK,
-    DETOUR_SET_WANTS_TO_TALK, DIRECT_PATCHES, EOS_BEFORE_RECV_AUDIO_GUARD,
-    EOS_PLUS_GET_VOICE_VTABLE_PATCH, EOS_RECV_GUARD_CHECK, EOS_RECV_GUARD_STUB_LEN, PE_DOS_MAGIC,
-    PE_LFANEW_OFFSET, PE_MIN_DOS_BYTES, PE_MIN_NT_BYTES, PE_NT_SIGNATURE,
-    PE_OPTIONAL_HEADER_OFFSET, PE_OPT_MAGIC_PE32_PLUS, PE_SIZE_OF_IMAGE_OFFSET,
-    SUBMIT_REMOTE_VOICE_CALL_AND_EPILOGUE, SUBMIT_REMOTE_VOICE_HOOK, SUBMIT_REMOTE_VOICE_PROLOGUE,
-    SUBMIT_REMOTE_VOICE_STUB_LEN, TARGET_PROCESS_NAME, TOTAL_PATCH_COUNT, TRAMPOLINE_ALLOC_SIZE,
-    TRAMPOLINE_MAX_DISTANCE, TRAMPOLINE_SLOT_ALIGN, X64_ABS_JMP_LEN, X64_INT3_BYTE,
-    X64_JMP_ABS_RIP0_PREFIX, X64_JMP_REL32_LEN, X64_JMP_REL32_OPCODE, X64_MOV_RAX_IMM64_PREFIX,
-    X64_NOP_BYTE,
+    EOS_RECV_GUARD_CHECK, EOS_RECV_GUARD_STUB_LEN, PE_DOS_MAGIC, PE_LFANEW_OFFSET,
+    PE_MIN_DOS_BYTES, PE_MIN_NT_BYTES, PE_NT_SIGNATURE, PE_OPTIONAL_HEADER_OFFSET,
+    PE_OPT_MAGIC_PE32_PLUS, PE_SIZE_OF_IMAGE_OFFSET, TARGET_PROCESS_NAME, X64_ABS_JMP_LEN,
+    X64_INT3_BYTE, X64_JMP_ABS_RIP0_PREFIX, X64_JMP_REL32_LEN, X64_JMP_REL32_OPCODE,
+    X64_MOV_RAX_IMM64_PREFIX,
 };
-use crate::structs::patch::{
-    BytePatch, EosRecvGuardSpec, PatchOutcome, PatchReport, PendingSitePatch,
-    StandardDetourBinding, SubmitRemoteVoiceSpec, TrampolineError, TrampolinePageBuilder,
-    VtablePatchSpec,
-};
+use crate::structs::patch::{PatchReport, TrampolineError};
 
 #[cfg(windows)]
 use std::ffi::c_void;
@@ -38,16 +28,28 @@ use windows::Win32::System::SystemInformation::{GetSystemInfo, SYSTEM_INFO};
 use windows::Win32::System::Threading::GetCurrentProcess;
 
 #[cfg(windows)]
+use crate::consts::patch::{
+    DEFAULT_ALLOC_GRANULARITY, DETOUR_ENGINE_LOOP_TICK, DETOUR_GET_WANTS_TO_TALK,
+    DETOUR_IS_PARTICIPANT_SPEAKING, DETOUR_IS_PLAYER_IN_VOICE_CHAT, DETOUR_SET_WANTS_TO_TALK,
+    DETOUR_SOCKET_CLOSE, DETOUR_SOCKET_RECV_FROM, DETOUR_SOCKET_SEND_TO,
+    EOS_BEFORE_RECV_AUDIO_GUARD, STANDARD_DETOUR_COUNT, TOTAL_PATCH_COUNT, TRAMPOLINE_ALLOC_SIZE,
+    TRAMPOLINE_MAX_DISTANCE, TRAMPOLINE_SLOT_ALIGN, X64_NOP_BYTE,
+};
+#[cfg(windows)]
 use crate::hooks::{
-    detour_eos_plus_get_voice_interface, detour_get_wants_to_talk, detour_is_participant_speaking,
-    detour_is_player_in_voice_chat, detour_load_channel_definitions, detour_on_decoded_remote_pcm,
-    detour_online_voice_tick, detour_set_wants_to_talk, set_module_base,
+    detour_engine_loop_tick, detour_get_wants_to_talk, detour_is_participant_speaking,
+    detour_is_player_in_voice_chat, detour_set_wants_to_talk, detour_socket_close,
+    detour_socket_recv_from, detour_socket_send_to, set_module_image, set_orig_engine_loop_tick,
     set_orig_get_wants_to_talk, set_orig_is_participant_speaking, set_orig_is_player_in_voice_chat,
-    set_orig_load_channel_definitions, set_orig_online_voice_tick, set_orig_set_wants_to_talk,
-    IN_DEDICATED_MATCH,
+    set_orig_set_wants_to_talk, set_orig_socket_close, set_orig_socket_recv_from,
+    set_orig_socket_send_to, IN_DEDICATED_MATCH,
 };
 #[cfg(windows)]
 use crate::logger::log_line;
+#[cfg(windows)]
+use crate::structs::patch::{
+    EosRecvGuardSpec, PatchOutcome, PendingSitePatch, StandardDetourBinding, TrampolinePageBuilder,
+};
 
 /// Checks whether a full executable path or filename matches `DreadHunger-Win64-Shipping.exe`
 /// case-insensitively.
@@ -153,27 +155,6 @@ pub fn encode_original_trampoline(
     Ok(bytes)
 }
 
-/// Encodes the 54-byte naked relay stub executed from `FVoiceEngineImpl::SubmitRemoteVoiceData`
-/// (`0x927C0C`): passes `(r13, [r14+0x140], [rbp+0x80], r14)` to `handler_addr` and jumps to
-/// `epilogue_addr` (`0x92824B`).
-pub fn encode_submit_remote_voice_stub(
-    handler_addr: usize,
-    epilogue_addr: usize,
-) -> Result<[u8; SUBMIT_REMOTE_VOICE_STUB_LEN], TrampolineError> {
-    let handler_u64: u64 = u64::try_from(handler_addr)
-        .map_err(|_err: std::num::TryFromIntError| TrampolineError::AddressOverflow)?;
-    let abs_epilogue: [u8; X64_ABS_JMP_LEN] = encode_abs_jmp_stub(epilogue_addr)?;
-
-    let mut stub: [u8; SUBMIT_REMOTE_VOICE_STUB_LEN] =
-        [X64_INT3_BYTE; SUBMIT_REMOTE_VOICE_STUB_LEN];
-    stub[0..24].copy_from_slice(&SUBMIT_REMOTE_VOICE_PROLOGUE);
-    stub[24..26].copy_from_slice(&X64_MOV_RAX_IMM64_PREFIX);
-    stub[26..34].copy_from_slice(&handler_u64.to_le_bytes());
-    stub[34..40].copy_from_slice(&SUBMIT_REMOTE_VOICE_CALL_AND_EPILOGUE);
-    stub[40..54].copy_from_slice(&abs_epilogue);
-    Ok(stub)
-}
-
 /// Encodes the 40-byte zero-overhead guard stub for
 /// `FEOSPlusVoiceChatUser::OnVoiceChatBeforeRecvAudioRendered` (`0xA2DC70`):
 /// returns immediately when `*(flag_addr as *const u8) != 0`; otherwise executes the stolen
@@ -220,29 +201,7 @@ pub fn align_down(value: usize, alignment: usize) -> Option<usize> {
     Some(value - (value % alignment))
 }
 
-/// Verifies and applies a single direct byte patch against a mutable memory buffer.
-#[must_use]
-pub fn apply_direct_patch_in_buffer(buffer: &mut [u8], patch: &BytePatch) -> PatchOutcome {
-    if patch.expected.len() != patch.replacement.len() {
-        return PatchOutcome::SignatureMismatch;
-    }
-    let Some(end): Option<usize> = patch.rva.checked_add(patch.expected.len()) else {
-        return PatchOutcome::OutOfBounds;
-    };
-    let Some(slice): Option<&mut [u8]> = buffer.get_mut(patch.rva..end) else {
-        return PatchOutcome::OutOfBounds;
-    };
-    if slice == patch.replacement {
-        return PatchOutcome::AlreadyApplied;
-    }
-    if slice != patch.expected {
-        return PatchOutcome::SignatureMismatch;
-    }
-    slice.copy_from_slice(patch.replacement);
-    PatchOutcome::Applied
-}
-
-/// Applies all dual-mode UE4 native voice patches if and only if running inside
+/// Applies all 9 Plan A pure-Rust client voice detours if and only if running inside
 /// `DreadHunger-Win64-Shipping.exe`.
 #[cfg(windows)]
 #[must_use]
@@ -287,7 +246,7 @@ pub fn apply_client_patches_if_target() -> PatchReport {
         };
     };
 
-    set_module_base(module_base);
+    set_module_image(module_base, image_size);
 
     let mut report: PatchReport = PatchReport {
         target_matched: true,
@@ -296,28 +255,10 @@ pub fn apply_client_patches_if_target() -> PatchReport {
         skipped: 0,
     };
 
-    for patch in &DIRECT_PATCHES {
-        let outcome: PatchOutcome = apply_live_direct_patch(module_base, image_size, patch);
-        log_line(&format!("patch '{}': {outcome:?}", patch.name));
-        record_outcome(&mut report, outcome);
-    }
-
-    let vtable_outcome: PatchOutcome = apply_live_vtable_patch(
-        module_base,
-        image_size,
-        &EOS_PLUS_GET_VOICE_VTABLE_PATCH,
-        detour_eos_plus_get_voice_interface as *const () as usize,
-    );
-    log_line(&format!(
-        "vtable '{}': {vtable_outcome:?}",
-        EOS_PLUS_GET_VOICE_VTABLE_PATCH.name
-    ));
-    record_outcome(&mut report, vtable_outcome);
-
     install_all_client_trampolines(module_base, image_size, &mut report);
 
     log_line(&format!(
-        "startup summary: applied={}, already_applied={}, skipped={}, image_base=0x{module_base:X}, image_size=0x{image_size:X}",
+        "Plan A voice startup summary: applied={}, already_applied={}, skipped={}, image_base=0x{module_base:X}, image_size=0x{image_size:X}",
         report.applied, report.already_applied, report.skipped
     ));
 
@@ -341,8 +282,10 @@ fn install_all_client_trampolines(module_base: usize, image_size: usize, report:
     let Some(page_addr): Option<usize> =
         allocate_nearby_rw_page(module_base, image_size, TRAMPOLINE_ALLOC_SIZE)
     else {
-        log_line("failed to allocate nearby RX trampoline page; skipping 8 detours");
-        report.skipped += 8;
+        log_line(&format!(
+            "failed to allocate nearby RX trampoline page; skipping {TOTAL_PATCH_COUNT} detours"
+        ));
+        report.skipped += TOTAL_PATCH_COUNT;
         return;
     };
 
@@ -357,18 +300,10 @@ fn install_all_client_trampolines(module_base: usize, image_size: usize, report:
         page_addr,
         page_slice,
         cursor: 0,
-        pending_patches: Vec::with_capacity(8),
+        pending_patches: Vec::with_capacity(TOTAL_PATCH_COUNT),
     };
 
-    // 1. Mid-function hook inside `FVoiceEngineImpl::SubmitRemoteVoiceData` (`0x927C0C`).
-    prepare_submit_remote_voice_hook(
-        &mut builder,
-        &SUBMIT_REMOTE_VOICE_HOOK,
-        detour_on_decoded_remote_pcm as *const () as usize,
-        report,
-    );
-
-    // 2. Zero-overhead guard on `FEOSPlusVoiceChatUser::OnVoiceChatBeforeRecvAudioRendered`.
+    // 1. Zero-overhead guard on `FEOSPlusVoiceChatUser::OnVoiceChatBeforeRecvAudioRendered`.
     prepare_eos_recv_guard(
         &mut builder,
         &EOS_BEFORE_RECV_AUDIO_GUARD,
@@ -376,17 +311,27 @@ fn install_all_client_trampolines(module_base: usize, image_size: usize, report:
         report,
     );
 
-    // 3..8. Six standard function-entry detours with original-call trampolines.
-    let standard_detours: [StandardDetourBinding; 6] = [
+    // 2..9. Eight standard function-entry detours with original-call trampolines.
+    let standard_detours: [StandardDetourBinding; STANDARD_DETOUR_COUNT] = [
         StandardDetourBinding {
-            spec: &DETOUR_LOAD_CHANNEL_DEFINITIONS,
-            handler_addr: detour_load_channel_definitions as *const () as usize,
-            register_orig: set_orig_load_channel_definitions,
+            spec: &DETOUR_SOCKET_RECV_FROM,
+            handler_addr: detour_socket_recv_from as *const () as usize,
+            register_orig: set_orig_socket_recv_from,
         },
         StandardDetourBinding {
-            spec: &DETOUR_ONLINE_VOICE_TICK,
-            handler_addr: detour_online_voice_tick as *const () as usize,
-            register_orig: set_orig_online_voice_tick,
+            spec: &DETOUR_SOCKET_SEND_TO,
+            handler_addr: detour_socket_send_to as *const () as usize,
+            register_orig: set_orig_socket_send_to,
+        },
+        StandardDetourBinding {
+            spec: &DETOUR_SOCKET_CLOSE,
+            handler_addr: detour_socket_close as *const () as usize,
+            register_orig: set_orig_socket_close,
+        },
+        StandardDetourBinding {
+            spec: &DETOUR_ENGINE_LOOP_TICK,
+            handler_addr: detour_engine_loop_tick as *const () as usize,
+            register_orig: set_orig_engine_loop_tick,
         },
         StandardDetourBinding {
             spec: &DETOUR_SET_WANTS_TO_TALK,
@@ -416,7 +361,7 @@ fn install_all_client_trampolines(module_base: usize, image_size: usize, report:
 
     let pending_patches: Vec<PendingSitePatch> = builder.pending_patches;
 
-    // Transition the entire shared trampoline page strictly from `RW` to `RX` (no persistent `RWX`)
+    // Transition the entire shared trampoline page strictly from `RW` to `RX` (zero persistent `RWX`)
     // BEFORE activating any `E9 rel32` site jumps.
     let mut old_protect: PAGE_PROTECTION_FLAGS = PAGE_PROTECTION_FLAGS(0);
     // SAFETY: Switching our populated trampoline page to `PAGE_EXECUTE_READ`.
@@ -448,69 +393,6 @@ fn install_all_client_trampolines(module_base: usize, image_size: usize, report:
         log_line(&format!("detour '{}': {outcome:?}", patch.name));
         record_outcome(report, outcome);
     }
-}
-
-#[cfg(windows)]
-fn prepare_submit_remote_voice_hook(
-    builder: &mut TrampolinePageBuilder<'_>,
-    spec: &SubmitRemoteVoiceSpec,
-    handler_addr: usize,
-    report: &mut PatchReport,
-) {
-    let stolen_len: usize = spec.expected_bytes.len();
-    let Some(end_rva): Option<usize> = spec.hook_rva.checked_add(stolen_len) else {
-        record_outcome(report, PatchOutcome::OutOfBounds);
-        return;
-    };
-    if stolen_len < X64_JMP_REL32_LEN
-        || end_rva > builder.image_size
-        || spec.epilogue_rva >= builder.image_size
-    {
-        record_outcome(report, PatchOutcome::OutOfBounds);
-        return;
-    }
-    let Some(site_addr): Option<usize> = builder.module_base.checked_add(spec.hook_rva) else {
-        record_outcome(report, PatchOutcome::OutOfBounds);
-        return;
-    };
-    let Some(epilogue_addr): Option<usize> = builder.module_base.checked_add(spec.epilogue_rva)
-    else {
-        record_outcome(report, PatchOutcome::OutOfBounds);
-        return;
-    };
-
-    // SAFETY: `site_addr..site_addr + stolen_len` is bounds-checked inside the mapped image.
-    let current: &[u8] = unsafe { std::slice::from_raw_parts(site_addr as *const u8, stolen_len) };
-    if current != spec.expected_bytes {
-        log_line(&format!("detour '{}': SignatureMismatch", spec.name));
-        record_outcome(report, PatchOutcome::SignatureMismatch);
-        return;
-    }
-
-    let Ok(stub): Result<[u8; SUBMIT_REMOTE_VOICE_STUB_LEN], TrampolineError> =
-        encode_submit_remote_voice_stub(handler_addr, epilogue_addr)
-    else {
-        record_outcome(report, PatchOutcome::MemoryError);
-        return;
-    };
-    let Some(stub_addr): Option<usize> = append_stub_to_page(builder, &stub) else {
-        record_outcome(report, PatchOutcome::MemoryError);
-        return;
-    };
-    let Ok(site_jmp): Result<[u8; X64_JMP_REL32_LEN], TrampolineError> =
-        encode_jmp_rel32(site_addr, stub_addr)
-    else {
-        record_outcome(report, PatchOutcome::MemoryError);
-        return;
-    };
-
-    let mut patch_bytes: Vec<u8> = vec![X64_NOP_BYTE; stolen_len];
-    patch_bytes[..X64_JMP_REL32_LEN].copy_from_slice(&site_jmp);
-    builder.pending_patches.push(PendingSitePatch {
-        name: spec.name,
-        site_addr,
-        patch_bytes,
-    });
 }
 
 #[cfg(windows)]
@@ -657,81 +539,6 @@ fn append_stub_to_page(builder: &mut TrampolinePageBuilder<'_>, stub: &[u8]) -> 
 }
 
 #[cfg(windows)]
-fn apply_live_vtable_patch(
-    module_base: usize,
-    image_size: usize,
-    spec: &VtablePatchSpec,
-    replacement_fn_addr: usize,
-) -> PatchOutcome {
-    let slot_size: usize = std::mem::size_of::<u64>();
-    let Some(end_rva): Option<usize> = spec.slot_rva.checked_add(slot_size) else {
-        return PatchOutcome::OutOfBounds;
-    };
-    if end_rva > image_size || spec.expected_target_rva >= image_size {
-        return PatchOutcome::OutOfBounds;
-    }
-    let Some(slot_addr): Option<usize> = module_base.checked_add(spec.slot_rva) else {
-        return PatchOutcome::OutOfBounds;
-    };
-    let Some(expected_target_addr): Option<usize> =
-        module_base.checked_add(spec.expected_target_rva)
-    else {
-        return PatchOutcome::OutOfBounds;
-    };
-    let Ok(expected_u64): Result<u64, std::num::TryFromIntError> =
-        u64::try_from(expected_target_addr)
-    else {
-        return PatchOutcome::OutOfBounds;
-    };
-    let Ok(replacement_u64): Result<u64, std::num::TryFromIntError> =
-        u64::try_from(replacement_fn_addr)
-    else {
-        return PatchOutcome::OutOfBounds;
-    };
-
-    // SAFETY: `slot_addr..slot_addr + 8` is bounds-checked inside `.rdata` of the mapped image.
-    let current_u64: u64 = unsafe { *(slot_addr as *const u64) };
-    if current_u64 == replacement_u64 {
-        return PatchOutcome::AlreadyApplied;
-    }
-    if current_u64 != expected_u64 {
-        return PatchOutcome::SignatureMismatch;
-    }
-
-    let mut old_protect: PAGE_PROTECTION_FLAGS = PAGE_PROTECTION_FLAGS(0);
-    // SAFETY: Temporarily marks `.rdata` vtable slot writable (`PAGE_READWRITE`, never `RWX`).
-    let protect_ok: Result<(), windows::core::Error> = unsafe {
-        VirtualProtect(
-            slot_addr as *const c_void,
-            slot_size,
-            PAGE_READWRITE,
-            &raw mut old_protect,
-        )
-    };
-    if protect_ok.is_err() {
-        return PatchOutcome::MemoryError;
-    }
-
-    // SAFETY: Writing verified 8-byte function pointer into the vtable slot.
-    unsafe {
-        *(slot_addr as *mut u64) = replacement_u64;
-    }
-
-    let mut ignored: PAGE_PROTECTION_FLAGS = PAGE_PROTECTION_FLAGS(0);
-    // SAFETY: Restoring `.rdata` page protection immediately.
-    let _restored: Result<(), windows::core::Error> = unsafe {
-        VirtualProtect(
-            slot_addr as *const c_void,
-            slot_size,
-            old_protect,
-            &raw mut ignored,
-        )
-    };
-
-    PatchOutcome::Applied
-}
-
-#[cfg(windows)]
 fn record_outcome(report: &mut PatchReport, outcome: PatchOutcome) {
     match outcome {
         PatchOutcome::Applied => {
@@ -774,38 +581,6 @@ fn read_live_image_size(module_base: usize) -> Option<usize> {
     let header_slice: &[u8] =
         unsafe { std::slice::from_raw_parts(module_base as *const u8, TRAMPOLINE_ALLOC_SIZE) };
     parse_pe_size_of_image(header_slice)
-}
-
-#[cfg(windows)]
-fn apply_live_direct_patch(
-    module_base: usize,
-    image_size: usize,
-    patch: &BytePatch,
-) -> PatchOutcome {
-    if patch.expected.len() != patch.replacement.len() {
-        return PatchOutcome::SignatureMismatch;
-    }
-    let Some(end_rva): Option<usize> = patch.rva.checked_add(patch.expected.len()) else {
-        return PatchOutcome::OutOfBounds;
-    };
-    if end_rva > image_size {
-        return PatchOutcome::OutOfBounds;
-    }
-    let Some(target_addr): Option<usize> = module_base.checked_add(patch.rva) else {
-        return PatchOutcome::OutOfBounds;
-    };
-
-    // SAFETY: `target_addr..target_addr + expected.len()` is bounds-checked inside the image.
-    let current_bytes: &[u8] =
-        unsafe { std::slice::from_raw_parts(target_addr as *const u8, patch.expected.len()) };
-    if current_bytes == patch.replacement {
-        return PatchOutcome::AlreadyApplied;
-    }
-    if current_bytes != patch.expected {
-        return PatchOutcome::SignatureMismatch;
-    }
-
-    write_protected_code(target_addr, patch.replacement)
 }
 
 #[cfg(windows)]
